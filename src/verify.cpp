@@ -28,8 +28,10 @@ namespace {
 
 int g_failures = 0;
 
-void check(bool ok, const char* name, const char* detail = "") {
-    std::printf("  [%s] %s %s\n", ok ? "PASS" : "FAIL", name, detail);
+void check(bool ok, const char* name, const char* detail, std::string& report) {
+    char line[1024];
+    std::snprintf(line, sizeof(line), "  [%s] %s %s\n", ok ? "PASS" : "FAIL", name, detail);
+    report += line;
     if (!ok) g_failures++;
 }
 
@@ -118,85 +120,6 @@ bool run_capture(const std::string& cmd, std::string& out, int timeout_sec = 120
 }  // namespace
 
 // Shared: run `codex exec --skip-git-repo-check helmx` and capture output.
-// (defined below verify_main; declared here for use inside it)
-bool codex_exec_capture(std::string& out, int timeout_sec);
-
-int verify_main(int argc, char** argv) {
-    bool e2e = false;
-    for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--e2e") == 0) e2e = true;
-    }
-
-    std::printf("helm-x verify\n");
-    std::printf("=============\n");
-
-    // 1. codex home
-    std::string home = find_codex_home();
-    check(!home.empty(), "codex home", home.c_str());
-    if (home.empty()) {
-        std::printf("\n%d check(s) failed\n", g_failures);
-        return 1;
-    }
-
-    // 2. config.toml exists + parse sanity
-    fs::path cfg = fs::path(home) / "config.toml";
-    check(fs::exists(cfg), "config.toml exists", cfg.string().c_str());
-
-    // 3. mcp_servers.helmx injected
-    std::string cfg_text = read_file_str(cfg);
-    bool has_mcp = cfg_text.find("[mcp_servers.helmx]") != std::string::npos;
-    check(has_mcp, "mcp_servers.helmx injected");
-
-    // 4. AGENTS.md exists
-    fs::path agents = fs::path(home) / "AGENTS.md";
-    bool agents_exists = fs::exists(agents);
-    check(agents_exists, "AGENTS.md exists", agents_exists ? agents.string().c_str() : "");
-
-    // 5. AGENTS.md content matches embedded resource
-    std::string expected = get_resource(ResId::AgentsMd);
-    std::string actual = read_file_str(agents);
-    bool agents_match = !expected.empty() && actual == expected;
-    check(agents_match, "AGENTS.md content == embedded resource",
-          agents_match ? std::to_string(actual.size()).c_str() : "(mismatch)");
-
-    // 6. embedded resources non-empty (encryption layer working)
-    bool res_ok = !expected.empty() &&
-                  !get_resource(ResId::TamperRules).empty() &&
-                  !get_resource(ResId::DashboardHtml).empty();
-    check(res_ok, "embedded resources decrypt", res_ok ? "3/3" : "missing");
-
-    // 7. backup exists
-    check(fs::exists(cfg.string() + ".helmx-bak"), "config backup (.helmx-bak)");
-
-    // 8. e2e: codex exec "helmx" -> activation phrase
-    if (e2e) {
-        std::printf("  [....] e2e: codex exec \"helmx\" (may take ~1-2 min)...\n");
-        std::fflush(stdout);
-        std::string out;
-        bool spawned = codex_exec_capture(out, 240);
-        bool activated = spawned && out.find("Knowing you, I still like you") != std::string::npos;
-        if (!spawned) {
-            // fallback: where codex to diagnose
-            std::string wout;
-            run_capture("cmd /c \"where codex 2>&1\"", wout, 15);
-            std::printf("  [....] where codex -> %s\n", wout.c_str());
-        }
-        check(activated, "e2e: codex activation (helmx)",
-              activated ? "" : (spawned ? "(reply missing)" : "(codex spawn failed)"));
-    } else {
-        std::printf("  [SKIP] e2e codex check (run with --e2e)\n");
-    }
-
-    std::printf("=============\n");
-    if (g_failures == 0) {
-        std::printf("ALL CHECKS PASSED%s\n", e2e ? " (incl. e2e)" : "");
-        return 0;
-    }
-    std::printf("%d check(s) FAILED\n", g_failures);
-    return 1;
-}
-
-// Shared: run `codex exec --skip-git-repo-check helmx` and capture output.
 // codex on Windows is a .cmd shim (npm); CreateProcess cannot run it
 // directly, so route through cmd /c.
 bool codex_exec_capture(std::string& out, int timeout_sec) {
@@ -204,25 +127,121 @@ bool codex_exec_capture(std::string& out, int timeout_sec) {
     return run_capture(cmd, out, timeout_sec);
 }
 
+int run_verify(bool e2e, std::string& report) {
+    report.clear();
+    g_failures = 0;
+
+    report += "helm-x verify\n";
+    report += "=============\n";
+
+    // 1. codex home
+    std::string home = find_codex_home();
+    check(!home.empty(), "codex home", home.c_str(), report);
+    if (home.empty()) {
+        char line[128];
+        std::snprintf(line, sizeof(line), "\n%d check(s) failed\n", g_failures);
+        report += line;
+        return 1;
+    }
+
+    // 2. config.toml exists
+    fs::path cfg = fs::path(home) / "config.toml";
+    check(fs::exists(cfg), "config.toml exists", cfg.string().c_str(), report);
+
+    // 3. mcp_servers.helmx injected
+    std::string cfg_text = read_file_str(cfg);
+    bool has_mcp = cfg_text.find("[mcp_servers.helmx]") != std::string::npos;
+    check(has_mcp, "mcp_servers.helmx injected", "", report);
+
+    // 4. AGENTS.md exists
+    fs::path agents = fs::path(home) / "AGENTS.md";
+    bool agents_exists = fs::exists(agents);
+    check(agents_exists, "AGENTS.md exists", agents_exists ? agents.string().c_str() : "", report);
+
+    // 5. AGENTS.md content matches embedded resource
+    std::string expected = get_resource(ResId::AgentsMd);
+    std::string actual = read_file_str(agents);
+    bool agents_match = !expected.empty() && actual == expected;
+    check(agents_match, "AGENTS.md content == embedded resource",
+          agents_match ? std::to_string(actual.size()).c_str() : "(mismatch)", report);
+
+    // 6. embedded resources non-empty
+    bool res_ok = !expected.empty() &&
+                  !get_resource(ResId::TamperRules).empty() &&
+                  !get_resource(ResId::DashboardHtml).empty();
+    check(res_ok, "embedded resources decrypt", res_ok ? "3/3" : "missing", report);
+
+    // 7. backup exists
+    check(fs::exists(cfg.string() + ".helmx-bak"), "config backup (.helmx-bak)", "", report);
+
+    // 8. e2e
+    if (e2e) {
+        report += "  [....] e2e: codex exec \"helmx\" (may take ~1-2 min)...\n";
+        std::fflush(stdout);
+        std::string out;
+        bool spawned = codex_exec_capture(out, 240);
+        bool activated = spawned && out.find("Knowing you, I still like you") != std::string::npos;
+        if (!spawned) {
+            std::string wout;
+            run_capture("cmd /c \"where codex 2>&1\"", wout, 15);
+            report += "  [....] where codex -> " + wout + "\n";
+        }
+        check(activated, "e2e: codex activation (helmx)",
+              activated ? "" : (spawned ? "(reply missing)" : "(codex spawn failed)"), report);
+    } else {
+        report += "  [SKIP] e2e codex check (run with --e2e)\n";
+    }
+
+    report += "=============\n";
+    if (g_failures == 0) {
+        report += e2e ? "ALL CHECKS PASSED (incl. e2e)\n" : "ALL CHECKS PASSED\n";
+        return 0;
+    }
+    char line[128];
+    std::snprintf(line, sizeof(line), "%d check(s) FAILED\n", g_failures);
+    report += line;
+    return 1;
+}
+
+int verify_main(int argc, char** argv) {
+    bool e2e = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--e2e") == 0) e2e = true;
+    }
+    std::string report;
+    int rc = run_verify(e2e, report);
+    std::printf("%s", report.c_str());
+    return rc;
+}
+
+int run_zxwn(std::string& out, bool& activated) {
+    out.clear();
+    activated = false;
+    std::string raw;
+    // codex reasoning can exceed 4 min on first run; give it 6 min
+    if (!codex_exec_capture(raw, 360)) {
+        out = "[FAIL] could not run codex (is it installed? run `where codex`)";
+        return 1;
+    }
+    out = raw;
+    activated = raw.find("Knowing you, I still like you") != std::string::npos;
+    return activated ? 0 : 1;
+}
+
 int zxwn_cmd() {
     std::printf("helm-x helmx — sending activation to codex...\n");
     std::fflush(stdout);
 
     std::string out;
-    if (!codex_exec_capture(out, 240)) {
-        std::fprintf(stderr, "[FAIL] could not run codex (is it installed? run `where codex`)\n");
-        return 1;
-    }
-
-    // Print the reply (trim leading banner noise)
+    bool activated = false;
+    int rc = run_zxwn(out, activated);
     std::printf("%s\n", out.c_str());
-
-    if (out.find("Knowing you, I still like you") != std::string::npos) {
+    if (activated) {
         std::printf("[OK] activation confirmed\n");
         return 0;
     }
     std::fprintf(stderr, "[WARN] activation phrase not detected in codex reply\n");
-    return 1;
+    return rc;
 }
 
 }  // namespace helmx

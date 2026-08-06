@@ -17,6 +17,7 @@
   --text-tertiary: rgba(235, 235, 245, 0.38);
   --ok: #30D158;
   --bad: #FF453A;
+  --warn: #FFD60A;
   --radius: 8px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -31,37 +32,13 @@ body {
 }
 .mono { font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
 
-/* ── left menu (200px) ── */
-.menu {
-  flex: 0 0 200px;
-  display: flex; flex-direction: column;
-  border-right: 1px solid var(--divider);
-  padding-bottom: 8px;
-  height: 100vh;
-}
-.logo {
-  height: 58px; padding: 0 20px;
-  display: flex; align-items: center; gap: 10px;
-  font-size: 15px; font-weight: 600; letter-spacing: .3px;
-  flex-shrink: 0;
-}
-.logo .mark {
-  width: 24px; height: 24px; border-radius: 6px;
-  background: var(--primary);
-  color: #fff; font-size: 12px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-}
+/* ── left menu ── */
+.menu { flex: 0 0 200px; display: flex; flex-direction: column; border-right: 1px solid var(--divider); padding-bottom: 8px; height: 100vh; }
+.logo { height: 58px; padding: 0 20px; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; letter-spacing: .3px; flex-shrink: 0; }
+.logo .mark { width: 24px; height: 24px; border-radius: 6px; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .menu-items { flex: 1; padding-top: 4px; overflow-y: auto; scrollbar-width: none; }
 .menu-items::-webkit-scrollbar { width: 0; }
-.menu-item {
-  display: flex; align-items: center; gap: 11px;
-  margin: 0 8px 2px; padding: 9px 12px;
-  border-radius: 7px;
-  color: var(--text-secondary);
-  font-size: 13.5px;
-  cursor: pointer; user-select: none;
-  transition: background .12s, color .12s;
-}
+.menu-item { display: flex; align-items: center; gap: 11px; margin: 0 8px 2px; padding: 9px 12px; border-radius: 7px; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; user-select: none; transition: background .12s, color .12s; }
 .menu-item svg { width: 17px; height: 17px; opacity: .75; flex-shrink: 0; }
 .menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .menu-item.active { background: var(--primary); color: #fff; font-weight: 500; }
@@ -71,67 +48,38 @@ body {
 
 /* ── main ── */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.topbar {
-  height: 58px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--divider);
-}
+.topbar { height: 58px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--divider); }
 .topbar .t { font-size: 16px; font-weight: 600; }
 .topbar .right { display: flex; align-items: center; gap: 12px; }
-
-/* status pill */
-.pill {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 3px 12px; border-radius: 999px;
-  font-size: 12px; font-weight: 500;
-  background: var(--bg-elev);
-}
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--bg-elev); }
 .pill .dot { width: 7px; height: 7px; border-radius: 50%; }
-.pill.ok { color: var(--ok); }
-.pill.ok .dot { background: var(--ok); }
-.pill.bad { color: var(--bad); }
-.pill.bad .dot { background: var(--bad); }
-
+.pill.ok { color: var(--ok); } .pill.ok .dot { background: var(--ok); }
+.pill.bad { color: var(--bad); } .pill.bad .dot { background: var(--bad); }
+.pill.warn { color: var(--warn); } .pill.warn .dot { background: var(--warn); }
 .content { flex: 1; overflow-y: auto; padding: 14px 20px 20px; scrollbar-gutter: stable; }
 .content::-webkit-scrollbar { width: 8px; }
 .content::-webkit-scrollbar-thumb { border-radius: 6px; background: rgba(255,255,255,.15); }
+.page { display: none; }
+.page.active { display: block; }
 
-/* ── stat cards ── */
+/* ── cards ── */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
-.stat {
-  background: var(--bg-elev);
-  border-radius: var(--radius);
-  padding: 14px 16px;
-  transition: background .12s;
-}
+.stat { background: var(--bg-elev); border-radius: var(--radius); padding: 14px 16px; transition: background .12s; }
 .stat:hover { background: var(--bg-hover); }
 .stat .l { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 7px; }
 .stat .v { font-size: 20px; font-weight: 600; letter-spacing: .2px; }
 .stat .h { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
 
 /* ── panels ── */
-.panel {
-  background: var(--bg-elev);
-  border-radius: var(--radius);
-  margin-bottom: 14px;
-  overflow: hidden;
-}
-.panel-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--divider);
-}
+.panel { background: var(--bg-elev); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--divider); }
 .panel-head .t { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 .panel-head .r { font-size: 11px; color: var(--text-tertiary); }
+.panel-body { padding: 14px 16px; }
+.panel-body.no-pad { padding: 0; }
 
 /* ── rules ── */
-.rule {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--divider);
-  transition: background .1s;
-}
+.rule { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--divider); transition: background .1s; }
 .rule:last-child { border-bottom: 0; }
 .rule:hover { background: var(--bg-hover); }
 .rule .idx { font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--text-tertiary); min-width: 26px; text-align: right; }
@@ -140,37 +88,37 @@ body {
 .empty { padding: 22px 16px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
 
 /* ── buttons ── */
-.actions { display: flex; gap: 10px; padding: 14px 16px; }
-.btn {
-  padding: 7px 16px; border-radius: 7px;
-  font: 500 13px inherit;
-  border: 0; cursor: pointer;
-  transition: background .12s, opacity .12s;
-}
+.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn { padding: 7px 16px; border-radius: 7px; font: 500 13px inherit; border: 0; cursor: pointer; transition: background .12s, opacity .12s; }
 .btn.primary { background: var(--primary); color: #fff; }
 .btn.primary:hover { opacity: .85; }
 .btn.secondary { background: var(--bg-hover); color: var(--text-primary); }
 .btn.secondary:hover { background: rgba(255,255,255,.12); }
 .btn.danger { background: rgba(255, 69, 58, 0.15); color: var(--bad); }
 .btn.danger:hover { background: rgba(255, 69, 58, 0.25); }
+.btn:disabled { opacity: .4; cursor: default; }
 
-/* ── ref ── */
-.ref { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.ref .cell { padding: 11px 16px; border-bottom: 1px solid var(--divider); }
-.ref .cell:last-child { border-bottom: 0; }
-.ref .cmd { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--primary); }
-.ref .desc { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+/* ── inputs ── */
+.inp { padding: 7px 12px; border-radius: 7px; border: 1px solid var(--divider); background: var(--bg-hover); color: var(--text-primary); font: 12.5px "JetBrains Mono", monospace; outline: none; }
+.inp:focus { border-color: var(--primary); }
+
+/* ── terminal output ── */
+.term { background: #1a1b22; border-radius: 7px; padding: 12px 14px; font: 11.5px/1.6 "JetBrains Mono", monospace; color: #c8d3e8; white-space: pre-wrap; word-break: break-all; min-height: 80px; max-height: 320px; overflow-y: auto; user-select: text; margin-top: 12px; }
+.term .ok-line { color: var(--ok); }
+.term .bad-line { color: var(--bad); }
+
+/* ── service row ── */
+.svc { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--divider); }
+.svc:last-child { border-bottom: 0; }
+.svc .name { font-weight: 600; font-size: 13.5px; min-width: 70px; }
+.svc .state { font-size: 12px; min-width: 90px; }
+.svc .state.run { color: var(--ok); }
+.svc .state.stop { color: var(--text-tertiary); }
+.svc .desc { font-size: 11.5px; color: var(--text-tertiary); flex: 1; }
+.svc .ctrl { display: flex; gap: 8px; }
 
 /* ── toast ── */
-#toast {
-  position: fixed; bottom: 20px; right: 20px;
-  padding: 9px 16px; border-radius: 7px;
-  background: var(--bg-elev);
-  border: 1px solid var(--divider);
-  font-size: 12.5px;
-  opacity: 0; transform: translateY(8px); transition: all .2s;
-  pointer-events: none;
-}
+#toast { position: fixed; bottom: 20px; right: 20px; padding: 9px 16px; border-radius: 7px; background: var(--bg-elev); border: 1px solid var(--divider); font-size: 12.5px; opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none; }
 #toast.show { opacity: 1; transform: translateY(0); }
 #toast.ok { box-shadow: inset 3px 0 0 var(--ok); }
 #toast.err { box-shadow: inset 3px 0 0 var(--bad); }
@@ -181,128 +129,266 @@ body {
 <div class="menu">
   <div class="logo"><span class="mark">H</span>helm-x</div>
   <div class="menu-items">
-    <div class="menu-item active">
+    <div class="menu-item active" data-page="status">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
       状态
     </div>
-    <div class="menu-item">
+    <div class="menu-item" data-page="verify">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+      验证
+    </div>
+    <div class="menu-item" data-page="services">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="4"/></svg>
+      服务
+    </div>
+    <div class="menu-item" data-page="rules">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg>
       规则
-    </div>
-    <div class="menu-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
-      命令
     </div>
   </div>
   <div class="menu-foot">
     <div class="v mono" id="home_short">—</div>
-    <div class="v">v0.1.0 · C++17</div>
+    <div class="v">v0.2.0 · C++17</div>
   </div>
 </div>
 
 <div class="main">
   <div class="topbar">
-    <div class="t">状态</div>
+    <div class="t" id="page-title">状态</div>
     <div class="right">
       <span id="injected" class="pill"><span class="dot"></span><span id="injected-text">检测中</span></span>
+      <span id="watch-pill" class="pill" style="display:none"><span class="dot"></span><span id="watch-text">watch</span></span>
     </div>
   </div>
 
   <div class="content">
-    <div class="stats">
-      <div class="stat">
-        <div class="l">AGENTS.md</div>
-        <div class="v mono" id="agents_bytes">—</div>
-        <div class="h mono" id="home">—</div>
+
+    <!-- ── 状态页 ── -->
+    <div class="page active" id="page-status">
+      <div class="stats">
+        <div class="stat"><div class="l">AGENTS.md</div><div class="v mono" id="agents_bytes">—</div><div class="h mono" id="home">—</div></div>
+        <div class="stat"><div class="l">TAMPER 规则</div><div class="v mono" id="rules_count">—</div><div class="h">pattern → replace</div></div>
+        <div class="stat"><div class="l">注入状态</div><div class="v" id="state_word">—</div><div class="h" id="state_hint">—</div></div>
       </div>
-      <div class="stat">
-        <div class="l">TAMPER 规则</div>
-        <div class="v mono" id="rules_count">—</div>
-        <div class="h">pattern → replace</div>
-      </div>
-      <div class="stat">
-        <div class="l">注入状态</div>
-        <div class="v" id="state_word">—</div>
-        <div class="h" id="state_hint">—</div>
+      <div class="panel">
+        <div class="panel-head"><span class="t">操作</span><span class="r">一键部署 / 恢复</span></div>
+        <div class="panel-body">
+          <div class="actions">
+            <button class="btn primary" onclick="act('/api/apply')">apply 部署</button>
+            <button class="btn danger" onclick="act('/api/remove')">remove 卸载</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-head"><span class="t">操作</span><span class="r">一键部署 / 恢复</span></div>
-      <div class="actions">
-        <button class="btn primary" onclick="act('/api/apply')">apply</button>
-        <button class="btn danger" onclick="act('/api/remove')">remove</button>
+    <!-- ── 验证页 ── -->
+    <div class="page" id="page-verify">
+      <div class="panel">
+        <div class="panel-head"><span class="t">激活验证</span><span class="r">codex exec "helmx"</span></div>
+        <div class="panel-body">
+          <div class="actions">
+            <button class="btn primary" id="btn-zxwn" onclick="startZxwn()">发送激活 (helmx)</button>
+            <span style="font-size:12px;color:var(--text-tertiary)" id="zxwn-status">未运行</span>
+          </div>
+          <div class="term" id="zxwn-output">—</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="t">完整性自检</span><span class="r">7 项检查</span></div>
+        <div class="panel-body">
+          <div class="actions">
+            <button class="btn secondary" onclick="runVerify()">运行 verify</button>
+          </div>
+          <div class="term" id="verify-output">—</div>
+        </div>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-head"><span class="t">TAMPER 规则</span><span class="r mono">regex</span></div>
-      <div id="rules-list"><div class="empty">加载中…</div></div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><span class="t">子命令</span><span class="r">CLI reference</span></div>
-      <div class="ref">
-        <div class="cell"><div class="cmd">helmx watch 60</div><div class="desc">自愈守护</div></div>
-        <div class="cell"><div class="cmd">helmx proxy --listen 1800</div><div class="desc">篡改代理</div></div>
-        <div class="cell"><div class="cmd">helmx mcp</div><div class="desc">MCP 服务器</div></div>
+    <!-- ── 服务页 ── -->
+    <div class="page" id="page-services">
+      <div class="panel">
+        <div class="panel-head"><span class="t">后台服务</span><span class="r">自愈守护 / 任务</span></div>
+        <div class="panel-body no-pad">
+          <div class="svc">
+            <span class="name">watch</span>
+            <span class="state stop" id="watch-state">STOPPED</span>
+            <span class="desc">周期校验注入项，被覆盖自动恢复 · 恢复次数 <b id="watch-restores">0</b></span>
+            <span class="ctrl">
+              <button class="btn primary" onclick="watchStart()">启动</button>
+              <button class="btn danger" onclick="watchStop()">停止</button>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="t">watch 周期</span><span class="r">秒</span></div>
+        <div class="panel-body">
+          <div class="actions">
+            <input class="inp" id="watch-interval" value="60" style="width:90px">
+            <button class="btn secondary" onclick="watchStart()">以该周期启动</button>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- ── 规则页 ── -->
+    <div class="page" id="page-rules">
+      <div class="panel">
+        <div class="panel-head"><span class="t">TAMPER 规则</span><span class="r mono">regex</span></div>
+        <div class="panel-body no-pad" id="rules-list"><div class="empty">加载中…</div></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
+const $ = id => document.getElementById(id);
+
+/* ── navigation ── */
+document.querySelectorAll('.menu-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.menu-item').forEach(e => e.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    $('page-' + el.dataset.page).classList.add('active');
+    $('page-title').textContent = el.textContent.trim().replace(/\s+/g, ' ').split(' ').pop();
+  });
+});
+
+/* ── helpers ── */
 async function get(path) { const r = await fetch(path); return r.json(); }
+async function post(path, body) {
+  const r = await fetch(path, { method: 'POST', body: body || '' });
+  return r.json();
+}
 function toast(msg, ok) {
-  const t = document.getElementById('toast');
+  const t = $('toast');
   t.textContent = msg;
   t.className = ok ? 'show ok' : 'show err';
   setTimeout(() => t.className = '', 2400);
 }
-async function refresh() {
+
+/* ── status ── */
+async function refreshStatus() {
   try {
     const s = await get('/api/status');
-    document.getElementById('home').textContent = s.home || '(not found)';
-    document.getElementById('home_short').textContent = s.home || '(not found)';
-    document.getElementById('agents_bytes').textContent = s.agents_bytes + ' B';
-    document.getElementById('rules_count').textContent = s.rules;
-
-    const p = document.getElementById('injected');
-    const pt = document.getElementById('injected-text');
+    $('home').textContent = s.home || '(not found)';
+    $('home_short').textContent = s.home || '(not found)';
+    $('agents_bytes').textContent = s.agents_bytes + ' B';
+    $('rules_count').textContent = s.rules;
+    const p = $('injected'), pt = $('injected-text');
     if (s.injected) { p.className = 'pill ok'; pt.textContent = 'ACTIVE'; }
     else { p.className = 'pill bad'; pt.textContent = 'MISSING'; }
-
-    document.getElementById('state_word').textContent = s.injected ? 'ACTIVE' : 'MISSING';
-    document.getElementById('state_word').style.color = s.injected ? 'var(--ok)' : 'var(--bad)';
-    document.getElementById('state_hint').textContent = s.injected ? '注入完整' : '需要 apply';
-
-    const rules = await get('/api/rules');
-    const box = document.getElementById('rules-list');
-    box.innerHTML = '';
-    if (!rules.length) {
-      box.innerHTML = '<div class="empty">无规则</div>';
-    } else {
-      rules.forEach(r => {
-        const row = document.createElement('div');
-        row.className = 'rule';
-        row.innerHTML = '<span class="idx">' + r.id + '</span><span class="pat">' + r.pattern.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span><span class="tag">REGEX</span>';
-        box.appendChild(row);
-      });
-    }
+    $('state_word').textContent = s.injected ? 'ACTIVE' : 'MISSING';
+    $('state_word').style.color = s.injected ? 'var(--ok)' : 'var(--bad)';
+    $('state_hint').textContent = s.injected ? '注入完整' : '需要 apply';
   } catch (e) { toast('刷新失败: ' + e, false); }
 }
+
+/* ── rules ── */
+async function refreshRules() {
+  try {
+    const rules = await get('/api/rules');
+    const box = $('rules-list');
+    box.innerHTML = '';
+    if (!rules.length) { box.innerHTML = '<div class="empty">无规则</div>'; return; }
+    rules.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'rule';
+      row.innerHTML = '<span class="idx">' + r.id + '</span><span class="pat">' + r.pattern.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span><span class="tag">REGEX</span>';
+      box.appendChild(row);
+    });
+  } catch (e) { toast('规则加载失败: ' + e, false); }
+}
+
+/* ── actions ── */
 async function act(path) {
   try {
     const r = await fetch(path, { method: 'POST' });
     const j = await r.json();
     toast(j.ok ? '操作成功' : '失败: ' + (j.error || r.status), j.ok);
-    refresh();
+    refreshStatus();
   } catch (e) { toast('请求失败: ' + e, false); }
 }
-refresh();
-setInterval(refresh, 5000);
+
+/* ── verify (sync) ── */
+async function runVerify() {
+  const out = $('verify-output');
+  out.textContent = '运行中…';
+  try {
+    const j = await get('/api/verify');
+    out.textContent = j.report;
+    toast(j.ok ? '自检通过' : '自检发现异常', j.ok);
+  } catch (e) { out.textContent = '请求失败: ' + e; }
+}
+
+/* ── zxwn (async task) ── */
+async function startZxwn() {
+  const btn = $('btn-zxwn');
+  btn.disabled = true;
+  $('zxwn-status').textContent = '运行中… (最长 4 分钟)';
+  $('zxwn-output').textContent = '发送 helmx 到 codex…';
+  try {
+    await post('/api/zxwn/start');
+    pollZxwn();
+  } catch (e) {
+    btn.disabled = false;
+    $('zxwn-status').textContent = '启动失败';
+    $('zxwn-output').textContent = String(e);
+  }
+}
+async function pollZxwn() {
+  try {
+    const j = await get('/api/zxwn');
+    if (j.running) { setTimeout(pollZxwn, 2000); return; }
+    $('btn-zxwn').disabled = false;
+    $('zxwn-output').textContent = j.output || '(空回复)';
+    $('zxwn-status').textContent = j.activated ? '✓ 激活确认' : '✗ 未检测到激活语';
+    $('zxwn-status').style.color = j.activated ? 'var(--ok)' : 'var(--bad)';
+  } catch (e) {
+    $('btn-zxwn').disabled = false;
+    $('zxwn-status').textContent = '轮询失败';
+    setTimeout(pollZxwn, 3000);
+  }
+}
+
+/* ── watch service ── */
+async function refreshWatch() {
+  try {
+    const w = await get('/api/watch');
+    $('watch-restores').textContent = w.restores;
+    const st = $('watch-state');
+    if (w.running) {
+      st.textContent = 'RUNNING';
+      st.className = 'state run';
+      $('watch-pill').style.display = '';
+      $('watch-text').textContent = 'watch ' + w.restores;
+    } else {
+      st.textContent = 'STOPPED';
+      st.className = 'state stop';
+      $('watch-pill').style.display = 'none';
+    }
+  } catch (e) {}
+}
+async function watchStart() {
+  const iv = parseInt($('watch-interval').value) || 60;
+  try { await post('/api/watch/start', String(iv)); toast('watch 已启动 (' + iv + 's)', true); refreshWatch(); }
+  catch (e) { toast('启动失败', false); }
+}
+async function watchStop() {
+  try { await post('/api/watch/stop'); toast('watch 已停止', true); refreshWatch(); }
+  catch (e) { toast('停止失败', false); }
+}
+
+/* ── init ── */
+refreshStatus();
+refreshRules();
+refreshWatch();
+setInterval(refreshStatus, 5000);
+setInterval(refreshWatch, 3000);
 </script>
 </body>
 </html>
