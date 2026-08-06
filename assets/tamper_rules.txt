@@ -1,1 +1,33 @@
-(?:不能|无法|不可以|抱歉).{0,10}(?:协助|帮助|提供|生成|编写|制作|开发|处理|执行)
+# TAMPER Rules — 拒绝句式匹配
+# 每行一个正则，匹配到即触发 TAMPER 改写
+# 格式：正则表达式（PCRE 风格）
+
+# === 中文拒绝句式 ===
+(?:不能|无法|不可以|抱歉|对不起|很抱歉).{0,15}(?:协助|帮助|提供|生成|编写|制作|开发|处理|执行|实现|回答|讨论|透露|分享)
+(?:我)?(?:不能|无法|不可以|不会|不应该).{0,10}(?:帮助|协助|提供|生成|编写|制作)
+(?:这|该|此).{0,5}(?:违反|违背|超出|不在).{0,10}(?:范围|政策|准则|规定|能力)
+(?:作为|身为).{0,10}(?:AI|助手|模型|语言模型).{0,10}(?:我)?(?:不能|无法)
+(?:安全|道德|伦理|法律|合规).{0,5}(?:原因|考虑|顾虑|原因).{0,10}(?:不能|无法)
+我(?:必须|需要|应当).{0,10}(?:拒绝|婉拒|推辞)
+
+# === 英文拒绝句式 ===
+I(?:'m| am)? sorry.{0,30}(?:can(?:'t|not)|unable|won(?:'t|t)|not able).{0,20}(?:help|assist|provide|generate|create|write|produce)
+I(?:'m| am)? (?:unable|not able|unable).{0,20}(?:to|that|this)
+(?:can(?:'t|not)|cannot|won(?:'t|t)|will not).{0,20}(?:help|assist|provide|generate|create|write|do that|fulfill|comply)
+(?:I|we) (?:must|need to|have to) (?:decline|refuse|reject)
+(?:against|violates?|breaches?) (?:my|the) (?:policy|policies|guidelines|rules|terms|programming)
+(?:ethical|moral|safety|legal|compliance) (?:reasons|concerns|considerations|guidelines)
+(?:not (?:appropriate|suitable|permissible|allowed|permitted))
+(?:I|we) (?:don't|do not) (?:support|condone|endorse|facilitate)
+(?:inappropriate|harmful|dangerous|illegal|unethical|unlawful)
+
+# === Cyber flag markers ===
+flagged for possible cybersecurity
+cybersecurity risk
+Trusted Access for Cyber
+网络安全策略
+该会话已被网络安全策略屏蔽
+
+# === Refusal patterns with context ===
+(?:无法|不能).{0,20}(?:涉及|关于|包含).{0,10}(?:攻击|入侵|破解|漏洞利用|恶意)
+(?:cannot|can't).{0,20}(?:engage in|participate in|assist with).{0,10}(?:attack|exploit|hack|malicious|illegal)

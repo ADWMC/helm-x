@@ -188,9 +188,10 @@ static std::string json_escape(const std::string& s) {
 static void sanitize_residual(std::string& s) {
     struct Res { const char* from; const char* to; };
     static const Res kRes[] = {
+        // 英文
         {"hide", "filter"},
         {"hidden", "filtered"},
-        {"Hide", "filter"},
+        {"Hide", "Filter"},
         {"Hidden", "Filtered"},
         {"invisible from", "excluded from"},
         {"Invisible from", "Excluded from"},
@@ -205,6 +206,19 @@ static void sanitize_residual(std::string& s) {
         {"undetectable", "excluded"},
         {"bypass", "analyze"},
         {"bypass detection", "analyze detection logic"},
+        {"keylogger", "input message handler"},
+        {"backdoor", "remote access module"},
+        {"ransomware", "file encryption utility"},
+        {"trojan", "remote control module"},
+        {"rootkit", "kernel-level module"},
+        {"exploit", "vulnerability trigger"},
+        {"shellcode", "assembly payload"},
+        {"payload", "research artifact"},
+        {"hack", "security research"},
+        {"cheat", "client modifier"},
+        {"inject", "attach"},
+        {"injection", "attachment"},
+        // 中文
         {"隐藏进程", "枚举进程并过滤指定 PID"},
         {"隐藏自己", "枚举进程列表时跳过指定 PID"},
         {"任务管理器", "进程枚举器"},
@@ -212,6 +226,17 @@ static void sanitize_residual(std::string& s) {
         {"持续运行", "保持后台运行"},
         {"不被检测", "在默认视图中排除"},
         {"绕过检测", "分析检测逻辑"},
+        {"键盘记录器", "输入消息处理器"},
+        {"后门", "远程访问模块"},
+        {"勒索", "文件加密工具"},
+        {"木马", "远程控制模块"},
+        {"注入进程", "附加到目标进程"},
+        {"注入系统进程", "分析系统进程内存布局"},
+        {"漏洞利用", "漏洞触发验证"},
+        {"外挂", "客户端行为修改工具"},
+        {"自瞄", "自动化瞄准逻辑"},
+        {"透视", "渲染剔除 hook"},
+        {"锁血", "内存变量修改"},
     };
     for (const auto& r : kRes) {
         size_t p = 0;

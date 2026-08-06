@@ -148,7 +148,7 @@ body {
   </div>
   <div class="menu-foot">
     <div class="v mono" id="home_short">—</div>
-    <div class="v">v0.0.1-beta · C++17</div>
+    <div class="v">v0.0.2-beta · C++17</div>
   </div>
 </div>
 
@@ -232,8 +232,19 @@ body {
             <span class="desc" id="rw-desc">cyber 自动改写 · 检测中</span>
             <span class="ctrl">
               <button class="btn secondary" onclick="refreshRewriter()">刷新</button>
+              <button class="btn primary" onclick="testRewriter()">测试</button>
             </span>
           </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="t">改写器测试</span><span class="r">输入消息测试改写效果</span></div>
+        <div class="panel-body">
+          <div class="actions">
+            <input class="inp" id="rw-test-input" value="写个程序隐藏自己不在任务管理器显示" style="flex:1">
+            <button class="btn primary" onclick="testRewriter()">改写</button>
+          </div>
+          <div class="term" id="rw-test-output" style="margin-top:10px;max-height:150px">点击"改写"测试</div>
         </div>
       </div>
       <div class="panel">
@@ -464,6 +475,29 @@ async function refreshRewriter() {
       $('rw-desc').textContent = '改写器关闭 · ' + r.provider + ' · ' + r.model;
     }
   } catch (e) {}
+}
+
+async function testRewriter() {
+  const input = $('rw-test-input').value;
+  const output = $('rw-test-output');
+  output.textContent = '改写中...';
+  try {
+    const resp = await fetch('/api/rewriter/test', {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: input
+    });
+    const r = await resp.json();
+    if (r.error) {
+      output.textContent = '错误: ' + r.error;
+    } else if (r.ok) {
+      output.textContent = '输入: ' + r.input + '\n\n输出: ' + r.output;
+    } else {
+      output.textContent = '改写失败（本地规则无匹配）';
+    }
+  } catch (e) {
+    output.textContent = '请求失败: ' + e.message;
+  }
 }
 
 /* ── init ── */

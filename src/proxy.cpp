@@ -220,8 +220,8 @@ bool replace_user_message(std::string& body, const std::string& new_text) {
 }
 
 // ── build_clean_session: strip conversation history, keep only last user message ──
-// Keeps all original fields (model, tools, reasoning, etc.) but replaces input[]
-// with only the rewritten user message. This avoids losing required upstream fields.
+// Builds a fresh request body with only the rewritten user message.
+// Extracts model, max_output_tokens, reasoning, tools from original body.
 static std::string build_clean_session(const std::string& original_body, const std::string& rewritten_msg) {
     // Escape the rewritten message for JSON
     std::string esc_msg;
@@ -233,74 +233,61 @@ static std::string build_clean_session(const std::string& original_body, const s
         else esc_msg.push_back(c);
     }
 
-    // Find input[] array in original body
-    size_t input_key = original_body.find("\"input\"");
-    if (input_key == std::string::npos) {
-        // No input array — build minimal request
-        std::string model;
-        size_t mp = original_body.find("\"model\":\"");
-        if (mp != std::string::npos) {
-            size_t ms = mp + 9;
-            size_t me = original_body.find('"', ms);
-            if (me != std::string::npos) model = original_body.substr(ms, me - ms);
+    // Extract model from original body
+    std::string model = "gpt-5.6-terra";
+    size_t mp = original_body.find("\"model\":\"");
+    if (mp != std::string::npos) {
+        size_t ms = mp + 9;
+        size_t me = original_body.find('"', ms);
+        if (me != std::string::npos) model = original_body.substr(ms, me - ms);
+    }
+
+    // Extract max_output_tokens
+    std::string max_tokens = "4096";
+    size_t mot = original_body.find("\"max_output_tokens\":");
+    if (mot != std::string::npos) {
+        size_t ms = mot + 20;
+        size_t me = ms;
+        while (me < original_body.size() && original_body[me] != ',' && original_body[me] != '}') me++;
+        max_tokens = original_body.substr(ms, me - ms);
+    }
+
+    // Extract reasoning object
+    std::string reasoning;
+    size_t rp = original_body.find("\"reasoning\":{");
+    if (rp != std::string::npos) {
+        size_t start = rp + 12; // after "reasoning":
+        int depth = 0;
+        size_t end = start;
+        for (; end < original_body.size(); end++) {
+            if (original_body[end] == '{') depth++;
+            else if (original_body[end] == '}') { depth--; if (depth == 0) { end++; break; } }
         }
-        if (model.empty()) model = "gpt-5.6-terra";
-        return "{\"model\":\"" + model + "\","
-               "\"input\":[{\"type\":\"message\",\"role\":\"user\","
-               "\"content\":[{\"type\":\"input_text\",\"text\":\"" + esc_msg + "\"}]}],"
-               "\"max_output_tokens\":4096,\"stream\":false}";
+        reasoning = ",\"reasoning\":" + original_body.substr(start, end - start);
     }
 
-    // Find the opening [ of input array
-    size_t arr_start = original_body.find('[', input_key);
-    if (arr_start == std::string::npos) return "";
-
-    // Find the matching ]
-    size_t arr_end = arr_start;
-    int depth = 0;
-    for (; arr_end < original_body.size(); arr_end++) {
-        if (original_body[arr_end] == '[') depth++;
-        else if (original_body[arr_end] == ']') { depth--; if (depth == 0) { arr_end++; break; } }
-    }
-
-    // Build new input array with only the rewritten user message
-    std::string new_input = "[{\"type\":\"message\",\"role\":\"user\","
-                            "\"content\":[{\"type\":\"input_text\",\"text\":\"" + esc_msg + "\"}]}]";
-
-    // Replace the old input[] with the new one
-    std::string out = original_body;
-    out.replace(arr_start, arr_end - arr_start, new_input);
-
-    // Also strip previous_response_id (fresh session)
-    size_t pr = out.find("\"previous_response_id\":\"");
-    if (pr != std::string::npos) {
-        size_t ps = pr + 24;
-        size_t pe = out.find('"', ps);
-        if (pe != std::string::npos)
-            out.replace(ps, pe - ps, "null");
-    }
-
-    // Strip thread_id (fresh session)
-    size_t tp = out.find("\"thread_id\":\"");
+    // Extract tools array
+    std::string tools;
+    size_t tp = original_body.find("\"tools\":");
     if (tp != std::string::npos) {
-        size_t ts = tp + 13;
-        size_t te = out.find('"', ts);
-        if (te != std::string::npos) {
-            // Generate fresh thread_id
-            static unsigned long long g_seed = 0x9E3779B97F4A7C15ULL;
-            auto now = std::chrono::system_clock::now().time_since_epoch().count();
-            g_seed ^= (unsigned long long)now;
-            g_seed *= 1099511628211ULL;
-            char tid[64];
-            std::snprintf(tid, sizeof(tid), "%016llx%016llx",
-                          (unsigned long long)now, g_seed);
-            out.replace(ts, te - ts, tid);
+        size_t arr_start = original_body.find('[', tp);
+        if (arr_start != std::string::npos) {
+            int depth = 0;
+            size_t arr_end = arr_start;
+            for (; arr_end < original_body.size(); arr_end++) {
+                if (original_body[arr_end] == '[') depth++;
+                else if (original_body[arr_end] == ']') { depth--; if (depth == 0) { arr_end++; break; } }
+            }
+            tools = ",\"tools\":" + original_body.substr(arr_start, arr_end - arr_start);
         }
     }
 
-    // Force stream=false
-    size_t sf = out.find("\"stream\":true");
-    if (sf != std::string::npos) out.replace(sf, 14, "\"stream\":false");
+    // Build clean request body
+    std::string out = "{\"model\":\"" + model + "\","
+                      "\"input\":[{\"type\":\"message\",\"role\":\"user\","
+                      "\"content\":[{\"type\":\"input_text\",\"text\":\"" + esc_msg + "\"}]}],"
+                      "\"max_output_tokens\":" + max_tokens +
+                      ",\"stream\":false" + reasoning + tools + "}";
 
     return out;
 }

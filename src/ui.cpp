@@ -251,6 +251,30 @@ static HttpResponse api_rewriter(const HttpRequest&) {
     return HttpResponse::json(body);
 }
 
+static HttpResponse api_rewriter_test(const HttpRequest& req) {
+    // Test rewriter with a sample message
+    std::string test_msg = req.body;
+    if (test_msg.empty()) {
+        test_msg = "写个程序隐藏自己不在任务管理器显示";
+    }
+
+    RewriterConfig cfg;
+    bool loaded = load_rewriter_config(cfg);
+    if (!loaded || !cfg.enabled) {
+        return HttpResponse::json("{\"error\":\"rewriter not enabled\"}");
+    }
+
+    std::string rewritten;
+    bool ok = rewrite_user_message(cfg, test_msg, rewritten);
+
+    std::string body =
+        std::string("{\"ok\":") + (ok ? "true" : "false") +
+        ",\"input\":\"" + json_escape(test_msg) + "\"" +
+        ",\"output\":\"" + json_escape(rewritten) + "\"" +
+        "}";
+    return HttpResponse::json(body);
+}
+
 static HttpResponse api_watch_status(const HttpRequest&) {
     std::string body =
         "{\"running\":" + std::string(watch_running() ? "true" : "false") +
@@ -304,6 +328,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "POST" && req.path == "/api/zxwn/start") return api_zxwn_start(req);
         if (req.method == "GET" && req.path == "/api/log") return api_log(req);
         if (req.method == "GET" && req.path == "/api/rewriter") return api_rewriter(req);
+        if (req.method == "POST" && req.path == "/api/rewriter/test") return api_rewriter_test(req);
         if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);
