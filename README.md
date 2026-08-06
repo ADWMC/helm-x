@@ -1,4 +1,4 @@
-# helm-x
+# Codex 破甲工具（helm-x）
 
 **Codex CLI 本地映射控制工具** · 单二进制 · C++17 · 零外部 DLL 依赖
 
@@ -244,7 +244,7 @@ cmake --build build
 
 ## 贡献 / Contributing
 
-**欢迎 PR！** 本项目欢迎任何形式的贡献：Bug 修复、新功能、文档改进、TAMPER 规则扩充、测试补充。
+**欢迎 PR！** 本项目（Codex 破甲工具）欢迎任何形式的贡献：Bug 修复、新功能、文档改进、TAMPER 规则扩充、测试补充。
 
 **你可以贡献的方向**：
 
