@@ -12,6 +12,7 @@ enum class ResId {
     ToolsJson,      // MCP tool definitions
     DashboardHtml,  // embedded web dashboard
     SkillsIndex,    // skills manifest (name -> content)
+    RewritePrompt,  // rewriter system prompt
 };
 
 // Decrypt and return an embedded resource (runtime XOR key derived in code)

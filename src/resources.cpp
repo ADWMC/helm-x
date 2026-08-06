@@ -28,6 +28,11 @@ extern const size_t kDashboardHtmlCipherLen;
 extern const unsigned char kDashboardHtmlKey[];
 extern const size_t kDashboardHtmlKeyLen;
 
+extern const unsigned char kRewritePromptCipher[];
+extern const size_t kRewritePromptCipherLen;
+extern const unsigned char kRewritePromptKey[];
+extern const size_t kRewritePromptKeyLen;
+
 extern const char* const kSkillNames[];
 extern const size_t kSkillCount;
 struct SkillEntry {
@@ -60,6 +65,8 @@ std::string get_resource(ResId id) {
             return xor_decrypt(kToolsJsonCipher, kToolsJsonCipherLen, kToolsJsonKey, kToolsJsonKeyLen);
         case ResId::DashboardHtml:
             return xor_decrypt(kDashboardHtmlCipher, kDashboardHtmlCipherLen, kDashboardHtmlKey, kDashboardHtmlKeyLen);
+        case ResId::RewritePrompt:
+            return xor_decrypt(kRewritePromptCipher, kRewritePromptCipherLen, kRewritePromptKey, kRewritePromptKeyLen);
         default:
             return "";
     }
