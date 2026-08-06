@@ -184,6 +184,7 @@ static void handle_conn(SOCKET client, HttpHandler& handler) {
         bool noisy = req.method == "GET" &&
                      (req.path == "/api/status" || req.path == "/api/watch" ||
                       req.path == "/api/log" || req.path == "/api/rules" ||
+                      req.path == "/api/proxy" ||
                       req.path == "/" || req.path == "/index.html");
         bool error = resp.status >= 400;
         if (!noisy || error) {

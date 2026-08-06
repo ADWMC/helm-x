@@ -12,9 +12,22 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
+
+namespace fs = std::filesystem;
 
 namespace helmx {
 
@@ -164,6 +177,49 @@ static HttpResponse api_log(const HttpRequest&) {
     return HttpResponse::json(body);
 }
 
+static HttpResponse api_proxy_status(const HttpRequest&) {
+    // local mapping status: is proxy listening? what's the relay?
+    bool listening = false;
+#ifdef _WIN32
+    // check if something listens on 127.0.0.1:1800
+    SOCKET s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s != INVALID_SOCKET) {
+        sockaddr_in a{};
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.sin_port = htons(1800);
+        if (::connect(s, (sockaddr*)&a, sizeof(a)) == 0) listening = true;
+        ::closesocket(s);
+    }
+#endif
+    std::string home = find_codex_home();
+    std::string relay = !home.empty() ? read_relay_url(home) : "";
+    std::string cfg_base;
+    if (!home.empty()) {
+        std::ifstream f(fs::path(home) / "config.toml");
+        if (f) {
+            std::stringstream ss;
+            ss << f.rdbuf();
+            std::string c = ss.str();
+            size_t p = c.find("base_url");
+            if (p != std::string::npos) {
+                size_t q1 = c.find('"', p);
+                size_t q2 = q1 == std::string::npos ? std::string::npos : c.find('"', q1 + 1);
+                if (q2 != std::string::npos) cfg_base = c.substr(q1 + 1, q2 - q1 - 1);
+            }
+        }
+    }
+    // proxied = config points at local proxy
+    bool proxied = cfg_base.find("127.0.0.1:1800") != std::string::npos;
+    std::string body =
+        "{\"running\":" + std::string(listening ? "true" : "false") +
+        ",\"proxied\":" + std::string(proxied ? "true" : "false") +
+        ",\"relay\":\"" + json_escape(relay) + "\"" +
+        ",\"cfg_base\":\"" + json_escape(cfg_base) + "\"" +
+        "}";
+    return HttpResponse::json(body);
+}
+
 static HttpResponse api_proxy_restore(const HttpRequest&) {
     std::string home = find_codex_home();
     if (home.empty()) {
@@ -227,6 +283,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/zxwn") return api_zxwn(req);
         if (req.method == "POST" && req.path == "/api/zxwn/start") return api_zxwn_start(req);
         if (req.method == "GET" && req.path == "/api/log") return api_log(req);
+        if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);
         if (req.method == "POST" && req.path == "/api/watch/start") return api_watch_start(req);

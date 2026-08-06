@@ -220,8 +220,8 @@ body {
           </div>
           <div class="svc">
             <span class="name">proxy</span>
-            <span class="state stop">—</span>
-            <span class="desc">本地映射：codex → 127.0.0.1:1800 → 上游 · 退出自动还原 base_url</span>
+            <span class="state stop" id="proxy-state">—</span>
+            <span class="desc" id="proxy-desc">本地映射 · 检测中</span>
             <span class="ctrl">
               <button class="btn secondary" onclick="proxyRestore()">还原配置</button>
             </span>
@@ -397,6 +397,27 @@ async function watchStop() {
   catch (e) { toast('停止失败', false); }
 }
 
+/* ── proxy status ── */
+async function refreshProxy() {
+  try {
+    const p = await get('/api/proxy');
+    const st = $('proxy-state');
+    if (p.running && p.proxied) {
+      st.textContent = 'RUNNING';
+      st.className = 'state run';
+      $('proxy-desc').textContent = 'codex → 127.0.0.1:1800 → ' + p.relay;
+    } else if (p.proxied) {
+      st.textContent = 'BROKEN';
+      st.className = 'state stop';
+      $('proxy-desc').textContent = 'config 指向 1800 但 proxy 未运行 · ' + (p.relay || '');
+    } else {
+      st.textContent = 'DIRECT';
+      st.className = 'state stop';
+      $('proxy-desc').textContent = '直连 ' + (p.cfg_base || '');
+    }
+  } catch (e) {}
+}
+
 /* ── proxy restore ── */
 async function proxyRestore() {
   try {
@@ -420,9 +441,11 @@ async function refreshLog() {
 refreshStatus();
 refreshRules();
 refreshWatch();
+refreshProxy();
 refreshLog();
 setInterval(refreshStatus, 5000);
 setInterval(refreshWatch, 3000);
+setInterval(refreshProxy, 3000);
 setInterval(refreshLog, 3000);
 </script>
 </body>
