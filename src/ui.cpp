@@ -5,6 +5,7 @@
 #include "http.h"
 #include "log.h"
 #include "resources.h"
+#include "rewrite.h"
 #include "tamper.h"
 #include "verify.h"
 #include "watch.h"
@@ -231,6 +232,25 @@ static HttpResponse api_proxy_restore(const HttpRequest&) {
     return HttpResponse::json(body, ok ? 200 : 200);  // 200 either way; ok field carries result
 }
 
+static HttpResponse api_rewriter(const HttpRequest&) {
+    // report rewriter config state (mask the key)
+    RewriterConfig cfg;
+    bool loaded = load_rewriter_config(cfg);
+    std::string key_hint;
+    if (loaded && !cfg.api_key.empty()) {
+        key_hint = cfg.api_key.substr(0, 6) + "..." + cfg.api_key.substr(cfg.api_key.size() - 4);
+    }
+    std::string body =
+        std::string("{\"loaded\":") + (loaded ? "true" : "false") +
+        ",\"enabled\":" + (cfg.enabled ? "true" : "false") +
+        ",\"model\":\"" + json_escape(cfg.model) + "\"" +
+        ",\"provider\":\"" + json_escape(cfg.provider) + "\"" +
+        ",\"key\":\"" + json_escape(key_hint) + "\"" +
+        ",\"base_url\":\"" + json_escape(cfg.base_url) + "\"" +
+        "}";
+    return HttpResponse::json(body);
+}
+
 static HttpResponse api_watch_status(const HttpRequest&) {
     std::string body =
         "{\"running\":" + std::string(watch_running() ? "true" : "false") +
@@ -283,6 +303,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/zxwn") return api_zxwn(req);
         if (req.method == "POST" && req.path == "/api/zxwn/start") return api_zxwn_start(req);
         if (req.method == "GET" && req.path == "/api/log") return api_log(req);
+        if (req.method == "GET" && req.path == "/api/rewriter") return api_rewriter(req);
         if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);

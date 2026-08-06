@@ -6,6 +6,7 @@ namespace helmx {
 
 struct RewriterConfig {
     bool enabled = false;
+    std::string provider = "klapi";
     std::string base_url = "https://klapi.me/v1";
     std::string api_key;
     std::string model = "mimo-v2.5-pro";

@@ -83,6 +83,8 @@ bool load_rewriter_config(RewriterConfig& cfg) {
 
     // rewriter.enabled / provider / base_url / api_key / model / system_prompt
     cfg.enabled = json_field(content, "enabled") == "true";
+    std::string prov = json_field(content, "provider");
+    if (!prov.empty()) cfg.provider = prov;
     std::string base = json_field(content, "base_url");
     if (!base.empty()) cfg.base_url = base;
     std::string key = json_field(content, "api_key");

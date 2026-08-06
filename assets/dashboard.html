@@ -226,6 +226,14 @@ body {
               <button class="btn secondary" onclick="proxyRestore()">还原配置</button>
             </span>
           </div>
+          <div class="svc">
+            <span class="name">改写器</span>
+            <span class="state stop" id="rw-state">—</span>
+            <span class="desc" id="rw-desc">cyber 自动改写 · 检测中</span>
+            <span class="ctrl">
+              <button class="btn secondary" onclick="refreshRewriter()">刷新</button>
+            </span>
+          </div>
         </div>
       </div>
       <div class="panel">
@@ -437,11 +445,33 @@ async function refreshLog() {
   } catch (e) {}
 }
 
+/* ── rewriter status ── */
+async function refreshRewriter() {
+  try {
+    const r = await get('/api/rewriter');
+    const st = $('rw-state');
+    if (!r.loaded) {
+      st.textContent = 'NO CONFIG';
+      st.className = 'state stop';
+      $('rw-desc').textContent = '未找到 helmx.config.json';
+    } else if (r.enabled) {
+      st.textContent = 'ON';
+      st.className = 'state run';
+      $('rw-desc').textContent = r.provider + ' · ' + r.model + ' · key ' + (r.key || '无');
+    } else {
+      st.textContent = 'OFF';
+      st.className = 'state stop';
+      $('rw-desc').textContent = '改写器关闭 · ' + r.provider + ' · ' + r.model;
+    }
+  } catch (e) {}
+}
+
 /* ── init ── */
 refreshStatus();
 refreshRules();
 refreshWatch();
 refreshProxy();
+refreshRewriter();
 refreshLog();
 setInterval(refreshStatus, 5000);
 setInterval(refreshWatch, 3000);
