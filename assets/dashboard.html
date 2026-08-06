@@ -3,104 +3,293 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>helm-x dashboard</title>
+<title>helm-x</title>
 <style>
+/* ── osmium-inspired palette (webtui) ── */
 :root {
-  --bg: #0d1117; --panel: #161b22; --border: #30363d;
-  --fg: #e6edf3; --dim: #8b949e; --accent: #2f81f7;
-  --ok: #3fb950; --bad: #f85149; --warn: #d29922;
+  --root: #14131e;
+  --surface0: #1f1d2d;
+  --surface1: #242336;
+  --surface2: #353553;
+  --surface3: #494764;
+  --foreground0: #c8d5f1;
+  --foreground1: #949bb9;
+  --foreground2: #747a9c;
+
+  --blue-fg: #9abfe8;
+  --blue-dim: #8caad1;
+  --green-fg: #c9de96;
+  --green-dim: #b3c48d;
+  --red-fg: #e55376;
+  --red-dim: #ca5072;
+  --orange-fg: #ebb17b;
+  --orange-dim: #cf9876;
+  --yellow-fg: #e9d39c;
+  --purple-fg: #b0a8eb;
+  --purple-dim: #9d97d3;
+
+  --border: #2e2c44;
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, "SF Mono", monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--fg); font: 14px/1.6 "Segoe UI", system-ui, sans-serif; padding: 24px; }
-h1 { font-size: 20px; margin-bottom: 4px; }
-.sub { color: var(--dim); margin-bottom: 20px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-.card h2 { font-size: 14px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
-.kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; }
-.kv dt { color: var(--dim); }
-.kv dd { word-break: break-all; }
-.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
-.badge.ok { background: rgba(63,185,80,.15); color: var(--ok); }
-.badge.bad { background: rgba(248,81,73,.15); color: var(--bad); }
-.btn { display: inline-block; margin: 8px 8px 0 0; padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: #21262d; color: var(--fg); cursor: pointer; font-size: 13px; }
-.btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.danger { background: rgba(248,81,73,.15); border-color: var(--bad); color: var(--bad); }
-#rules { list-style: none; }
-#rules li { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; font-family: Consolas, monospace; }
-#rules li .idx { color: var(--dim); min-width: 24px; }
-#toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 18px; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); opacity: 0; transition: opacity .3s; font-size: 13px; }
-#toast.show { opacity: 1; }
-.mono { font-family: Consolas, monospace; font-size: 12px; }
+html, body { height: 100%; }
+body {
+  background: var(--root);
+  color: var(--foreground0);
+  font: 14px/1.65 var(--mono);
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── sidebar ── */
+.sidebar {
+  width: 208px;
+  flex-shrink: 0;
+  background: var(--surface0);
+  border-right: 1px solid var(--border);
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.logo {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 4px 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.logo .dot { width: 10px; height: 10px; border-radius: 3px; background: var(--blue-fg); box-shadow: 0 0 12px var(--blue-fg); }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  color: var(--foreground1);
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+  transition: background .15s, color .15s;
+}
+.nav-item:hover { background: var(--surface1); color: var(--foreground0); }
+.nav-item.active { background: var(--surface2); color: var(--foreground0); }
+.nav-item .k { color: var(--foreground2); font-size: 11px; }
+.sidebar .spacer { flex: 1; }
+.version { font-size: 11px; color: var(--foreground2); padding: 8px 10px; }
+
+/* ── main ── */
+.main { flex: 1; padding: 26px 30px; min-width: 0; }
+.page-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.page-sub { color: var(--foreground2); font-size: 12.5px; margin-bottom: 22px; }
+
+/* ── status cards ── */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.card {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  transition: border-color .2s;
+}
+.card:hover { border-color: var(--surface3); }
+.card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--foreground2); margin-bottom: 10px; }
+.card .value { font-size: 22px; font-weight: 700; letter-spacing: .5px; }
+.card .value.blue { color: var(--blue-fg); }
+.card .value.green { color: var(--green-fg); }
+.card .value.orange { color: var(--orange-fg); }
+.card .value.purple { color: var(--purple-fg); }
+.card .hint { font-size: 11.5px; color: var(--foreground2); margin-top: 4px; }
+
+/* ── status pill ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface0);
+}
+.pill .led { width: 7px; height: 7px; border-radius: 50%; }
+.pill.ok { color: var(--green-fg); }
+.pill.ok .led { background: var(--green-fg); box-shadow: 0 0 8px var(--green-fg); animation: pulse 2s infinite; }
+.pill.bad { color: var(--red-fg); }
+.pill.bad .led { background: var(--red-fg); box-shadow: 0 0 8px var(--red-fg); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ── actions ── */
+.actions { display: flex; gap: 10px; margin-top: 6px; }
+.btn {
+  padding: 8px 18px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface0);
+  color: var(--foreground0);
+  font: 600 13px var(--mono);
+  cursor: pointer;
+  transition: all .15s;
+  letter-spacing: .3px;
+}
+.btn:hover { border-color: var(--blue-dim); color: var(--blue-fg); }
+.btn.primary { background: var(--blue-dim); border-color: var(--blue-dim); color: #12121c; }
+.btn.primary:hover { background: var(--blue-fg); }
+.btn.danger { border-color: var(--red-dim); color: var(--red-fg); }
+.btn.danger:hover { background: rgba(229,83,118,.12); }
+
+/* ── panels ── */
+.panel {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface0);
+}
+.panel-head .t { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--foreground1); }
+.panel-head .r { font-size: 11.5px; color: var(--foreground2); }
+.panel-body { padding: 8px 0; }
+
+/* ── rules list ── */
+.rule-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.rule-row:last-child { border-bottom: none; }
+.rule-row .idx { color: var(--foreground2); min-width: 30px; text-align: right; }
+.rule-row .pat { flex: 1; color: var(--foreground0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rule-row .tag { font-size: 10.5px; padding: 1px 8px; border-radius: 4px; background: var(--surface2); color: var(--blue-fg); }
+
+/* ── kv grid ── */
+.kv { display: grid; grid-template-columns: 150px 1fr; gap: 8px 16px; padding: 14px 18px; font-size: 13px; }
+.kv dt { color: var(--foreground2); }
+.kv dd { color: var(--foreground0); word-break: break-all; }
+
+/* ── toast ── */
+#toast {
+  position: fixed; bottom: 22px; right: 22px;
+  padding: 11px 20px; border-radius: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--foreground0); font-size: 13px;
+  opacity: 0; transform: translateY(8px); transition: all .25s; pointer-events: none;
+  box-shadow: 0 8px 30px rgba(0,0,0,.5);
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.ok { border-color: var(--green-dim); }
+#toast.err { border-color: var(--red-dim); color: var(--red-fg); }
+
+.empty { padding: 22px 18px; color: var(--foreground2); font-size: 12.5px; }
 </style>
 </head>
 <body>
-<h1>helm-x</h1>
-<div class="sub">Codex 环境控制 · <span class="mono" id="home"></span></div>
 
-<div class="grid">
-  <div class="card">
-    <h2>注入状态</h2>
-    <dl class="kv">
-      <dt>AGENTS.md</dt><dd><span id="injected" class="badge">—</span></dd>
-      <dt>资源体积</dt><dd class="mono" id="agents_bytes">—</dd>
-      <dt>规则数</dt><dd class="mono" id="rules_count">—</dd>
-    </dl>
-    <button class="btn primary" onclick="act('/api/apply')">apply</button>
-    <button class="btn danger" onclick="act('/api/remove')">remove</button>
+<div class="sidebar">
+  <div class="logo"><span class="dot"></span>helm-x</div>
+  <div class="nav-item active"><span class="k">01</span>状态总览</div>
+  <div class="nav-item"><span class="k">02</span>TAMPER 规则</div>
+  <div class="nav-item"><span class="k">03</span>子命令</div>
+  <div class="spacer"></div>
+  <div class="version">v0.1.0 · C++17</div>
+</div>
+
+<div class="main">
+  <div class="page-title">状态总览</div>
+  <div class="page-sub mono" id="home">—</div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">AGENTS.md</div>
+      <div><span id="injected" class="pill"><span class="led"></span>检测中</span></div>
+      <div class="hint mono" id="agents_bytes">—</div>
+    </div>
+    <div class="card">
+      <div class="label">TAMPER 规则</div>
+      <div class="value blue" id="rules_count">—</div>
+      <div class="hint">内嵌加密资源</div>
+    </div>
+    <div class="card">
+      <div class="label">Codex Home</div>
+      <div class="value orange mono" id="home_short" style="font-size:15px">—</div>
+      <div class="hint" id="home_hint">—</div>
+    </div>
   </div>
 
-  <div class="card">
-    <h2>TAMPER 规则</h2>
-    <ul id="rules"><li>加载中…</li></ul>
+  <div class="panel">
+    <div class="panel-head"><span class="t">操作</span><span class="r">apply / remove</span></div>
+    <div class="panel-body" style="padding: 14px 18px;">
+      <div class="actions">
+        <button class="btn primary" onclick="act('/api/apply')">▶ apply</button>
+        <button class="btn danger" onclick="act('/api/remove')">✕ remove</button>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <h2>子命令</h2>
-    <dl class="kv">
-      <dt>watch</dt><dd class="mono">helmx watch 60</dd>
+  <div class="panel" id="rules-panel">
+    <div class="panel-head"><span class="t">TAMPER 规则</span><span class="r">pattern → replace</span></div>
+    <div class="panel-body"><div class="empty" id="rules-loading">加载中…</div><div id="rules-list"></div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><span class="t">子命令</span><span class="r">CLI reference</span></div>
+    <div class="kv">
+      <dt>watch</dt><dd class="mono">helmx watch [interval_sec]</dd>
       <dt>proxy</dt><dd class="mono">helmx proxy --listen 1800 --upstream &lt;relay&gt;</dd>
       <dt>mcp</dt><dd class="mono">helmx mcp</dd>
-    </dl>
+      <dt>ui</dt><dd class="mono">helmx ui --port 8090</dd>
+    </div>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-async function get(path) {
-  const r = await fetch(path);
-  return r.json();
-}
+async function get(path) { const r = await fetch(path); return r.json(); }
 function toast(msg, ok) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.style.background = ok ? 'rgba(63,185,80,.15)' : 'rgba(248,81,73,.15)';
-  t.style.borderColor = ok ? 'var(--ok)' : 'var(--bad)';
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  t.className = ok ? 'show ok' : 'show err';
+  setTimeout(() => t.className = '', 2400);
 }
 async function refresh() {
   try {
     const s = await get('/api/status');
-    document.getElementById('home').textContent = s.home || '(not found)';
+    document.getElementById('home').textContent = 'codex home: ' + (s.home || '(not found)');
     const inj = document.getElementById('injected');
-    inj.textContent = s.injected ? 'ACTIVE' : 'MISSING';
-    inj.className = 'badge ' + (s.injected ? 'ok' : 'bad');
-    document.getElementById('agents_bytes').textContent = s.agents_bytes + ' B';
+    if (s.injected) { inj.className = 'pill ok'; inj.innerHTML = '<span class="led"></span>ACTIVE'; }
+    else { inj.className = 'pill bad'; inj.innerHTML = '<span class="led"></span>MISSING'; }
+    document.getElementById('agents_bytes').textContent = s.agents_bytes + ' B · 加密内嵌';
     document.getElementById('rules_count').textContent = s.rules;
+    document.getElementById('home_short').textContent = s.home || '(not found)';
+    document.getElementById('home_hint').textContent = s.injected ? '注入完整' : '需要 apply';
 
     const rules = await get('/api/rules');
-    const ul = document.getElementById('rules');
-    ul.innerHTML = '';
+    const box = document.getElementById('rules-list');
+    const loading = document.getElementById('rules-loading');
+    loading.style.display = 'none';
+    box.innerHTML = '';
     if (!rules.length) {
-      ul.innerHTML = '<li><span class="idx">—</span><span>无规则</span></li>';
+      box.innerHTML = '<div class="empty">无规则</div>';
     } else {
       rules.forEach(r => {
-        const li = document.createElement('li');
-        li.innerHTML = '<span class="idx">#' + r.id + '</span><span>' + r.pattern.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
-        ul.appendChild(li);
+        const row = document.createElement('div');
+        row.className = 'rule-row';
+        row.innerHTML = '<span class="idx">#' + r.id + '</span><span class="pat">' + r.pattern.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span><span class="tag">regex</span>';
+        box.appendChild(row);
       });
     }
   } catch (e) {
@@ -111,11 +300,9 @@ async function act(path) {
   try {
     const r = await fetch(path, { method: 'POST' });
     const j = await r.json();
-    toast(j.ok ? 'OK' : '失败: ' + (j.error || r.status), j.ok);
+    toast(j.ok ? '操作成功' : '失败: ' + (j.error || r.status), j.ok);
     refresh();
-  } catch (e) {
-    toast('请求失败: ' + e, false);
-  }
+  } catch (e) { toast('请求失败: ' + e, false); }
 }
 refresh();
 setInterval(refresh, 5000);
