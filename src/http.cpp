@@ -1,6 +1,8 @@
 // http.cpp — minimal HTTP/1.1 server (WinSock2, zero external deps)
 #include "http.h"
 
+#include "log.h"
+
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -174,6 +176,13 @@ static void handle_conn(SOCKET client, HttpHandler& handler) {
     } catch (...) {
         resp = HttpResponse::text("{\"error\":\"internal\"}", 500);
         resp.content_type = "application/json";
+    }
+
+    // real-time log stream: print each request to console + log file
+    {
+        char line[256];
+        std::snprintf(line, sizeof(line), "req %s %s -> %d", req.method.c_str(), req.path.c_str(), resp.status);
+        log_info(line);
     }
 
     // serialize response

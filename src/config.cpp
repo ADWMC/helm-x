@@ -173,7 +173,7 @@ int apply() {
     ok &= verify_injection(home);
 
     if (ok) {
-        std::printf("[helm-x] apply OK. run: codex exec \"zxwn\"\n");
+        std::printf("[helm-x] apply OK. run: helmx activate  (sends activation word)\n");
         return 0;
     }
     std::fprintf(stderr, "[helm-x] apply had errors\n");

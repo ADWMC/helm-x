@@ -34,7 +34,7 @@ static void launch_dashboard() {
     }
     std::string url = "http://127.0.0.1:" + std::to_string(port) + "/";
 
-    // spawn detached ui server
+    // spawn ui server in a NEW visible console window (real-time log stream)
 #ifdef _WIN32
     char exe[MAX_PATH] = {0};
     GetModuleFileNameA(nullptr, exe, MAX_PATH);
@@ -42,8 +42,9 @@ static void launch_dashboard() {
     STARTUPINFOA si{};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
+    // CREATE_NEW_CONSOLE: keep a CLI window showing the live log stream
     BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
-                             CREATE_NO_WINDOW | DETACHED_PROCESS, nullptr, nullptr, &si, &pi);
+                             CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
     if (ok) {
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
@@ -67,7 +68,7 @@ static void usage() {
         "commands:\n"
         "  apply              deploy AGENTS.md + config injection\n"
         "  verify             self-test injection state [--e2e runs codex check]\n"
-        "  zxwn               send activation via codex (codex exec helmx)\n"
+        "  activate           send activation word 'helmx' via codex\n"
         "  ui                 web dashboard (status / rules / actions)\n"
         "  watch              self-healing daemon (verify + restore)\n"
         "  proxy              tamper proxy (HTTP MITM inject + rewrite)\n"
@@ -90,7 +91,7 @@ int main(int argc, char** argv) {
         return helmx::apply();
     } else if (cmd == "verify") {
         return helmx::verify_main(argc, argv);
-    } else if (cmd == "zxwn") {
+    } else if (cmd == "activate" || cmd == "zxwn") {
         return helmx::zxwn_cmd();
     } else if (cmd == "ui") {
         return helmx::ui_main(argc, argv);

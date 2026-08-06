@@ -195,6 +195,17 @@ int ui_main(int argc, char** argv) {
         dashboard = "<h1>helm-x dashboard (resource missing)</h1>";
     }
 
+    // CLI window banner: this window streams live logs
+    std::printf("==============================================\n");
+    std::printf("  helm-x  —  Web Console\n");
+    std::printf("  UI      : http://127.0.0.1:%d\n", port);
+    std::printf("  Log     : %s\n", log_path().c_str());
+    std::printf("  Commands: helmx apply | verify | activate | watch\n");
+    std::printf("  Close this window to stop the service.\n");
+    std::printf("==============================================\n");
+    std::fflush(stdout);
+    log_info("ui: server starting on port " + std::to_string(port));
+
     HttpHandler handler = [dashboard](const HttpRequest& req) -> HttpResponse {
         if (req.method == "GET" && (req.path == "/" || req.path == "/index.html")) {
             return HttpResponse::html(dashboard);
