@@ -91,8 +91,28 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     if (!key.empty()) cfg.api_key = key;
     std::string model = json_field(content, "model");
     if (!model.empty()) cfg.model = model;
+    // system_prompt: prefer config, fallback to assets/rewrite_prompt.txt
     std::string sp = json_field(content, "system_prompt");
-    if (!sp.empty()) cfg.system_prompt = sp;
+    if (!sp.empty()) {
+        cfg.system_prompt = sp;
+    } else {
+        // try reading from assets/rewrite_prompt.txt (relative to config dir)
+        fs::path config_dir = fs::path(path).parent_path();
+        fs::path txt_path = config_dir / "assets" / "rewrite_prompt.txt";
+        if (!fs::exists(txt_path)) {
+            // also try next to the exe
+            txt_path = config_dir / "rewrite_prompt.txt";
+        }
+        if (fs::exists(txt_path)) {
+            std::ifstream tf(txt_path, std::ios::binary);
+            if (tf) {
+                std::stringstream ts;
+                ts << tf.rdbuf();
+                cfg.system_prompt = ts.str();
+                log_info("rewriter: loaded system_prompt from " + txt_path.string());
+            }
+        }
+    }
 
     // timeout
     std::string to = json_field(content, "timeout_sec");
