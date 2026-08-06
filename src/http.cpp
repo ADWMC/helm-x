@@ -178,11 +178,19 @@ static void handle_conn(SOCKET client, HttpHandler& handler) {
         resp.content_type = "application/json";
     }
 
-    // real-time log stream: print each request to console + log file
+    // real-time log stream: log meaningful events, skip high-frequency
+    // polling GETs (status/watch/log/rules refresh every few seconds)
     {
-        char line[256];
-        std::snprintf(line, sizeof(line), "req %s %s -> %d", req.method.c_str(), req.path.c_str(), resp.status);
-        log_info(line);
+        bool noisy = req.method == "GET" &&
+                     (req.path == "/api/status" || req.path == "/api/watch" ||
+                      req.path == "/api/log" || req.path == "/api/rules" ||
+                      req.path == "/" || req.path == "/index.html");
+        bool error = resp.status >= 400;
+        if (!noisy || error) {
+            char line[256];
+            std::snprintf(line, sizeof(line), "req %s %s -> %d", req.method.c_str(), req.path.c_str(), resp.status);
+            log_info(line);
+        }
     }
 
     // serialize response
