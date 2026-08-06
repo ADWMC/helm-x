@@ -60,6 +60,7 @@ def main():
     agents = read('bridge.md')
     rules = read('tamper_rules.txt')
     tools = read('tools.json')
+    dashboard = read('dashboard.html')
 
     # Skills index: name -> (cipher, key, len) ; content encrypted per-skill
     skills_dir = os.path.join(assets, 'skills')
@@ -93,6 +94,7 @@ def main():
     emit_var('kAgentsMd', agents, KEY_SEED)
     emit_var('kTamperRules', rules, KEY_SEED + 0x1000)
     emit_var('kToolsJson', tools, KEY_SEED + 0x2000)
+    emit_var('kDashboardHtml', dashboard, KEY_SEED + 0x3000)
 
     # skills index: names array
     lines.append('extern const char* const kSkillNames[] = {')

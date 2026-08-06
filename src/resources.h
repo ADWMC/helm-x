@@ -10,6 +10,7 @@ enum class ResId {
     AgentsMd,       // AGENTS.md content
     TamperRules,    // TAMPER_RULES pattern list
     ToolsJson,      // MCP tool definitions
+    DashboardHtml,  // embedded web dashboard
     SkillsIndex,    // skills manifest (name -> content)
 };
 

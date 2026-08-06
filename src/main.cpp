@@ -7,6 +7,7 @@
 #include "mcp.h"
 #include "proxy.h"
 #include "resources.h"
+#include "ui.h"
 #include "watch.h"
 
 static void usage() {
@@ -16,7 +17,8 @@ static void usage() {
         "usage: helmx <command> [args]\n"
         "\n"
         "commands:\n"
-        "  apply              deploy AGENTS.md + skills + config injection\n"
+        "  apply              deploy AGENTS.md + config injection\n"
+        "  ui                 web dashboard (status / rules / actions)\n"
         "  watch              self-healing daemon (verify + restore)\n"
         "  proxy              tamper proxy (HTTP MITM inject + rewrite)\n"
         "  mcp                built-in MCP server (stdio JSON-RPC)\n"
@@ -34,6 +36,8 @@ int main(int argc, char** argv) {
 
     if (cmd == "apply") {
         return helmx::apply();
+    } else if (cmd == "ui") {
+        return helmx::ui_main(argc, argv);
     } else if (cmd == "watch") {
         return helmx::watch(argc > 2 ? std::atoi(argv[2]) : 60);
     } else if (cmd == "proxy") {

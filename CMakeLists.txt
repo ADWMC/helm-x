@@ -18,6 +18,8 @@ add_executable(helmx
     src/tamper.cpp
     src/proxy.cpp
     src/sse.cpp
+    src/http.cpp
+    src/ui.cpp
     src/mcp.cpp
     src/watch.cpp
 )

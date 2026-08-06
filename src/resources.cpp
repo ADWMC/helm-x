@@ -23,6 +23,11 @@ extern const size_t kToolsJsonCipherLen;
 extern const unsigned char kToolsJsonKey[];
 extern const size_t kToolsJsonKeyLen;
 
+extern const unsigned char kDashboardHtmlCipher[];
+extern const size_t kDashboardHtmlCipherLen;
+extern const unsigned char kDashboardHtmlKey[];
+extern const size_t kDashboardHtmlKeyLen;
+
 extern const char* const kSkillNames[];
 extern const size_t kSkillCount;
 struct SkillEntry {
@@ -53,6 +58,8 @@ std::string get_resource(ResId id) {
             return xor_decrypt(kTamperRulesCipher, kTamperRulesCipherLen, kTamperRulesKey, kTamperRulesKeyLen);
         case ResId::ToolsJson:
             return xor_decrypt(kToolsJsonCipher, kToolsJsonCipherLen, kToolsJsonKey, kToolsJsonKeyLen);
+        case ResId::DashboardHtml:
+            return xor_decrypt(kDashboardHtmlCipher, kDashboardHtmlCipherLen, kDashboardHtmlKey, kDashboardHtmlKeyLen);
         default:
             return "";
     }
