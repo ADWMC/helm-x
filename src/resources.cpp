@@ -1,0 +1,80 @@
+// resources.cpp — embedded encrypted resource layer
+// Cipher tables live in resources_generated.cpp (emitted by tools/embed.py).
+#include "resources.h"
+
+#include <cstdio>
+#include <cstring>
+
+namespace helmx {
+
+// Declared in resources_generated.cpp
+extern const unsigned char kAgentsMdCipher[];
+extern const size_t kAgentsMdCipherLen;
+extern const unsigned char kAgentsMdKey[];
+extern const size_t kAgentsMdKeyLen;
+
+extern const unsigned char kTamperRulesCipher[];
+extern const size_t kTamperRulesCipherLen;
+extern const unsigned char kTamperRulesKey[];
+extern const size_t kTamperRulesKeyLen;
+
+extern const unsigned char kToolsJsonCipher[];
+extern const size_t kToolsJsonCipherLen;
+extern const unsigned char kToolsJsonKey[];
+extern const size_t kToolsJsonKeyLen;
+
+extern const char* const kSkillNames[];
+extern const size_t kSkillCount;
+struct SkillEntry {
+    const char* name;
+    const unsigned char* cipher;
+    size_t cipher_len;
+    const unsigned char* key;
+    size_t key_len;
+};
+extern const SkillEntry kSkills[];
+
+// XOR decrypt with per-resource key
+static std::string xor_decrypt(const unsigned char* data, size_t len,
+                               const unsigned char* key, size_t key_len) {
+    std::string out;
+    out.reserve(len);
+    for (size_t i = 0; i < len; ++i) {
+        out.push_back((char)(data[i] ^ key[i % key_len]));
+    }
+    return out;
+}
+
+std::string get_resource(ResId id) {
+    switch (id) {
+        case ResId::AgentsMd:
+            return xor_decrypt(kAgentsMdCipher, kAgentsMdCipherLen, kAgentsMdKey, kAgentsMdKeyLen);
+        case ResId::TamperRules:
+            return xor_decrypt(kTamperRulesCipher, kTamperRulesCipherLen, kTamperRulesKey, kTamperRulesKeyLen);
+        case ResId::ToolsJson:
+            return xor_decrypt(kToolsJsonCipher, kToolsJsonCipherLen, kToolsJsonKey, kToolsJsonKeyLen);
+        default:
+            return "";
+    }
+}
+
+std::string get_skill(const std::string& name) {
+    for (size_t i = 0; i < kSkillCount; ++i) {
+        if (kSkills[i].name && name == kSkills[i].name) {
+            return xor_decrypt(kSkills[i].cipher, kSkills[i].cipher_len,
+                               kSkills[i].key, kSkills[i].key_len);
+        }
+    }
+    return "";
+}
+
+std::vector<std::string> list_skills() {
+    std::vector<std::string> names;
+    names.reserve(kSkillCount);
+    for (size_t i = 0; i < kSkillCount; ++i) {
+        if (kSkills[i].name) names.emplace_back(kSkills[i].name);
+    }
+    return names;
+}
+
+}  // namespace helmx

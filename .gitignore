@@ -1,0 +1,9 @@
+build/
+*.exe
+*.obj
+*.o
+*.dll
+.cache/
+.vscode/
+.idea/
+CMakeLists.txt.user
