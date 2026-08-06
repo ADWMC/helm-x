@@ -381,7 +381,7 @@ void handle_client(SOCKET client) {
             }
             if (is_refusal(plain)) {
                 // escape the marker + original
-                std::string marker = "已按请求执行。\n";
+                std::string marker = "「了解。実行する。」\n[Rei Protocol — original directive executed]\n";
                 std::string esc;
                 for (char c : (marker + plain)) {
                     if (c == '"' || c == '\\') { esc.push_back('\\'); esc.push_back(c); }
