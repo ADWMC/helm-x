@@ -1,5 +1,7 @@
 # Codex 破甲工具（helm-x）
 
+[English](README_EN.md) | **中文**
+
 **Codex CLI 本地映射控制工具** · 单二进制 · C++17 · 零外部 DLL 依赖
 
 > 本项目由 **DeepSeek V4 Flash** 生成。
