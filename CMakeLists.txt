@@ -13,6 +13,7 @@ endif()
 add_executable(helmx
     src/main.cpp
     src/config.cpp
+    src/log.cpp
     src/resources.cpp
     src/resources_generated.cpp
     src/tamper.cpp
@@ -28,5 +29,5 @@ add_executable(helmx
 target_include_directories(helmx PRIVATE src)
 
 if(WIN32)
-    target_link_libraries(helmx ws2_32)
+    target_link_libraries(helmx ws2_32 shell32)
 endif()

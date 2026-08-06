@@ -2,6 +2,7 @@
 #include "watch.h"
 
 #include "config.h"
+#include "log.h"
 
 #include <atomic>
 #include <chrono>
@@ -21,6 +22,7 @@ bool watch_pass(const std::string& home) {
     if (verify_injection(home)) return true;
     std::printf("[helm-x] injection broken, restoring...\n");
     std::fflush(stdout);
+    log_info("watch: injection broken, restoring");
     inject_config(home);
     deploy_agents(home);
     if (verify_injection(home)) {
@@ -30,8 +32,10 @@ bool watch_pass(const std::string& home) {
                                 .count();
         std::printf("[helm-x] restored\n");
         std::fflush(stdout);
+        log_info("watch: restored (total " + std::to_string(g_watch_restores.load()) + ")");
     } else {
         std::fprintf(stderr, "[helm-x] restore FAILED\n");
+        log_error("watch: restore FAILED");
     }
     return false;
 }
@@ -41,10 +45,12 @@ void watch_start(int interval_sec) {
     if (g_watch_running.load()) return;
     if (interval_sec < 5) interval_sec = 5;
     g_watch_running = true;
+    log_info("watch: start (interval " + std::to_string(interval_sec) + "s)");
     g_watch_thread = std::thread([interval_sec] {
         std::string home = find_codex_home();
         if (home.empty()) {
             std::fprintf(stderr, "[helm-x] codex home not found\n");
+            log_error("watch: codex home not found");
             g_watch_running = false;
             return;
         }
@@ -58,11 +64,15 @@ void watch_start(int interval_sec) {
         }
         std::printf("[helm-x] watch stopped\n");
         std::fflush(stdout);
+        log_info("watch: stopped");
     });
     g_watch_thread.detach();
 }
 
 void watch_stop() {
+    if (g_watch_running.load()) {
+        log_info("watch: stop requested");
+    }
     g_watch_running = false;
 }
 

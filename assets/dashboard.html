@@ -229,6 +229,12 @@ body {
           </div>
         </div>
       </div>
+      <div class="panel">
+        <div class="panel-head"><span class="t">运行日志</span><span class="r">~/.codex/helmx.log</span></div>
+        <div class="panel-body">
+          <div class="term" id="log-output" style="max-height:300px">加载中…</div>
+        </div>
+      </div>
     </div>
 
     <!-- ── 规则页 ── -->
@@ -383,12 +389,23 @@ async function watchStop() {
   catch (e) { toast('停止失败', false); }
 }
 
+/* ── log viewer ── */
+async function refreshLog() {
+  try {
+    const j = await get('/api/log');
+    $('log-output').textContent = j.log || '(空)';
+    $('log-output').scrollTop = $('log-output').scrollHeight;
+  } catch (e) {}
+}
+
 /* ── init ── */
 refreshStatus();
 refreshRules();
 refreshWatch();
+refreshLog();
 setInterval(refreshStatus, 5000);
 setInterval(refreshWatch, 3000);
+setInterval(refreshLog, 3000);
 </script>
 </body>
 </html>

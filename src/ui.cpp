@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "http.h"
+#include "log.h"
 #include "resources.h"
 #include "tamper.h"
 #include "verify.h"
@@ -33,6 +34,7 @@ void async_zxwn() {
     g_task_output = out;
     g_task_activated = activated;
     g_task_running = false;
+    log_info(std::string("ui: zxwn done, activated=") + (activated ? "true" : "false"));
 }
 
 void start_zxwn_task() {
@@ -43,6 +45,7 @@ void start_zxwn_task() {
         g_task_output.clear();
         g_task_activated = false;
     }
+    log_info("ui: zxwn task started");
     std::thread(async_zxwn).detach();
 }
 }  // namespace
@@ -99,18 +102,22 @@ static HttpResponse api_rules(const HttpRequest&) {
 static HttpResponse api_apply(const HttpRequest&) {
     std::string home = find_codex_home();
     if (home.empty()) {
+        log_error("ui: apply failed (codex home not found)");
         return HttpResponse::json("{\"ok\":false,\"error\":\"codex home not found\"}", 500);
     }
     bool ok = inject_config(home) && deploy_agents(home) && verify_injection(home);
+    log_info(std::string("ui: apply ") + (ok ? "OK" : "FAILED"));
     return HttpResponse::json(std::string("{\"ok\":") + (ok ? "true" : "false") + "}", ok ? 200 : 500);
 }
 
 static HttpResponse api_remove(const HttpRequest&) {
     std::string home = find_codex_home();
     if (home.empty()) {
+        log_error("ui: remove failed (codex home not found)");
         return HttpResponse::json("{\"ok\":false,\"error\":\"codex home not found\"}", 500);
     }
     bool ok = remove_all(home);
+    log_info(std::string("ui: remove ") + (ok ? "OK" : "FAILED"));
     return HttpResponse::json(std::string("{\"ok\":") + (ok ? "true" : "false") + "}", ok ? 200 : 500);
 }
 
@@ -143,6 +150,20 @@ static HttpResponse api_zxwn_start(const HttpRequest&) {
     return HttpResponse::json("{\"started\":true}");
 }
 
+static HttpResponse api_log(const HttpRequest&) {
+    // return last N lines of ~/.codex/helmx.log
+    std::string path = log_path();
+    std::string content;
+    if (read_file(path, content)) {
+        // keep last 3000 chars
+        if (content.size() > 3000) content = content.substr(content.size() - 3000);
+    } else {
+        content = "(log empty)";
+    }
+    std::string body = "{\"log\":\"" + json_escape(content) + "\"}";
+    return HttpResponse::json(body);
+}
+
 static HttpResponse api_watch_status(const HttpRequest&) {
     std::string body =
         "{\"running\":" + std::string(watch_running() ? "true" : "false") +
@@ -158,6 +179,7 @@ static HttpResponse api_watch_start(const HttpRequest& req) {
     try { interval = std::stoi(req.body); } catch (...) {}
     if (interval < 5) interval = 5;
     watch_start(interval);
+    log_info("ui: watch start (interval " + std::to_string(interval) + "s)");
     return HttpResponse::json("{\"started\":true}");
 }
 
@@ -182,10 +204,12 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/verify") return api_verify(req);
         if (req.method == "GET" && req.path == "/api/zxwn") return api_zxwn(req);
         if (req.method == "POST" && req.path == "/api/zxwn/start") return api_zxwn_start(req);
+        if (req.method == "GET" && req.path == "/api/log") return api_log(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);
         if (req.method == "POST" && req.path == "/api/watch/start") return api_watch_start(req);
         if (req.method == "POST" && req.path == "/api/watch/stop") {
             watch_stop();
+            log_info("ui: watch stop");
             return HttpResponse::json("{\"stopped\":true}");
         }
         if (req.method == "POST" && req.path == "/api/apply") return api_apply(req);
