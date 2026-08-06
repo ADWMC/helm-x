@@ -5,160 +5,309 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>helm-x</title>
 <style>
-/* ── glance-style design: single-hue HSL system ── */
+/* ── modern SaaS dark (Linear/shadcn-inspired) ── */
 :root {
-  font-size: 10px;
-
-  /* single hue family (240° blue-grey), all surfaces derived from bg lightness */
-  --bgh: 240; --bgs: 8%; --bgl: 9%;
-  --color-background: hsl(240, 8%, 9%);
-  --color-widget: hsl(240, 8%, 10%);          /* bg + 1% */
-  --color-widget-hover: hsl(240, 8%, 12%);
-  --color-separator: hsl(240, 8%, 13%);
-  --color-text-highlight: hsl(240, 8%, 85%);
-  --color-text-base: hsl(240, 8%, 60%);
-  --color-text-subdue: hsl(240, 8%, 38%);
-  --color-accent: hsl(43, 50%, 70%);          /* single warm accent */
-  --color-negative: hsl(0, 70%, 70%);
-
-  --radius: 5px;
-  --gap: 23px;
-  --font-size-base: 1.3rem;
+  --bg: #09090b;
+  --bg-elev: #0d0d12;
+  --card: rgba(255, 255, 255, 0.028);
+  --card-hover: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text-hi: #f4f4f5;
+  --text: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #6366f1;         /* indigo */
+  --accent-2: #8b5cf6;       /* violet */
+  --accent-3: #22d3ee;       /* cyan */
+  --ok: #34d399;
+  --bad: #f87171;
+  --grad: linear-gradient(135deg, #6366f1, #8b5cf6 55%, #22d3ee);
+  --radius: 14px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 }
-*, *::before, *::after { box-sizing: border-box; padding: 0; margin: 0; }
-html { scrollbar-color: var(--color-text-subdue) transparent; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font: 1.3rem/1.6 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  font-variant-ligatures: none;
-  color: var(--color-text-base);
-  background: var(--color-background);
-  padding: var(--gap);
+  font: 14px/1.6 "Inter", "SF Pro Text", -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(99, 102, 241, 0.09), transparent 60%),
+    radial-gradient(900px 400px at 0% 110%, rgba(34, 211, 238, 0.05), transparent 55%),
+    var(--bg);
   min-height: 100vh;
+  display: flex;
 }
-::selection { background: hsl(240, 8%, 29%); color: var(--color-text-highlight); }
+.mono { font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
 
-/* ── top bar ── */
-.topbar {
-  display: flex; align-items: baseline; gap: 1.2rem;
-  padding-bottom: 1.4rem; margin-bottom: var(--gap);
-  border-bottom: 1px solid var(--color-separator);
+/* ── sidebar ── */
+.sidebar {
+  width: 228px; flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 22px 14px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(12px);
+  position: sticky; top: 0; height: 100vh;
 }
-.topbar .brand { font-size: 1.5rem; color: var(--color-text-highlight); letter-spacing: .05rem; }
-.topbar .status { font-size: 1.2rem; }
-.topbar .status .led {
-  display: inline-block; width: .7em; height: .7em; border-radius: 50%;
-  margin-right: .5em; vertical-align: baseline;
+.logo {
+  display: flex; align-items: center; gap: 11px;
+  padding: 6px 10px 20px; font-size: 15px; font-weight: 700;
+  color: var(--text-hi); letter-spacing: .3px;
 }
-.topbar .status.ok { color: var(--color-accent); }
-.topbar .status.ok .led { background: var(--color-accent); }
-.topbar .status.bad { color: var(--color-negative); }
-.topbar .status.bad .led { background: var(--color-negative); }
-.topbar .meta { margin-left: auto; font-size: 1.15rem; color: var(--color-text-subdue); }
+.logo .mark {
+  width: 26px; height: 26px; border-radius: 8px;
+  background: var(--grad);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.45);
+  font-size: 12px; color: #fff; font-weight: 800;
+}
+.nav {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 11px; border-radius: 9px;
+  color: var(--text-muted); font-size: 13.5px; font-weight: 500;
+  cursor: default; user-select: none;
+  transition: all .15s;
+}
+.nav-item svg { width: 16px; height: 16px; opacity: .7; }
+.nav-item.active {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--text-hi);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+.nav-item.active svg { opacity: 1; color: #a5b4fc; }
+.sidebar .spacer { flex: 1; }
+.side-card {
+  margin: 8px 4px 4px; padding: 13px 13px;
+  border-radius: 11px;
+  background: var(--card); border: 1px solid var(--border);
+}
+.side-card .l { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--text-muted); margin-bottom: 6px; }
+.side-card .v { font-size: 12.5px; color: var(--text-hi); }
 
-/* ── columns ── */
-.columns { display: flex; gap: var(--gap); align-items: flex-start; }
-.col-small { width: 300px; flex-shrink: 0; }
-.col-full { flex: 1; min-width: 0; }
-.col { display: flex; flex-direction: column; gap: var(--gap); }
+/* ── main ── */
+.main { flex: 1; padding: 30px 36px; min-width: 0; }
+.header { display: flex; align-items: center; margin-bottom: 26px; }
+.header .t { font-size: 21px; font-weight: 700; color: var(--text-hi); letter-spacing: -.2px; }
+.header .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+.header .right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 
-/* ── widget ── */
-.widget {
-  background: var(--color-widget);
+/* status pill */
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 14px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; letter-spacing: .4px;
+  border: 1px solid var(--border-strong);
+  background: var(--card);
+}
+.pill .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+}
+.pill.ok { color: var(--ok); }
+.pill.ok .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: ring 2.4s infinite; }
+.pill.bad { color: var(--bad); }
+.pill.bad .dot { background: var(--bad); box-shadow: 0 0 10px var(--bad); animation: ring 1.2s infinite; }
+@keyframes ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(52, 211, 153, 0); }
+}
+.pill.bad .dot { animation-name: ring-red; }
+@keyframes ring-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(248, 113, 113, 0); }
+}
+
+/* ── stat cards ── */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.stat {
+  position: relative; overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1.6rem 1.7rem;
+  padding: 17px 19px;
+  transition: all .2s;
 }
-.widget-title {
-  font-size: 1.1rem; text-transform: uppercase; letter-spacing: .15rem;
-  color: var(--color-text-subdue); margin-bottom: 1.2rem;
+.stat:hover { background: var(--card-hover); border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow); }
+.stat::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1.5px;
+  background: var(--grad); opacity: 0; transition: opacity .2s;
 }
-.widget-title .right { float: right; text-transform: none; letter-spacing: 0; }
+.stat:hover::before { opacity: 1; }
+.stat .l { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-muted); margin-bottom: 8px; }
+.stat .v { font-size: 22px; font-weight: 700; color: var(--text-hi); letter-spacing: .3px; font-family: "JetBrains Mono", monospace; }
+.stat .h { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
 
-/* ── kv rows (status) ── */
-.kv { display: flex; flex-direction: column; gap: .9rem; }
-.kv .row { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
-.kv .k { color: var(--color-text-subdue); }
-.kv .v { color: var(--color-text-highlight); font-size: 1.3rem; }
-.kv .v.acc { color: var(--color-accent); }
-
-/* ── actions ── */
-.actions { display: flex; gap: 2rem; margin-top: 1.4rem; }
-.btn {
-  font: inherit; color: var(--color-text-subdue); background: none; border: 0;
-  cursor: pointer; padding: .2rem 0; font-size: 1.3rem; transition: color .15s;
+/* ── panels ── */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 18px;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
 }
-.btn:hover { color: var(--color-text-highlight); }
-.btn.primary { color: var(--color-accent); }
-.btn.primary:hover { color: hsl(43, 60%, 80%); }
-.btn.danger:hover { color: var(--color-negative); }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-head .t { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.1px; color: var(--text); }
+.panel-head .r { font-size: 11.5px; color: var(--text-muted); }
+.panel-body { padding: 4px 0; }
 
-/* ── rules list ── */
+/* ── rules ── */
 .rule {
-  display: flex; align-items: baseline; gap: 1.2rem;
-  padding: .8rem 0; border-bottom: 1px solid var(--color-separator);
-  font-size: 1.2rem;
+  display: flex; align-items: center; gap: 14px;
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
 }
 .rule:last-child { border-bottom: 0; }
-.rule .idx { color: var(--color-text-subdue); min-width: 2.4rem; text-align: right; }
-.rule .pat { flex: 1; color: var(--color-text-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rule .tag { font-size: 1.05rem; color: var(--color-accent); opacity: .8; }
-.empty { color: var(--color-text-subdue); padding: 1rem 0; }
+.rule:hover { background: rgba(255, 255, 255, 0.02); }
+.rule .idx {
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  color: var(--text-muted); min-width: 30px; text-align: right;
+}
+.rule .pat {
+  flex: 1; font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+  color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rule .tag {
+  font-size: 10px; font-weight: 600; letter-spacing: .6px;
+  padding: 2.5px 9px; border-radius: 6px;
+  color: #a5b4fc; background: rgba(99, 102, 241, 0.13);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+}
+.empty { padding: 26px 20px; color: var(--text-muted); font-size: 12.5px; text-align: center; }
 
-/* ── code ref ── */
-.ref { display: flex; flex-direction: column; gap: .8rem; }
-.ref .line { display: flex; gap: 1.2rem; font-size: 1.2rem; }
-.ref .cmd { color: var(--color-text-highlight); }
-.ref .desc { color: var(--color-text-subdue); }
+/* ── buttons ── */
+.actions { display: flex; gap: 10px; padding: 16px 20px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 18px; border-radius: 9px;
+  font: 600 13px "Inter", sans-serif; cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: var(--card); color: var(--text);
+  transition: all .15s;
+}
+.btn svg { width: 14px; height: 14px; }
+.btn:hover { border-color: rgba(255, 255, 255, 0.2); color: var(--text-hi); background: var(--card-hover); }
+.btn.primary {
+  background: var(--grad); border: 0; color: #fff;
+  box-shadow: 0 2px 14px rgba(99, 102, 241, 0.35);
+}
+.btn.primary:hover { filter: brightness(1.12); box-shadow: 0 3px 20px rgba(99, 102, 241, 0.5); }
+.btn.danger { color: #fca5a5; border-color: rgba(248, 113, 113, 0.25); }
+.btn.danger:hover { background: rgba(248, 113, 113, 0.08); color: #fecaca; }
+
+/* ── ref grid ── */
+.ref { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0; }
+.ref .cell { padding: 13px 20px; border-bottom: 1px solid var(--border); }
+.ref .cell:last-child { border-bottom: 0; }
+.ref .cmd { font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: #a5b4fc; }
+.ref .desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
 
 /* ── toast ── */
 #toast {
-  position: fixed; bottom: 2.2rem; right: 2.2rem;
-  padding: .9rem 1.6rem; border-radius: var(--radius);
-  background: hsl(240, 8%, 13%); color: var(--color-text-highlight);
-  font-size: 1.25rem; opacity: 0; transform: translateY(.6rem);
-  transition: all .25s; pointer-events: none;
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 11px 20px; border-radius: 11px;
+  background: rgba(20, 20, 28, 0.9);
+  border: 1px solid var(--border-strong);
+  color: var(--text-hi); font-size: 13px;
+  opacity: 0; transform: translateY(10px); transition: all .25s;
+  pointer-events: none; backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 #toast.show { opacity: 1; transform: translateY(0); }
-#toast.ok { box-shadow: inset 2px 0 0 var(--color-accent); }
-#toast.err { box-shadow: inset 2px 0 0 var(--color-negative); }
+#toast.ok { border-left: 3px solid var(--ok); }
+#toast.err { border-left: 3px solid var(--bad); }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <span class="brand">helm-x</span>
-  <span class="status" id="status"><span class="led"></span><span id="status-text">检测中</span></span>
-  <span class="meta" id="home">—</span>
+<div class="sidebar">
+  <div class="logo"><span class="mark">H</span>helm-x</div>
+  <div class="nav">
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      状态总览
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg>
+      TAMPER 规则
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+      子命令
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="side-card">
+    <div class="l">Codex Home</div>
+    <div class="v mono" id="home_short">—</div>
+  </div>
+  <div class="side-card">
+    <div class="l">版本</div>
+    <div class="v">v0.1.0 · C++17</div>
+  </div>
 </div>
 
-<div class="columns">
-  <div class="col col-small">
-    <div class="widget">
-      <div class="widget-title">注入状态</div>
-      <div class="kv">
-        <div class="row"><span class="k">AGENTS.md</span><span class="v" id="agents_bytes">—</span></div>
-        <div class="row"><span class="k">TAMPER 规则</span><span class="v acc" id="rules_count">—</span></div>
-        <div class="row"><span class="k">Codex home</span><span class="v" id="home_short">—</span></div>
-      </div>
-      <div class="actions">
-        <button class="btn primary" onclick="act('/api/apply')">apply</button>
-        <button class="btn danger" onclick="act('/api/remove')">remove</button>
-      </div>
+<div class="main">
+  <div class="header">
+    <div>
+      <div class="t">状态总览</div>
+      <div class="sub mono" id="home">—</div>
     </div>
-
-    <div class="widget">
-      <div class="widget-title">子命令</div>
-      <div class="ref">
-        <div class="line"><span class="cmd">watch</span><span class="desc">helmx watch 60</span></div>
-        <div class="line"><span class="cmd">proxy</span><span class="desc">--listen 1800 --upstream</span></div>
-        <div class="line"><span class="cmd">mcp</span><span class="desc">helmx mcp</span></div>
-      </div>
+    <div class="right">
+      <span id="injected" class="pill"><span class="dot"></span><span id="injected-text">检测中</span></span>
     </div>
   </div>
 
-  <div class="col col-full">
-    <div class="widget">
-      <div class="widget-title">TAMPER 规则 <span class="right">pattern → replace</span></div>
-      <div id="rules-list"><div class="empty">加载中…</div></div>
+  <div class="stats">
+    <div class="stat">
+      <div class="l">AGENTS.md</div>
+      <div class="v" id="agents_bytes">—</div>
+      <div class="h">加密内嵌资源</div>
+    </div>
+    <div class="stat">
+      <div class="l">TAMPER 规则</div>
+      <div class="v" id="rules_count">—</div>
+      <div class="h">pattern → replace</div>
+    </div>
+    <div class="stat">
+      <div class="l">注入状态</div>
+      <div class="v" id="state_word">—</div>
+      <div class="h" id="state_hint">—</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><span class="t">操作</span><span class="r">一键部署 / 恢复</span></div>
+    <div class="actions">
+      <button class="btn primary" onclick="act('/api/apply')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        apply
+      </button>
+      <button class="btn danger" onclick="act('/api/remove')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        remove
+      </button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><span class="t">TAMPER 规则</span><span class="r mono">regex</span></div>
+    <div class="panel-body"><div id="rules-list"><div class="empty">加载中…</div></div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><span class="t">子命令</span><span class="r">CLI reference</span></div>
+    <div class="ref">
+      <div class="cell"><div class="cmd">helmx watch 60</div><div class="desc">自愈守护，60s 周期</div></div>
+      <div class="cell"><div class="cmd">helmx proxy --listen 1800</div><div class="desc">篡改代理 MITM</div></div>
+      <div class="cell"><div class="cmd">helmx mcp</div><div class="desc">内置 MCP 服务器</div></div>
     </div>
   </div>
 </div>
@@ -181,9 +330,14 @@ async function refresh() {
     document.getElementById('agents_bytes').textContent = s.agents_bytes + ' B';
     document.getElementById('rules_count').textContent = s.rules;
 
-    const st = document.getElementById('status');
-    st.className = 'status ' + (s.injected ? 'ok' : 'bad');
-    document.getElementById('status-text').textContent = s.injected ? 'ACTIVE' : 'MISSING';
+    const p = document.getElementById('injected');
+    const pt = document.getElementById('injected-text');
+    if (s.injected) { p.className = 'pill ok'; pt.textContent = 'ACTIVE'; }
+    else { p.className = 'pill bad'; pt.textContent = 'MISSING'; }
+
+    document.getElementById('state_word').textContent = s.injected ? 'ACTIVE' : 'MISSING';
+    document.getElementById('state_word').style.color = s.injected ? 'var(--ok)' : 'var(--bad)';
+    document.getElementById('state_hint').textContent = s.injected ? '注入完整' : '需要 apply';
 
     const rules = await get('/api/rules');
     const box = document.getElementById('rules-list');
@@ -194,7 +348,7 @@ async function refresh() {
       rules.forEach(r => {
         const row = document.createElement('div');
         row.className = 'rule';
-        row.innerHTML = '<span class="idx">' + r.id + '</span><span class="pat">' + r.pattern.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span><span class="tag">regex</span>';
+        row.innerHTML = '<span class="idx">' + r.id + '</span><span class="pat">' + r.pattern.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span><span class="tag">REGEX</span>';
         box.appendChild(row);
       });
     }
