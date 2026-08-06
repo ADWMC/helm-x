@@ -164,6 +164,17 @@ static HttpResponse api_log(const HttpRequest&) {
     return HttpResponse::json(body);
 }
 
+static HttpResponse api_proxy_restore(const HttpRequest&) {
+    std::string home = find_codex_home();
+    if (home.empty()) {
+        return HttpResponse::json("{\"ok\":false,\"error\":\"codex home not found\"}", 500);
+    }
+    bool ok = restore_config_proxy(home);
+    log_info(std::string("ui: proxy restore ") + (ok ? "OK" : "(nothing to restore)"));
+    std::string body = std::string("{\"ok\":") + (ok ? "true" : "false") + "}";
+    return HttpResponse::json(body, ok ? 200 : 200);  // 200 either way; ok field carries result
+}
+
 static HttpResponse api_watch_status(const HttpRequest&) {
     std::string body =
         "{\"running\":" + std::string(watch_running() ? "true" : "false") +
@@ -216,6 +227,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/zxwn") return api_zxwn(req);
         if (req.method == "POST" && req.path == "/api/zxwn/start") return api_zxwn_start(req);
         if (req.method == "GET" && req.path == "/api/log") return api_log(req);
+        if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);
         if (req.method == "POST" && req.path == "/api/watch/start") return api_watch_start(req);
         if (req.method == "POST" && req.path == "/api/watch/stop") {

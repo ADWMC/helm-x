@@ -174,6 +174,25 @@ bool restore_config_proxy(const std::string& home) {
     return true;
 }
 
+std::string read_relay_url(const std::string& home) {
+    // prefer backup (live config may point at the proxy itself)
+    fs::path bak = fs::path(home) / "config.toml.helmx-proxy-bak";
+    fs::path cfg = fs::path(home) / "config.toml";
+    fs::path src = fs::exists(bak) ? bak : cfg;
+    std::ifstream f(src);
+    if (!f) return "";
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string content = ss.str();
+    size_t p = content.find("base_url");
+    if (p == std::string::npos) return "";
+    size_t q1 = content.find('"', p);
+    if (q1 == std::string::npos) return "";
+    size_t q2 = content.find('"', q1 + 1);
+    if (q2 == std::string::npos) return "";
+    return content.substr(q1 + 1, q2 - q1 - 1);
+}
+
 bool verify_injection(const std::string& home) {
     fs::path cfg = fs::path(home) / "config.toml";
     if (!fs::exists(cfg)) return false;

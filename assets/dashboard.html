@@ -218,6 +218,14 @@ body {
               <button class="btn danger" onclick="watchStop()">停止</button>
             </span>
           </div>
+          <div class="svc">
+            <span class="name">proxy</span>
+            <span class="state stop">—</span>
+            <span class="desc">本地映射：codex → 127.0.0.1:1800 → 上游 · 退出自动还原 base_url</span>
+            <span class="ctrl">
+              <button class="btn secondary" onclick="proxyRestore()">还原配置</button>
+            </span>
+          </div>
         </div>
       </div>
       <div class="panel">
@@ -387,6 +395,16 @@ async function watchStart() {
 async function watchStop() {
   try { await post('/api/watch/stop'); toast('watch 已停止', true); refreshWatch(); }
   catch (e) { toast('停止失败', false); }
+}
+
+/* ── proxy restore ── */
+async function proxyRestore() {
+  try {
+    const r = await fetch('/api/proxy/restore', { method: 'POST' });
+    const j = await r.json();
+    toast(j.ok ? '配置已还原' : '没有需要还原的（无备份）', j.ok);
+    refreshStatus();
+  } catch (e) { toast('请求失败: ' + e, false); }
 }
 
 /* ── log viewer ── */

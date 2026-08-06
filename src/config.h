@@ -19,6 +19,10 @@ bool inject_config_proxy(const std::string& home, int port);
 // Restore base_url from .helmx-proxy-bak (called on proxy exit)
 bool restore_config_proxy(const std::string& home);
 
+// Read relay base_url from config (prefers .helmx-proxy-bak if present,
+// since the live config may already point at the proxy itself).
+std::string read_relay_url(const std::string& home);
+
 // Verify injected settings are still present
 bool verify_injection(const std::string& home);
 

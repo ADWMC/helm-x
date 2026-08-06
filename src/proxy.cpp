@@ -436,8 +436,16 @@ int proxy_main(int argc, char** argv) {
         }
     }
     if (g_upstream.empty()) {
-        std::fprintf(stderr, "helmx proxy: --upstream required (e.g. https://host/v1)\n");
-        return 1;
+        // auto-read relay from codex config (prefers .helmx-proxy-bak)
+        std::string home = find_codex_home();
+        std::string relay = !home.empty() ? read_relay_url(home) : "";
+        if (!relay.empty()) {
+            g_upstream = relay;
+            std::printf("[helm-x] auto relay: %s\n", relay.c_str());
+        } else {
+            std::fprintf(stderr, "helmx proxy: --upstream required (config has no base_url)\n");
+            return 1;
+        }
     }
 
 #ifdef _WIN32
