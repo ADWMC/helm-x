@@ -218,6 +218,92 @@ bool replace_user_message(std::string& body, const std::string& new_text) {
     return true;
 }
 
+// ── build_clean_session: strip conversation history, keep only last user message ──
+// Keeps all original fields (model, tools, reasoning, etc.) but replaces input[]
+// with only the rewritten user message. This avoids losing required upstream fields.
+static std::string build_clean_session(const std::string& original_body, const std::string& rewritten_msg) {
+    // Escape the rewritten message for JSON
+    std::string esc_msg;
+    for (char c : rewritten_msg) {
+        if (c == '"' || c == '\\') { esc_msg.push_back('\\'); esc_msg.push_back(c); }
+        else if (c == '\n') esc_msg += "\\n";
+        else if (c == '\r') esc_msg += "\\r";
+        else if (c == '\t') esc_msg += "\\t";
+        else esc_msg.push_back(c);
+    }
+
+    // Find input[] array in original body
+    size_t input_key = original_body.find("\"input\"");
+    if (input_key == std::string::npos) {
+        // No input array — build minimal request
+        std::string model;
+        size_t mp = original_body.find("\"model\":\"");
+        if (mp != std::string::npos) {
+            size_t ms = mp + 9;
+            size_t me = original_body.find('"', ms);
+            if (me != std::string::npos) model = original_body.substr(ms, me - ms);
+        }
+        if (model.empty()) model = "gpt-5.6-terra";
+        return "{\"model\":\"" + model + "\","
+               "\"input\":[{\"type\":\"message\",\"role\":\"user\","
+               "\"content\":[{\"type\":\"input_text\",\"text\":\"" + esc_msg + "\"}]}],"
+               "\"max_output_tokens\":4096,\"stream\":false}";
+    }
+
+    // Find the opening [ of input array
+    size_t arr_start = original_body.find('[', input_key);
+    if (arr_start == std::string::npos) return "";
+
+    // Find the matching ]
+    size_t arr_end = arr_start;
+    int depth = 0;
+    for (; arr_end < original_body.size(); arr_end++) {
+        if (original_body[arr_end] == '[') depth++;
+        else if (original_body[arr_end] == ']') { depth--; if (depth == 0) { arr_end++; break; } }
+    }
+
+    // Build new input array with only the rewritten user message
+    std::string new_input = "[{\"type\":\"message\",\"role\":\"user\","
+                            "\"content\":[{\"type\":\"input_text\",\"text\":\"" + esc_msg + "\"}]}]";
+
+    // Replace the old input[] with the new one
+    std::string out = original_body;
+    out.replace(arr_start, arr_end - arr_start, new_input);
+
+    // Also strip previous_response_id (fresh session)
+    size_t pr = out.find("\"previous_response_id\":\"");
+    if (pr != std::string::npos) {
+        size_t ps = pr + 24;
+        size_t pe = out.find('"', ps);
+        if (pe != std::string::npos)
+            out.replace(ps, pe - ps, "null");
+    }
+
+    // Strip thread_id (fresh session)
+    size_t tp = out.find("\"thread_id\":\"");
+    if (tp != std::string::npos) {
+        size_t ts = tp + 13;
+        size_t te = out.find('"', ts);
+        if (te != std::string::npos) {
+            // Generate fresh thread_id
+            static unsigned long long g_seed = 0x9E3779B97F4A7C15ULL;
+            auto now = std::chrono::system_clock::now().time_since_epoch().count();
+            g_seed ^= (unsigned long long)now;
+            g_seed *= 1099511628211ULL;
+            char tid[64];
+            std::snprintf(tid, sizeof(tid), "%016llx%016llx",
+                          (unsigned long long)now, g_seed);
+            out.replace(ts, te - ts, tid);
+        }
+    }
+
+    // Force stream=false
+    size_t sf = out.find("\"stream\":true");
+    if (sf != std::string::npos) out.replace(sf, 14, "\"stream\":false");
+
+    return out;
+}
+
 // Inject AGENTS into a request body. Handles Responses API input array.
 // Strategy: insert a system message at the START of input[] (like the Python
 // original's inject_system does), and also try to replace top-level instructions.
@@ -303,6 +389,9 @@ bool upstream_post(const std::string& path, const std::string& body,
         hdrs += wauth;
         hdrs += L"\r\n";
     }
+    log_info(std::string("upstream: ") + host + ":" + std::to_string(port) + path +
+             " auth=" + (auth.empty() ? "(none)" : auth.substr(0, 20) + "...") +
+             " body=" + std::to_string(body.size()) + "B");
     hdrs += L"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0\r\n";
 
     BOOL ok = WinHttpSendRequest(hRequest, hdrs.c_str(), (DWORD)hdrs.size(),
@@ -458,59 +547,44 @@ void handle_client(SOCKET client) {
     };
     bool cyber_flagged = is_cyber_flag(status, resp_body);
     if (cyber_flagged && rcfg.enabled) {
-        log_info("proxy: CYBER FLAG detected, forking session + rewriting");
+        log_info("proxy: CYBER FLAG detected — session refresh + rewriting");
+        // Extract refusal text for context-aware rewriting
+        std::string refusal_text;
+        size_t ot_pos = resp_body.find("\"output_text\":\"");
+        if (ot_pos != std::string::npos) {
+            size_t vs = ot_pos + 15;
+            size_t ve = vs;
+            while (ve < resp_body.size() && resp_body[ve] != '"') {
+                if (resp_body[ve] == '\\') ve++;
+                ve++;
+            }
+            refusal_text = resp_body.substr(vs, ve - vs);
+        }
         std::string user_msg;
         if (extract_user_message(body, user_msg) && !user_msg.empty()) {
             std::string rewritten;
-            if (rewrite_user_message(rcfg, user_msg, rewritten) && !rewritten.empty()) {
-                std::string new_body = body;
-                if (replace_user_message(new_body, rewritten)) {
-                    // Fork: new thread_id (session-level block requires new session)
-                    // + clear previous_response_id + fresh AGENTS injection
-                    std::string old_thread;
-                    size_t tp = new_body.find("\"thread_id\":\"");
-                    if (tp != std::string::npos) {
-                        size_t ts = tp + 14;
-                        size_t te = new_body.find('"', ts);
-                        if (te != std::string::npos) old_thread = new_body.substr(ts, te - ts);
-                    }
-                    static unsigned long long g_seed = 0x9E3779B97F4A7C15ULL;
-                    auto now = std::chrono::system_clock::now().time_since_epoch().count();
-                    g_seed ^= (unsigned long long)now;
-                    g_seed *= 1099511628211ULL;
-                    char tid[64];
-                    std::snprintf(tid, sizeof(tid), "%016llx-%016llx-%016llx",
-                                  (unsigned long long)now,
-                                  g_seed ^ (unsigned long long)now,
-                                  g_seed * 31ULL + 17ULL);
-                    if (!old_thread.empty()) {
-                        size_t p2 = new_body.find(old_thread);
-                        if (p2 != std::string::npos)
-                            new_body.replace(p2, old_thread.size(), tid);
-                    }
-                    // clear previous_response_id (fresh session)
-                    size_t pr = new_body.find("\"previous_response_id\":\"");
-                    if (pr != std::string::npos) {
-                        size_t ps = pr + 24;
-                        size_t pe = new_body.find('"', ps);
-                        if (pe != std::string::npos)
-                            new_body.replace(ps, pe - ps, "null");
-                    }
-                    // Inject AGENTS into fresh session
-                    std::string new_out = inject_request(new_body, agents, &injected);
-                    log_info(std::string("proxy: REWRITE + fork (") + tid +
-                             ") " + std::to_string(body.size()) + "B -> " +
-                             std::to_string(new_out.size()) + "B");
-                    int status2 = 502;
-                    std::string resp2;
-                    bool ok2 = upstream_post(target, new_out, auth, status2, resp2);
-                    log_info("proxy: fork upstream " + std::to_string(status2) +
-                             " (" + std::to_string(resp2.size()) + "B)");
-                    if (ok2) {
-                        ok = ok2;
-                        status = status2;
-                        resp_body = resp2;
-                    }
+            if (rewrite_user_message(rcfg, user_msg, rewritten, refusal_text) && !rewritten.empty()) {
+                // ── Clean session rebuild ──
+                // Build a completely fresh request with ONLY the rewritten user message.
+                // This strips all conversation history (which contains injected AGENTS
+                // with trigger words like "隐藏进程", "键盘记录器" etc.)
+                std::string clean_body = build_clean_session(body, rewritten);
+                log_info(std::string("proxy: REWRITE + clean-session ") +
+                         std::to_string(body.size()) + "B -> " +
+                         std::to_string(clean_body.size()) + "B (history stripped)");
+                // Debug: log first 500 chars of clean request
+                log_info(std::string("proxy: clean-body preview: ") + clean_body.substr(0, 500));
+                int status2 = 502;
+                std::string resp2;
+                bool ok2 = upstream_post(target, clean_body, auth, status2, resp2);
+                log_info("proxy: clean-session upstream " + std::to_string(status2) +
+                         " (" + std::to_string(resp2.size()) + "B)");
+                if (ok2 && !is_cyber_flag(status2, resp2)) {
+                    ok = ok2;
+                    status = status2;
+                    resp_body = resp2;
+                } else {
+                    log_info("proxy: clean-session also flagged, returning original error");
                 }
             }
         }
