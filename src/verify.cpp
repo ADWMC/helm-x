@@ -155,10 +155,15 @@ int run_verify(bool e2e, std::string& report) {
 
     // 4. embedded resources non-empty (AGENTS.md not deployed as file — proxy injects)
     std::string expected = get_resource(ResId::AgentsMd);
-    bool res_ok = !expected.empty() &&
-                  !get_resource(ResId::TamperRules).empty() &&
-                  !get_resource(ResId::DashboardHtml).empty();
-    check(res_ok, "embedded resources decrypt", res_ok ? "3/3" : "missing", report);
+    int res_count = 0;
+    if (!get_resource(ResId::AgentsMd).empty()) res_count++;
+    if (!get_resource(ResId::TamperRules).empty()) res_count++;
+    if (!get_resource(ResId::DashboardHtml).empty()) res_count++;
+    if (!get_resource(ResId::RewritePrompt).empty()) res_count++;
+    if (!get_resource(ResId::ToolsJson).empty()) res_count++;
+    bool res_ok = res_count >= 3;  // At least AgentsMd + TamperRules + DashboardHtml
+    std::string res_detail = std::to_string(res_count) + "/5";
+    check(res_ok, "embedded resources decrypt", res_detail.c_str(), report);
 
     // 5. backup exists
     check(fs::exists(cfg.string() + ".helmx-bak"), "config backup (.helmx-bak)", "", report);

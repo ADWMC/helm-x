@@ -20,6 +20,7 @@
 #include "resources.h"
 #include "rewrite.h"
 #include "tamper.h"
+#include "version.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -369,7 +370,7 @@ bool upstream_post(const std::string& path, const std::string& body,
     std::wstring wpath(path.begin(), path.end());
     std::wstring wauth(auth.begin(), auth.end());
 
-    HINTERNET hSession = WinHttpOpen(L"helmx-proxy/0.0.1-beta",
+    HINTERNET hSession = WinHttpOpen(L"helmx-proxy/" HELMX_VERSION_W,
                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return false;

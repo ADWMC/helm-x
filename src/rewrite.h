@@ -12,7 +12,8 @@ struct RewriterConfig {
     std::string model = "mimo-v2.5-pro";
     std::string system_prompt;
     int timeout_sec = 90;
-    bool use_proxy = false;  // klapi direct; nvidia needs 127.0.0.1:7897
+    bool use_proxy = false;
+    std::string proxy_url = "http://127.0.0.1:7897";  // HTTP proxy for upstream
 };
 
 // Load config from helmx.config.json next to the exe (or ./helmx.config.json)

@@ -3,6 +3,7 @@
 
 #include "log.h"
 #include "resources.h"
+#include "version.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -126,11 +127,14 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     std::string to = json_field(content, "timeout_sec");
     if (!to.empty()) cfg.timeout_sec = std::atoi(to.c_str());
 
-    // use_proxy: nvidia inference needs 127.0.0.1:7897, klapi is direct
+    // use_proxy + proxy_url
     cfg.use_proxy = json_field(content, "use_proxy") == "true";
+    std::string pu = json_field(content, "proxy_url");
+    if (!pu.empty()) cfg.proxy_url = pu;
 
     log_info(std::string("rewriter: ") + (cfg.enabled ? "enabled" : "disabled") +
-             " model=" + cfg.model + " proxy=" + (cfg.use_proxy ? "7897" : "direct") +
+             " model=" + cfg.model +
+             " proxy=" + (cfg.use_proxy ? cfg.proxy_url : "direct") +
              " key=" + (cfg.api_key.empty() ? "(none)" : cfg.api_key.substr(0, 8) + "..."));
     return true;
 }
@@ -321,11 +325,12 @@ bool rewrite_via_api(const RewriterConfig& cfg, const std::string& user_msg,
     // klapi: direct; nvidia inference endpoint needs proxy in this network
     HINTERNET hSession;
     if (cfg.use_proxy) {
-        hSession = WinHttpOpen(L"helmx-rewriter/0.0.1",
+        std::wstring wproxy(cfg.proxy_url.begin(), cfg.proxy_url.end());
+        hSession = WinHttpOpen(L"helmx-rewriter/" HELMX_VERSION_W,
                                WINHTTP_ACCESS_TYPE_NAMED_PROXY,
-                               L"http://127.0.0.1:7897", WINHTTP_NO_PROXY_BYPASS, 0);
+                               wproxy.c_str(), WINHTTP_NO_PROXY_BYPASS, 0);
     } else {
-        hSession = WinHttpOpen(L"helmx-rewriter/0.0.1",
+        hSession = WinHttpOpen(L"helmx-rewriter/" HELMX_VERSION_W,
                                WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     }
