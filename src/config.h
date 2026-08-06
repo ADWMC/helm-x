@@ -13,6 +13,12 @@ bool backup_config(const std::string& cfg_path);
 // Merge-inject required settings into config.toml (TOML-safe, validate after write)
 bool inject_config(const std::string& home);
 
+// Point codex base_url at a local proxy port; back up original to .helmx-proxy-bak
+bool inject_config_proxy(const std::string& home, int port);
+
+// Restore base_url from .helmx-proxy-bak (called on proxy exit)
+bool restore_config_proxy(const std::string& home);
+
 // Verify injected settings are still present
 bool verify_injection(const std::string& home);
 

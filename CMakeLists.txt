@@ -29,5 +29,5 @@ add_executable(helmx
 target_include_directories(helmx PRIVATE src)
 
 if(WIN32)
-    target_link_libraries(helmx ws2_32 shell32)
+    target_link_libraries(helmx ws2_32 shell32 winhttp)
 endif()

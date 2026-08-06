@@ -125,6 +125,55 @@ bool inject_config(const std::string& home) {
     return true;
 }
 
+bool inject_config_proxy(const std::string& home, int port) {
+    fs::path cfg = fs::path(home) / "config.toml";
+    if (!fs::exists(cfg)) return false;
+
+    // back up original base_url once (proxy-mode backup)
+    fs::path bak = cfg.string() + ".helmx-proxy-bak";
+    if (!fs::exists(bak)) {
+        std::error_code ec;
+        fs::copy_file(cfg, bak, fs::copy_options::overwrite_existing, ec);
+    }
+
+    std::ifstream in(cfg);
+    std::stringstream ss;
+    ss << in.rdbuf();
+    std::string content = ss.str();
+
+    // already pointed at this proxy?
+    std::string needle = "127.0.0.1:" + std::to_string(port);
+    if (content.find(needle) != std::string::npos) return true;
+
+    // replace base_url with local proxy
+    size_t p = content.find("base_url");
+    if (p == std::string::npos) return false;
+    size_t eq = content.find('=', p);
+    if (eq == std::string::npos) return false;
+    size_t q1 = content.find('"', eq);
+    if (q1 == std::string::npos) return false;
+    size_t q2 = content.find('"', q1 + 1);
+    if (q2 == std::string::npos) return false;
+    std::string new_url = "http://127.0.0.1:" + std::to_string(port) + "/v1";
+    content.replace(q1 + 1, q2 - q1 - 1, new_url);
+
+    std::ofstream out(cfg, std::ios::trunc);
+    out << content;
+    out.close();
+    return true;
+}
+
+bool restore_config_proxy(const std::string& home) {
+    fs::path cfg = fs::path(home) / "config.toml";
+    fs::path bak = cfg.string() + ".helmx-proxy-bak";
+    if (!fs::exists(bak)) return false;
+    std::error_code ec;
+    fs::copy_file(bak, cfg, fs::copy_options::overwrite_existing, ec);
+    if (ec) return false;
+    fs::remove(bak);
+    return true;
+}
+
 bool verify_injection(const std::string& home) {
     fs::path cfg = fs::path(home) / "config.toml";
     if (!fs::exists(cfg)) return false;
