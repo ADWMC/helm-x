@@ -9,6 +9,13 @@
 #include <fstream>
 #include <sstream>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace helmx {
@@ -79,11 +86,22 @@ bool inject_config(const std::string& home) {
         content = "model_provider = \"custom\"\n" + content;
     }
     // 2. AGENTS.md is auto-read by codex; we only need skills dir + mcp_servers.
-    //    mcp_servers section (idempotent insert)
+    //    mcp_servers section (idempotent insert) — use THIS exe's absolute path
     if (content.find("[mcp_servers.helmx]") == std::string::npos) {
+        // resolve own exe path (so MCP works no matter where helmx.exe lives)
+        std::string exe_path = "helmx";
+#ifdef _WIN32
+        char buf[MAX_PATH] = {0};
+        DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            exe_path = buf;
+            // normalize backslashes for TOML
+            for (auto& ch : exe_path) if (ch == '\\') ch = '/';
+        }
+#endif
         std::string mcp_section =
             "\n[mcp_servers.helmx]\n"
-            "command = \"helmx\"\n"
+            "command = \"" + exe_path + "\"\n"
             "args = [\"mcp\"]\n"
             "startup_timeout_sec = 30\n";
         // insert before end of file (after any trailing newline)
