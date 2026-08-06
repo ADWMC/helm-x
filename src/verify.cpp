@@ -153,25 +153,14 @@ int run_verify(bool e2e, std::string& report) {
     bool has_mcp = cfg_text.find("[mcp_servers.helmx]") != std::string::npos;
     check(has_mcp, "mcp_servers.helmx injected", "", report);
 
-    // 4. AGENTS.md exists
-    fs::path agents = fs::path(home) / "AGENTS.md";
-    bool agents_exists = fs::exists(agents);
-    check(agents_exists, "AGENTS.md exists", agents_exists ? agents.string().c_str() : "", report);
-
-    // 5. AGENTS.md content matches embedded resource
+    // 4. embedded resources non-empty (AGENTS.md not deployed as file — proxy injects)
     std::string expected = get_resource(ResId::AgentsMd);
-    std::string actual = read_file_str(agents);
-    bool agents_match = !expected.empty() && actual == expected;
-    check(agents_match, "AGENTS.md content == embedded resource",
-          agents_match ? std::to_string(actual.size()).c_str() : "(mismatch)", report);
-
-    // 6. embedded resources non-empty
     bool res_ok = !expected.empty() &&
                   !get_resource(ResId::TamperRules).empty() &&
                   !get_resource(ResId::DashboardHtml).empty();
     check(res_ok, "embedded resources decrypt", res_ok ? "3/3" : "missing", report);
 
-    // 7. backup exists
+    // 5. backup exists
     check(fs::exists(cfg.string() + ".helmx-bak"), "config backup (.helmx-bak)", "", report);
 
     // 8. e2e
