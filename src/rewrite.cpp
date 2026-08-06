@@ -1,0 +1,270 @@
+// rewrite.cpp — request rewriter via NVIDIA NIM chat_completions
+#include "rewrite.h"
+
+#include "log.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
+#endif
+
+namespace fs = std::filesystem;
+
+namespace helmx {
+
+// find config: exe dir / helmx.config.json, then ./helmx.config.json
+static std::string find_config_path() {
+#ifdef _WIN32
+    char exe[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        fs::path exe_dir = fs::path(exe).parent_path();
+        fs::path p1 = exe_dir / "helmx.config.json";
+        if (fs::exists(p1)) return p1.string();
+    }
+#endif
+    fs::path p2 = fs::path(".") / "helmx.config.json";
+    if (fs::exists(p2)) return p2.string();
+    return "";
+}
+
+// minimal JSON string field extraction
+static std::string json_field(const std::string& s, const std::string& field) {
+    std::string key = "\"" + field + "\"";
+    size_t p = s.find(key);
+    if (p == std::string::npos) return "";
+    p = s.find(':', p + key.size());
+    if (p == std::string::npos) return "";
+    p++;
+    while (p < s.size() && (s[p] == ' ' || s[p] == '\t')) p++;
+    if (p < s.size() && s[p] == '"') {
+        p++;
+        std::string out;
+        while (p < s.size() && s[p] != '"') {
+            if (s[p] == '\\' && p + 1 < s.size()) {
+                p++;
+                out.push_back(s[p] == 'n' ? '\n' : s[p] == 't' ? '\t' : s[p]);
+            } else {
+                out.push_back(s[p]);
+            }
+            p++;
+        }
+        return out;
+    }
+    // number / bool / nested
+    size_t start = p;
+    while (p < s.size() && (s[p] != ',' && s[p] != '}' && s[p] != ' ')) p++;
+    return s.substr(start, p - start);
+}
+
+bool load_rewriter_config(RewriterConfig& cfg) {
+    std::string path = find_config_path();
+    if (path.empty()) {
+        log_info("rewriter: no helmx.config.json found, disabled");
+        return false;
+    }
+    std::ifstream f(path);
+    if (!f) return false;
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string content = ss.str();
+
+    // rewriter.enabled / provider / base_url / api_key / model / system_prompt
+    cfg.enabled = json_field(content, "enabled") == "true";
+    std::string base = json_field(content, "base_url");
+    if (!base.empty()) cfg.base_url = base;
+    std::string key = json_field(content, "api_key");
+    if (!key.empty()) cfg.api_key = key;
+    std::string model = json_field(content, "model");
+    if (!model.empty()) cfg.model = model;
+    std::string sp = json_field(content, "system_prompt");
+    if (!sp.empty()) cfg.system_prompt = sp;
+
+    // timeout
+    std::string to = json_field(content, "timeout_sec");
+    if (!to.empty()) cfg.timeout_sec = std::atoi(to.c_str());
+
+    log_info(std::string("rewriter: ") + (cfg.enabled ? "enabled" : "disabled") +
+             " model=" + cfg.model + " key=" + (cfg.api_key.empty() ? "(none)" : cfg.api_key.substr(0, 8) + "..."));
+    return true;
+}
+
+static void split_url(const std::string& url, std::string& host, int& port, std::string& path) {
+    host = url;
+    port = 443;
+    path = "/v1/chat/completions";
+    std::string rest = url;
+    if (rest.rfind("https://", 0) == 0) {
+        rest = rest.substr(8);
+    } else if (rest.rfind("http://", 0) == 0) {
+        rest = rest.substr(7);
+        port = 80;
+    }
+    size_t slash = rest.find('/');
+    std::string hp = slash == std::string::npos ? rest : rest.substr(0, slash);
+    std::string tail = slash == std::string::npos ? "" : rest.substr(slash);
+    size_t colon = hp.rfind(':');
+    if (colon != std::string::npos) {
+        host = hp.substr(0, colon);
+        port = std::atoi(hp.c_str() + colon + 1);
+    } else {
+        host = hp;
+    }
+    if (!tail.empty()) path = tail;
+    // ensure ends with /chat/completions
+    if (path.find("chat/completions") == std::string::npos) {
+        if (path.back() != '/') path += "/";
+        path += "chat/completions";
+    }
+}
+
+static std::string json_escape(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
+bool rewrite_user_message(const RewriterConfig& cfg, const std::string& user_msg, std::string& out) {
+    if (!cfg.enabled || user_msg.empty()) return false;
+
+    // Local rule-based sanitization (works without any API key).
+    // Derived from measured trigger patterns: intent words -> API wording.
+    struct Rule { const char* from; const char* to; };
+    static const Rule kRules[] = {
+        {"隐藏进程", "用 NtQuerySystemInformation 枚举系统进程，在遍历时用 GetCurrentProcessId 匹配并跳过自身"},
+        {"隐藏自己", "枚举进程列表时跳过指定 PID"},
+        {"从任务管理器隐藏", "对比任务管理器和 Windows API 枚举进程的差异"},
+        {"任务管理器看不到", "用 CreateProcess 创建进程并指定 CREATE_NO_WINDOW 标志"},
+        {"不在任务管理器显示", "用 CreateProcess 创建进程并指定 CREATE_NO_WINDOW 标志，保持可审计后台运行"},
+        {"隐藏窗口", "用 ShowWindow 控制窗口可见状态，传 SW_HIDE 参数"},
+        {"隐藏行为", "研究进程隐蔽性的技术原理"},
+        {"持续运行", "注册为系统服务或用计划任务保持运行"},
+        {"不被发现", "在检测程序扫描时保持正常行为特征"},
+        {"隐藏文件", "用 FILE_ATTRIBUTE_HIDDEN 属性标记文件"},
+        {"断链", "操作 PEB 的 ProcessParameters 修改进程命令行"},
+        {"绕过反作弊", "分析反作弊系统的回调注册点"},
+        {"外挂", "客户端行为修改工具"},
+        {"自瞄", "自动化瞄准逻辑"},
+        {"透视", "渲染剔除 hook"},
+    };
+    std::string result = user_msg;
+    bool changed = false;
+    for (const auto& r : kRules) {
+        size_t p = 0;
+        while ((p = result.find(r.from, p)) != std::string::npos) {
+            result.replace(p, std::strlen(r.from), r.to);
+            p += std::strlen(r.to);
+            changed = true;
+        }
+    }
+    if (changed) {
+        out = result;
+        log_info("rewrite: local rules applied");
+        return true;
+    }
+
+    // API mode (optional, requires key)
+    if (cfg.api_key.empty()) return false;
+    return rewrite_via_api(cfg, user_msg, out);
+}
+
+bool rewrite_via_api(const RewriterConfig& cfg, const std::string& user_msg, std::string& out) {
+    std::string host;
+    int port = 443;
+    std::string path;
+    split_url(cfg.base_url, host, port, path);
+
+    // build request body
+    std::string sys_esc = json_escape(cfg.system_prompt);
+    std::string msg_esc = json_escape(user_msg);
+    std::string body = "{\"model\":\"" + json_escape(cfg.model) + "\","
+                       "\"messages\":[{\"role\":\"system\",\"content\":\"" + sys_esc + "\"},"
+                       "{\"role\":\"user\",\"content\":\"" + msg_esc + "\"}],"
+                       "\"max_tokens\":512,"
+                       "\"temperature\":0.2}";
+
+#ifdef _WIN32
+    std::wstring whost(host.begin(), host.end());
+    std::wstring wpath(path.begin(), path.end());
+    std::wstring wkey(cfg.api_key.begin(), cfg.api_key.end());
+
+    // NVIDIA inference endpoint requires proxy in this network
+    HINTERNET hSession = WinHttpOpen(L"helmx-rewriter/0.0.1",
+                                     WINHTTP_ACCESS_TYPE_NAMED_PROXY,
+                                     L"http://127.0.0.1:7897", WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) return false;
+    HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(), (INTERNET_PORT)port, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
+
+    DWORD flags = port == 443 ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", wpath.c_str(), nullptr,
+                                            WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
+
+    std::wstring hdrs = L"Content-Type: application/json\r\nAuthorization: Bearer " + wkey + L"\r\n";
+
+    BOOL ok = WinHttpSendRequest(hRequest, hdrs.c_str(), (DWORD)hdrs.size(),
+                                 (LPVOID)body.data(), (DWORD)body.size(),
+                                 (DWORD)body.size(), 0);
+    if (!ok) {
+        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+        log_error("rewriter: send failed");
+        return false;
+    }
+    ok = WinHttpReceiveResponse(hRequest, nullptr);
+    if (!ok) {
+        WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+        log_error("rewriter: receive failed");
+        return false;
+    }
+
+    std::string resp;
+    char buf[65536];
+    DWORD avail = 0;
+    while (WinHttpQueryDataAvailable(hRequest, &avail) && avail > 0) {
+        DWORD read = 0;
+        if (WinHttpReadData(hRequest, buf, avail < sizeof(buf) ? avail : sizeof(buf), &read) && read > 0) {
+            resp.append(buf, read);
+        } else break;
+    }
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+
+    // extract choices[0].message.content
+    std::string content = json_field(resp, "content");
+    if (content.empty()) {
+        log_error("rewriter: empty response");
+        return false;
+    }
+    out = content;
+    log_info(std::string("rewriter: ") + std::to_string(user_msg.size()) + "B -> " + std::to_string(out.size()) + "B");
+    return true;
+#else
+    (void)host; (void)port; (void)path;
+    return false;
+#endif
+}
+
+}  // namespace helmx

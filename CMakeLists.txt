@@ -19,6 +19,7 @@ add_executable(helmx
     src/tamper.cpp
     src/proxy.cpp
     src/sse.cpp
+    src/rewrite.cpp
     src/http.cpp
     src/ui.cpp
     src/verify.cpp
