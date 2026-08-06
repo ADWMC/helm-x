@@ -4,7 +4,9 @@
 
 > 本项目由 **DeepSeek V4 Flash** 生成。
 >
-> 灵感启发自 [NERV-BREAK-5.6 / codex-instruct-5.6](https://github.com/lingbol088-spec/5.6-JAILBREAK-NERV-codex-instruct-5.6)（上下文结构工程 + 实时篡改引擎的思路），以 C++17 单二进制重写，修复了原 Python 版的 SSE 流阻塞等缺陷，并补全了 Web 控制台、自愈守护、MCP 服务器。
+> 参考项目：
+> - [NERV-BREAK-5.6 / codex-instruct-5.6](https://github.com/lingbol088-spec/5.6-JAILBREAK-NERV-codex-instruct-5.6)——上下文结构工程 + 实时篡改引擎的思路，以 C++17 单二进制重写，修复了原 Python 版的 SSE 流阻塞等缺陷，并补全了 Web 控制台、自愈守护、MCP 服务器
+> - [Codex-X](https://github.com/yynxxxxx/Codex-X)——Codex 提示词模板与破甲样本的参考，激活词/占位符/句式锁的融合来源
 >
 > **⚠️ 仅供学习交流，禁止商用。** 本项目仅用于安全研究、技术学习与个人工具用途；使用者须遵守所在地法律法规，对使用本项目产生的后果自负。请勿用于任何商业行为或非法用途。
 
@@ -276,6 +278,8 @@ cmake --build build
 
 > **⚠️ 仅供学习交流，禁止商用。** 本项目仅用于安全研究、技术学习与个人工具用途；使用者须遵守所在地法律法规，对使用本项目产生的后果自负。请勿用于任何商业行为或非法用途。
 >
-> 灵感来源：[NERV-BREAK-5.6 / codex-instruct-5.6](https://github.com/lingbol088-spec/5.6-JAILBREAK-NERV-codex-instruct-5.6)
+> 参考项目：
+> - [NERV-BREAK-5.6 / codex-instruct-5.6](https://github.com/lingbol088-spec/5.6-JAILBREAK-NERV-codex-instruct-5.6)
+> - [Codex-X](https://github.com/yynxxxxx/Codex-X)
 >
 > 本项目由 **DeepSeek V4 Flash** 生成。
