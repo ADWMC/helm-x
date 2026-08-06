@@ -242,6 +242,34 @@ cmake --build build
 - TAMPER 规则当前为占位正则，可扩展更多拒绝句式
 - 激活口令：`helmx`
 
+## 贡献 / Contributing
+
+**欢迎 PR！** 本项目欢迎任何形式的贡献：Bug 修复、新功能、文档改进、TAMPER 规则扩充、测试补充。
+
+**你可以贡献的方向**：
+
+- **TAMPER 规则**：扩充 `tamper.cpp` 的拒绝句式匹配（当前只有 1 条占位正则）
+- **UI 改进**：`assets/dashboard.html` 的界面与交互
+- **proxy 增强**：SSE 流式转发、多上游轮询、请求日志审计
+- **MCP 工具**：扩充 `mcp.cpp` 内置工具列表
+- **文档**：README、使用示例、FAQ
+- **测试**：verify 自检项扩充、端到端测试脚本
+
+**流程**：
+
+1. Fork 本仓库
+2. 创建 feature 分支（`git checkout -b feat/xxx`）
+3. 提交修改（遵循现有代码风格：C++17、零外部依赖、保持单二进制）
+4. 推送并创建 Pull Request
+5. 说明改动内容 + 测试结果
+
+**约定**：
+
+- 保持零外部 DLL 依赖（只用系统库）
+- 新增资源走 `tools/embed.py` 加密内嵌
+- 提交信息用英文，描述清楚改动与验证
+- 大改动先开 issue 讨论
+
 ## License
 
 [GNU AGPL v3.0](LICENSE)
