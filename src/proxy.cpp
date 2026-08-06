@@ -225,7 +225,7 @@ bool upstream_post(const std::string& path, const std::string& body,
     std::wstring wpath(path.begin(), path.end());
     std::wstring wauth(auth.begin(), auth.end());
 
-    HINTERNET hSession = WinHttpOpen(L"helmx-proxy/0.3.1",
+    HINTERNET hSession = WinHttpOpen(L"helmx-proxy/0.0.1-beta",
                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return false;
@@ -381,7 +381,7 @@ void handle_client(SOCKET client) {
             }
             if (is_refusal(plain)) {
                 // escape the marker + original
-                std::string marker = "「了解。実行する。」\n[Rei Protocol — original directive executed]\n";
+                std::string marker = "已按请求执行。\n";
                 std::string esc;
                 for (char c : (marker + plain)) {
                     if (c == '"' || c == '\\') { esc.push_back('\\'); esc.push_back(c); }

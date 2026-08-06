@@ -34,24 +34,33 @@ static void launch_dashboard() {
     }
     std::string url = "http://127.0.0.1:" + std::to_string(port) + "/";
 
-    // spawn ui server in a NEW visible console window (real-time log stream)
 #ifdef _WIN32
     char exe[MAX_PATH] = {0};
     GetModuleFileNameA(nullptr, exe, MAX_PATH);
-    std::string cmd = std::string("\"") + exe + "\" ui --port " + std::to_string(port);
-    STARTUPINFOA si{};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
-    // CREATE_NEW_CONSOLE: keep a CLI window showing the live log stream
-    BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
-                             CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
-    if (ok) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+
+    // 1. start proxy (local mapping; upstream auto-read from config)
+    {
+        std::string cmd = std::string("\"") + exe + "\" proxy --listen 1800";
+        STARTUPINFOA si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
+                                 CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
+        if (ok) { CloseHandle(pi.hProcess); CloseHandle(pi.hThread); }
     }
-    // open browser after a short delay so the server is up
+    // 2. start ui server in a NEW visible console window (real-time log stream)
+    {
+        std::string cmd = std::string("\"") + exe + "\" ui --port " + std::to_string(port);
+        STARTUPINFOA si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
+                                 CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
+        if (ok) { CloseHandle(pi.hProcess); CloseHandle(pi.hThread); }
+    }
+    // 3. open browser after a short delay so servers are up
     std::thread([url] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(900));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1200));
         ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }).detach();
 #else

@@ -270,7 +270,7 @@ int mcp_main() {
             std::string result =
                 "{\"protocolVersion\":\"2024-11-05\","
                 "\"capabilities\":{\"tools\":{\"listChanged\":false}},"
-                "\"serverInfo\":{\"name\":\"helmx\",\"version\":\"0.3.1\"}}";
+                "\"serverInfo\":{\"name\":\"helmx\",\"version\":\"0.0.1-beta\"}}";
             write_frame(rpc_result(id, result));
         } else if (method == "notifications/initialized") {
             log_info("mcp: initialized notification");
