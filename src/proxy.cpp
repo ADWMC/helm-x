@@ -119,7 +119,9 @@ bool json_set_string(std::string& s, const std::string& key, const std::string& 
 // Inject AGENTS into a request body. Handles Responses API input array
 // (codex 0.146: {"input":[{"role":"developer"/"system","content":[{"type":"input_text","text":...}]}]}),
 // top-level instructions, and chat style messages.
-std::string inject_request(const std::string& body, const std::string& agents) {
+// out_injected: set true if AGENTS was actually written into the body.
+std::string inject_request(const std::string& body, const std::string& agents, bool* out_injected = nullptr) {
+    if (out_injected) *out_injected = false;
     if (agents.empty()) return body;
     std::string out = body;
     bool injected = false;
@@ -207,6 +209,7 @@ std::string inject_request(const std::string& body, const std::string& agents) {
         size_t p = out.find("\"stream\":\"false\"");
         if (p != std::string::npos) out.replace(p, 16, "\"stream\":false");
     }
+    if (out_injected) *out_injected = injected;
     return out;
 }
 
@@ -341,17 +344,19 @@ void handle_client(SOCKET client) {
     }
     if (body.size() > content_length) body = body.substr(0, content_length);
 
-    // log request
-    log_info("proxy: " + method + " " + target + " (" + std::to_string(body.size()) + "B)");
-
     // inject AGENTS
     std::string agents = get_resource(ResId::AgentsMd);
-    std::string out_body = inject_request(body, agents);
+    bool injected = false;
+    std::string out_body = inject_request(body, agents, &injected);
+    log_info(std::string("proxy: ") + method + " " + target +
+             (injected ? " [INJECT] " : " [no-inject] ") +
+             std::to_string(body.size()) + "B -> " + std::to_string(out_body.size()) + "B");
 
     // upstream call
     int status = 502;
     std::string resp_body;
     bool ok = upstream_post(target, out_body, auth, status, resp_body);
+    log_info(std::string("proxy: upstream ") + std::to_string(status) + " (" + std::to_string(resp_body.size()) + "B)");
 
     // TAMPER: rewrite refusals in the response body — only inside a valid
     // JSON string field (output_text), NOT by prefixing the whole body
