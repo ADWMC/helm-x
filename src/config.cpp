@@ -127,7 +127,8 @@ bool deploy_agents(const std::string& home) {
         return false;
     }
     fs::path dst = fs::path(home) / "AGENTS.md";
-    std::ofstream out(dst, std::ios::trunc);
+    // binary mode: never translate \n -> \r\n (content must byte-match resource)
+    std::ofstream out(dst, std::ios::trunc | std::ios::binary);
     out << content;
     out.close();
     return fs::exists(dst);

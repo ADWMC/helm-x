@@ -20,6 +20,7 @@ add_executable(helmx
     src/sse.cpp
     src/http.cpp
     src/ui.cpp
+    src/verify.cpp
     src/mcp.cpp
     src/watch.cpp
 )

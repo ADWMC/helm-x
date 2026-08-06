@@ -62,6 +62,17 @@ def main():
     tools = read('tools.json')
     dashboard = read('dashboard.html')
 
+    # Normalize CRLF -> LF for embedded assets (git autocrlf may have
+    # converted working-tree files; embedded bytes must be stable so
+    # verify's content match is deterministic across checkouts).
+    def norm(b):
+        return b.replace(b'\r\n', b'\n')
+
+    agents = norm(agents)
+    rules = norm(rules)
+    tools = norm(tools)
+    dashboard = norm(dashboard)
+
     # Skills index: name -> (cipher, key, len) ; content encrypted per-skill
     skills_dir = os.path.join(assets, 'skills')
     skill_names = []

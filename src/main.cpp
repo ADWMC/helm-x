@@ -8,6 +8,7 @@
 #include "proxy.h"
 #include "resources.h"
 #include "ui.h"
+#include "verify.h"
 #include "watch.h"
 
 static void usage() {
@@ -18,6 +19,7 @@ static void usage() {
         "\n"
         "commands:\n"
         "  apply              deploy AGENTS.md + config injection\n"
+        "  verify             self-test injection state [--e2e runs codex check]\n"
         "  ui                 web dashboard (status / rules / actions)\n"
         "  watch              self-healing daemon (verify + restore)\n"
         "  proxy              tamper proxy (HTTP MITM inject + rewrite)\n"
@@ -36,6 +38,8 @@ int main(int argc, char** argv) {
 
     if (cmd == "apply") {
         return helmx::apply();
+    } else if (cmd == "verify") {
+        return helmx::verify_main(argc, argv);
     } else if (cmd == "ui") {
         return helmx::ui_main(argc, argv);
     } else if (cmd == "watch") {

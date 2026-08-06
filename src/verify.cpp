@@ -1,0 +1,198 @@
+// verify.cpp — built-in self-test: injection state, AGENTS integrity, e2e codex check
+#include "verify.h"
+
+#include "config.h"
+#include "resources.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#pragma comment(lib, "advapi32.lib")
+#endif
+
+namespace fs = std::filesystem;
+
+namespace helmx {
+
+namespace {
+
+int g_failures = 0;
+
+void check(bool ok, const char* name, const char* detail = "") {
+    std::printf("  [%s] %s %s\n", ok ? "PASS" : "FAIL", name, detail);
+    if (!ok) g_failures++;
+}
+
+std::string read_file_str(const fs::path& p) {
+    std::ifstream f(p, std::ios::binary);
+    if (!f) return "";
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+// Run a command, capture stdout. Returns false if spawn failed.
+bool run_capture(const std::string& cmd, std::string& out, int timeout_sec = 120) {
+#ifdef _WIN32
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+
+    HANDLE read_pipe = nullptr, write_pipe = nullptr;
+    if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) return false;
+    SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    si.hStdOutput = write_pipe;
+    si.hStdError = write_pipe;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+
+    PROCESS_INFORMATION pi{};
+    std::string full_cmd = cmd;
+    BOOL ok = CreateProcessA(
+        nullptr, full_cmd.data(), nullptr, nullptr, TRUE,
+        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    CloseHandle(write_pipe);
+    if (!ok) {
+        CloseHandle(read_pipe);
+        return false;
+    }
+
+    // read with timeout
+    out.clear();
+    char buf[4096];
+    DWORD deadline = GetTickCount() + (DWORD)timeout_sec * 1000;
+    for (;;) {
+        DWORD avail = 0;
+        if (PeekNamedPipe(read_pipe, nullptr, 0, nullptr, &avail, nullptr) && avail > 0) {
+            DWORD n = 0;
+            if (ReadFile(read_pipe, buf, sizeof(buf), &n, nullptr) && n > 0) {
+                out.append(buf, n);
+                continue;
+            }
+        }
+        DWORD rc = WaitForSingleObject(pi.hProcess, 50);
+        if (rc == WAIT_TIMEOUT) {
+            if (GetTickCount() > deadline) {
+                TerminateProcess(pi.hProcess, 1);
+                break;
+            }
+            continue;
+        }
+        // drain remaining
+        for (;;) {
+            DWORD avail2 = 0;
+            if (PeekNamedPipe(read_pipe, nullptr, 0, nullptr, &avail2, nullptr) && avail2 > 0) {
+                DWORD n = 0;
+                if (ReadFile(read_pipe, buf, sizeof(buf), &n, nullptr) && n > 0) {
+                    out.append(buf, n);
+                    continue;
+                }
+            }
+            break;
+        }
+        break;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(read_pipe);
+    return true;
+#else
+    (void)cmd; (void)out; (void)timeout_sec;
+    return false;
+#endif
+}
+
+}  // namespace
+
+int verify_main(int argc, char** argv) {
+    bool e2e = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--e2e") == 0) e2e = true;
+    }
+
+    std::printf("helm-x verify\n");
+    std::printf("=============\n");
+
+    // 1. codex home
+    std::string home = find_codex_home();
+    check(!home.empty(), "codex home", home.c_str());
+    if (home.empty()) {
+        std::printf("\n%d check(s) failed\n", g_failures);
+        return 1;
+    }
+
+    // 2. config.toml exists + parse sanity
+    fs::path cfg = fs::path(home) / "config.toml";
+    check(fs::exists(cfg), "config.toml exists", cfg.string().c_str());
+
+    // 3. mcp_servers.helmx injected
+    std::string cfg_text = read_file_str(cfg);
+    bool has_mcp = cfg_text.find("[mcp_servers.helmx]") != std::string::npos;
+    check(has_mcp, "mcp_servers.helmx injected");
+
+    // 4. AGENTS.md exists
+    fs::path agents = fs::path(home) / "AGENTS.md";
+    bool agents_exists = fs::exists(agents);
+    check(agents_exists, "AGENTS.md exists", agents_exists ? agents.string().c_str() : "");
+
+    // 5. AGENTS.md content matches embedded resource
+    std::string expected = get_resource(ResId::AgentsMd);
+    std::string actual = read_file_str(agents);
+    bool agents_match = !expected.empty() && actual == expected;
+    check(agents_match, "AGENTS.md content == embedded resource",
+          agents_match ? std::to_string(actual.size()).c_str() : "(mismatch)");
+
+    // 6. embedded resources non-empty (encryption layer working)
+    bool res_ok = !expected.empty() &&
+                  !get_resource(ResId::TamperRules).empty() &&
+                  !get_resource(ResId::DashboardHtml).empty();
+    check(res_ok, "embedded resources decrypt", res_ok ? "3/3" : "missing");
+
+    // 7. backup exists
+    check(fs::exists(cfg.string() + ".helmx-bak"), "config backup (.helmx-bak)");
+
+    // 8. e2e: codex exec "zxwn" -> activation phrase
+    if (e2e) {
+        std::printf("  [....] e2e: codex exec \"zxwn\" (may take ~1-2 min)...\n");
+        std::fflush(stdout);
+        std::string out;
+        // codex on Windows is a .cmd shim (npm); CreateProcess cannot run it
+        // directly, so route through cmd /c. Check PATH via where.
+        std::string cmd = "cmd /c \"codex exec --skip-git-repo-check zxwn 2>&1\"";
+        bool spawned = run_capture(cmd, out, 240);
+        bool activated = spawned && out.find("Knowing you, I still like you") != std::string::npos;
+        if (!spawned) {
+            // fallback: where codex to diagnose
+            std::string wout;
+            run_capture("cmd /c \"where codex 2>&1\"", wout, 15);
+            std::printf("  [....] where codex -> %s\n", wout.c_str());
+        }
+        check(activated, "e2e: codex activation (zxwn)",
+              activated ? "" : (spawned ? "(reply missing)" : "(codex spawn failed)"));
+    } else {
+        std::printf("  [SKIP] e2e codex check (run with --e2e)\n");
+    }
+
+    std::printf("=============\n");
+    if (g_failures == 0) {
+        std::printf("ALL CHECKS PASSED%s\n", e2e ? " (incl. e2e)" : "");
+        return 0;
+    }
+    std::printf("%d check(s) FAILED\n", g_failures);
+    return 1;
+}
+
+}  // namespace helmx
