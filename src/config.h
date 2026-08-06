@@ -19,9 +19,6 @@ bool verify_injection(const std::string& home);
 // Deploy AGENTS.md (decrypted from embedded resources)
 bool deploy_agents(const std::string& home);
 
-// Deploy skills/ from embedded resources
-bool deploy_skills(const std::string& home);
-
 // Remove all injected artifacts, restore backup
 bool remove_all(const std::string& home);
 

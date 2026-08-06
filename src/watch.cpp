@@ -24,7 +24,6 @@ int watch(int interval_sec) {
             std::printf("[helm-x] injection broken, restoring...\n");
             inject_config(home);
             deploy_agents(home);
-            deploy_skills(home);
             if (verify_injection(home)) {
                 std::printf("[helm-x] restored\n");
             } else {

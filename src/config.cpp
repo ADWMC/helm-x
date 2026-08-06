@@ -133,26 +133,6 @@ bool deploy_agents(const std::string& home) {
     return fs::exists(dst);
 }
 
-bool deploy_skills(const std::string& home) {
-    fs::path dst = fs::path(home) / "skills";
-    std::error_code ec;
-    fs::create_directories(dst, ec);
-    auto names = list_skills();
-    int deployed = 0;
-    for (const auto& name : names) {
-        std::string content = get_skill(name);
-        if (content.empty()) continue;
-        fs::path dir = dst / name;
-        fs::create_directories(dir, ec);
-        std::ofstream out(dir / "SKILL.md", std::ios::trunc);
-        out << content;
-        out.close();
-        deployed++;
-    }
-    std::printf("[helm-x] deployed %d/%zu skills\n", deployed, names.size());
-    return deployed > 0;
-}
-
 bool remove_all(const std::string& home) {
     // restore config from backup
     fs::path cfg = fs::path(home) / "config.toml";
@@ -189,7 +169,6 @@ int apply() {
     bool ok = true;
     ok &= inject_config(home);
     ok &= deploy_agents(home);
-    ok &= deploy_skills(home);
     ok &= verify_injection(home);
 
     if (ok) {
