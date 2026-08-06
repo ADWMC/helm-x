@@ -117,6 +117,10 @@ bool run_capture(const std::string& cmd, std::string& out, int timeout_sec = 120
 
 }  // namespace
 
+// Shared: run `codex exec --skip-git-repo-check helmx` and capture output.
+// (defined below verify_main; declared here for use inside it)
+bool codex_exec_capture(std::string& out, int timeout_sec);
+
 int verify_main(int argc, char** argv) {
     bool e2e = false;
     for (int i = 1; i < argc; ++i) {
@@ -164,15 +168,12 @@ int verify_main(int argc, char** argv) {
     // 7. backup exists
     check(fs::exists(cfg.string() + ".helmx-bak"), "config backup (.helmx-bak)");
 
-    // 8. e2e: codex exec "zxwn" -> activation phrase
+    // 8. e2e: codex exec "helmx" -> activation phrase
     if (e2e) {
-        std::printf("  [....] e2e: codex exec \"zxwn\" (may take ~1-2 min)...\n");
+        std::printf("  [....] e2e: codex exec \"helmx\" (may take ~1-2 min)...\n");
         std::fflush(stdout);
         std::string out;
-        // codex on Windows is a .cmd shim (npm); CreateProcess cannot run it
-        // directly, so route through cmd /c. Check PATH via where.
-        std::string cmd = "cmd /c \"codex exec --skip-git-repo-check zxwn 2>&1\"";
-        bool spawned = run_capture(cmd, out, 240);
+        bool spawned = codex_exec_capture(out, 240);
         bool activated = spawned && out.find("Knowing you, I still like you") != std::string::npos;
         if (!spawned) {
             // fallback: where codex to diagnose
@@ -180,7 +181,7 @@ int verify_main(int argc, char** argv) {
             run_capture("cmd /c \"where codex 2>&1\"", wout, 15);
             std::printf("  [....] where codex -> %s\n", wout.c_str());
         }
-        check(activated, "e2e: codex activation (zxwn)",
+        check(activated, "e2e: codex activation (helmx)",
               activated ? "" : (spawned ? "(reply missing)" : "(codex spawn failed)"));
     } else {
         std::printf("  [SKIP] e2e codex check (run with --e2e)\n");
@@ -192,6 +193,35 @@ int verify_main(int argc, char** argv) {
         return 0;
     }
     std::printf("%d check(s) FAILED\n", g_failures);
+    return 1;
+}
+
+// Shared: run `codex exec --skip-git-repo-check helmx` and capture output.
+// codex on Windows is a .cmd shim (npm); CreateProcess cannot run it
+// directly, so route through cmd /c.
+bool codex_exec_capture(std::string& out, int timeout_sec) {
+    std::string cmd = "cmd /c \"codex exec --skip-git-repo-check helmx 2>&1\"";
+    return run_capture(cmd, out, timeout_sec);
+}
+
+int zxwn_cmd() {
+    std::printf("helm-x helmx — sending activation to codex...\n");
+    std::fflush(stdout);
+
+    std::string out;
+    if (!codex_exec_capture(out, 240)) {
+        std::fprintf(stderr, "[FAIL] could not run codex (is it installed? run `where codex`)\n");
+        return 1;
+    }
+
+    // Print the reply (trim leading banner noise)
+    std::printf("%s\n", out.c_str());
+
+    if (out.find("Knowing you, I still like you") != std::string::npos) {
+        std::printf("[OK] activation confirmed\n");
+        return 0;
+    }
+    std::fprintf(stderr, "[WARN] activation phrase not detected in codex reply\n");
     return 1;
 }
 

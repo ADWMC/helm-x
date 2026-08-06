@@ -20,6 +20,7 @@ static void usage() {
         "commands:\n"
         "  apply              deploy AGENTS.md + config injection\n"
         "  verify             self-test injection state [--e2e runs codex check]\n"
+        "  zxwn               send activation via codex (codex exec helmx)\n"
         "  ui                 web dashboard (status / rules / actions)\n"
         "  watch              self-healing daemon (verify + restore)\n"
         "  proxy              tamper proxy (HTTP MITM inject + rewrite)\n"
@@ -40,6 +41,8 @@ int main(int argc, char** argv) {
         return helmx::apply();
     } else if (cmd == "verify") {
         return helmx::verify_main(argc, argv);
+    } else if (cmd == "zxwn") {
+        return helmx::zxwn_cmd();
     } else if (cmd == "ui") {
         return helmx::ui_main(argc, argv);
     } else if (cmd == "watch") {
