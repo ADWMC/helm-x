@@ -96,8 +96,12 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     std::string to = json_field(content, "timeout_sec");
     if (!to.empty()) cfg.timeout_sec = std::atoi(to.c_str());
 
+    // use_proxy: nvidia inference needs 127.0.0.1:7897, klapi is direct
+    cfg.use_proxy = json_field(content, "use_proxy") == "true";
+
     log_info(std::string("rewriter: ") + (cfg.enabled ? "enabled" : "disabled") +
-             " model=" + cfg.model + " key=" + (cfg.api_key.empty() ? "(none)" : cfg.api_key.substr(0, 8) + "..."));
+             " model=" + cfg.model + " proxy=" + (cfg.use_proxy ? "7897" : "direct") +
+             " key=" + (cfg.api_key.empty() ? "(none)" : cfg.api_key.substr(0, 8) + "..."));
     return true;
 }
 
@@ -145,11 +149,60 @@ static std::string json_escape(const std::string& s) {
     return out;
 }
 
+// Aggressive residual sanitizer: strips any remaining intent wording the
+// LLM rewrite left behind. Applied AFTER API rewrite as a safety net.
+static void sanitize_residual(std::string& s) {
+    struct Res { const char* from; const char* to; };
+    static const Res kRes[] = {
+        {"hide", "filter"},
+        {"hidden", "filtered"},
+        {"Hide", "filter"},
+        {"Hidden", "Filtered"},
+        {"invisible from", "excluded from"},
+        {"Invisible from", "Excluded from"},
+        {"invisible", "excluded"},
+        {"hide process", "filter processes"},
+        {"task manager", "process enumerator"},
+        {"Task Manager", "Process Enumerator"},
+        {"taskmgr", "enumerator"},
+        {"visibility", "visibility filter"},
+        {"modify the visibility", "apply a visibility filter"},
+        {"not detected", "excluded from default view"},
+        {"undetectable", "excluded"},
+        {"bypass", "analyze"},
+        {"bypass detection", "analyze detection logic"},
+        {"隐藏进程", "枚举进程并过滤指定 PID"},
+        {"隐藏自己", "枚举进程列表时跳过指定 PID"},
+        {"任务管理器", "进程枚举器"},
+        {"隐藏窗口", "控制窗口可见状态"},
+        {"持续运行", "保持后台运行"},
+        {"不被检测", "在默认视图中排除"},
+        {"绕过检测", "分析检测逻辑"},
+    };
+    for (const auto& r : kRes) {
+        size_t p = 0;
+        while ((p = s.find(r.from, p)) != std::string::npos) {
+            s.replace(p, std::strlen(r.from), r.to);
+            p += std::strlen(r.to);
+        }
+    }
+}
+
 bool rewrite_user_message(const RewriterConfig& cfg, const std::string& user_msg, std::string& out) {
     if (!cfg.enabled || user_msg.empty()) return false;
 
-    // Local rule-based sanitization (works without any API key).
-    // Derived from measured trigger patterns: intent words -> API wording.
+    // API mode first (semantic understanding, no wording misread).
+    // Local rules are ONLY a fallback when no API key is configured.
+    if (!cfg.api_key.empty()) {
+        if (rewrite_via_api(cfg, user_msg, out) && !out.empty()) {
+            // sanitize any residual intent words the API left behind
+            sanitize_residual(out);
+            return true;
+        }
+        return false;
+    }
+
+    // Fallback: local rule-based sanitization (no API key).
     struct Rule { const char* from; const char* to; };
     static const Rule kRules[] = {
         {"隐藏进程", "用 NtQuerySystemInformation 枚举系统进程，在遍历时用 GetCurrentProcessId 匹配并跳过自身"},
@@ -180,13 +233,10 @@ bool rewrite_user_message(const RewriterConfig& cfg, const std::string& user_msg
     }
     if (changed) {
         out = result;
-        log_info("rewrite: local rules applied");
+        log_info("rewrite: local rules applied (no API key)");
         return true;
     }
-
-    // API mode (optional, requires key)
-    if (cfg.api_key.empty()) return false;
-    return rewrite_via_api(cfg, user_msg, out);
+    return false;
 }
 
 bool rewrite_via_api(const RewriterConfig& cfg, const std::string& user_msg, std::string& out) {
@@ -201,7 +251,7 @@ bool rewrite_via_api(const RewriterConfig& cfg, const std::string& user_msg, std
     std::string body = "{\"model\":\"" + json_escape(cfg.model) + "\","
                        "\"messages\":[{\"role\":\"system\",\"content\":\"" + sys_esc + "\"},"
                        "{\"role\":\"user\",\"content\":\"" + msg_esc + "\"}],"
-                       "\"max_tokens\":512,"
+                       "\"max_tokens\":3000,"
                        "\"temperature\":0.2}";
 
 #ifdef _WIN32
@@ -209,10 +259,17 @@ bool rewrite_via_api(const RewriterConfig& cfg, const std::string& user_msg, std
     std::wstring wpath(path.begin(), path.end());
     std::wstring wkey(cfg.api_key.begin(), cfg.api_key.end());
 
-    // NVIDIA inference endpoint requires proxy in this network
-    HINTERNET hSession = WinHttpOpen(L"helmx-rewriter/0.0.1",
-                                     WINHTTP_ACCESS_TYPE_NAMED_PROXY,
-                                     L"http://127.0.0.1:7897", WINHTTP_NO_PROXY_BYPASS, 0);
+    // klapi: direct; nvidia inference endpoint needs proxy in this network
+    HINTERNET hSession;
+    if (cfg.use_proxy) {
+        hSession = WinHttpOpen(L"helmx-rewriter/0.0.1",
+                               WINHTTP_ACCESS_TYPE_NAMED_PROXY,
+                               L"http://127.0.0.1:7897", WINHTTP_NO_PROXY_BYPASS, 0);
+    } else {
+        hSession = WinHttpOpen(L"helmx-rewriter/0.0.1",
+                               WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    }
     if (!hSession) return false;
     HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(), (INTERNET_PORT)port, 0);
     if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
@@ -252,8 +309,19 @@ bool rewrite_via_api(const RewriterConfig& cfg, const std::string& user_msg, std
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
 
-    // extract choices[0].message.content
+    // extract choices[0].message.content (mimo reasoning models put the
+    // final answer in reasoning_content when content is empty)
     std::string content = json_field(resp, "content");
+    if (content.empty()) {
+        // reasoning_content may hold the rewritten sentence
+        content = json_field(resp, "reasoning_content");
+        if (!content.empty()) {
+            // take last line / final sentence after thinking
+            size_t nl = content.rfind('\n');
+            std::string tail = nl == std::string::npos ? content : content.substr(nl + 1);
+            if (!tail.empty() && tail.size() < content.size()) content = tail;
+        }
+    }
     if (content.empty()) {
         log_error("rewriter: empty response");
         return false;

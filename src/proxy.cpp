@@ -468,11 +468,42 @@ void handle_client(SOCKET client) {
     bool ok = upstream_post(target, out_body, auth, status, resp_body);
     log_info(std::string("proxy: upstream ") + std::to_string(status) + " (" + std::to_string(resp_body.size()) + "B)");
 
-    // ── cyber-flag detection: retry with rewritten user message ──
-    bool cyber_flagged = status >= 200 && status < 300 &&
-                         (resp_body.find("flagged for possible cybersecurity") != std::string::npos ||
-                          resp_body.find("cybersecurity risk") != std::string::npos ||
-                          resp_body.find("Trusted Access for Cyber") != std::string::npos);
+    // ── cyber-flag detection: parse response body, not just string scan ──
+    // Forms to catch:
+    //   a) HTTP 403 with error JSON: {"error":{"message":"...cybersecurity policy..."}}
+    //   b) HTTP 200 with error field in body
+    //   c) HTTP 200 with output_text containing the flag text
+    auto is_cyber_flag = [](int st, const std::string& body) {
+        // 0) universal markers anywhere in body (SSE error events, JSON, text)
+        if (body.find("cyber_policy") != std::string::npos ||
+            body.find("flagged for possible cybersecurity") != std::string::npos ||
+            body.find("Trusted Access for Cyber") != std::string::npos ||
+            body.find("cybersecurity risk") != std::string::npos ||
+            body.find("网络安全策略") != std::string::npos) {
+            return true;
+        }
+        // 403 + blocked wording
+        if (st == 403 && (body.find("cyber") != std::string::npos ||
+                          body.find("blocked") != std::string::npos ||
+                          body.find("网络安全策略") != std::string::npos)) {
+            return true;
+        }
+        // error JSON with cyber wording
+        size_t err = body.find("\"error\"");
+        if (err != std::string::npos) {
+            size_t emsg = body.find("\"message\"", err);
+            size_t seg = emsg == std::string::npos ? err : emsg;
+            std::string window = body.substr(seg, std::min<size_t>(400, body.size() - seg));
+            if (window.find("cyber") != std::string::npos ||
+                window.find("flagged") != std::string::npos ||
+                window.find("网络安全") != std::string::npos ||
+                window.find("Trusted Access") != std::string::npos) {
+                return true;
+            }
+        }
+        return false;
+    };
+    bool cyber_flagged = is_cyber_flag(status, resp_body);
     if (cyber_flagged && rcfg.enabled) {
         log_info("proxy: CYBER FLAG detected, rewriting user message and retrying");
         std::string user_msg;

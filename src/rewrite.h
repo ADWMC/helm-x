@@ -6,11 +6,12 @@ namespace helmx {
 
 struct RewriterConfig {
     bool enabled = false;
-    std::string base_url = "https://integrate.api.nvidia.com/v1";
+    std::string base_url = "https://klapi.me/v1";
     std::string api_key;
-    std::string model = "z-ai/glm-5.2";
+    std::string model = "mimo-v2.5-pro";
     std::string system_prompt;
-    int timeout_sec = 20;
+    int timeout_sec = 90;
+    bool use_proxy = false;  // klapi direct; nvidia needs 127.0.0.1:7897
 };
 
 // Load config from helmx.config.json next to the exe (or ./helmx.config.json)
