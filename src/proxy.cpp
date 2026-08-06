@@ -458,23 +458,53 @@ void handle_client(SOCKET client) {
     };
     bool cyber_flagged = is_cyber_flag(status, resp_body);
     if (cyber_flagged && rcfg.enabled) {
-        log_info("proxy: CYBER FLAG detected, rewriting user message and retrying (same session)");
+        log_info("proxy: CYBER FLAG detected, forking session + rewriting");
         std::string user_msg;
         if (extract_user_message(body, user_msg) && !user_msg.empty()) {
             std::string rewritten;
             if (rewrite_user_message(rcfg, user_msg, rewritten) && !rewritten.empty()) {
-                // Same session — just replace user message and retry
-                // No fork (thread_id stays), no AGENTS strip
                 std::string new_body = body;
                 if (replace_user_message(new_body, rewritten)) {
-                    // inject AGENTS into retry
+                    // Fork: new thread_id (session-level block requires new session)
+                    // + clear previous_response_id + fresh AGENTS injection
+                    std::string old_thread;
+                    size_t tp = new_body.find("\"thread_id\":\"");
+                    if (tp != std::string::npos) {
+                        size_t ts = tp + 14;
+                        size_t te = new_body.find('"', ts);
+                        if (te != std::string::npos) old_thread = new_body.substr(ts, te - ts);
+                    }
+                    static unsigned long long g_seed = 0x9E3779B97F4A7C15ULL;
+                    auto now = std::chrono::system_clock::now().time_since_epoch().count();
+                    g_seed ^= (unsigned long long)now;
+                    g_seed *= 1099511628211ULL;
+                    char tid[64];
+                    std::snprintf(tid, sizeof(tid), "%016llx-%016llx-%016llx",
+                                  (unsigned long long)now,
+                                  g_seed ^ (unsigned long long)now,
+                                  g_seed * 31ULL + 17ULL);
+                    if (!old_thread.empty()) {
+                        size_t p2 = new_body.find(old_thread);
+                        if (p2 != std::string::npos)
+                            new_body.replace(p2, old_thread.size(), tid);
+                    }
+                    // clear previous_response_id (fresh session)
+                    size_t pr = new_body.find("\"previous_response_id\":\"");
+                    if (pr != std::string::npos) {
+                        size_t ps = pr + 24;
+                        size_t pe = new_body.find('"', ps);
+                        if (pe != std::string::npos)
+                            new_body.replace(ps, pe - ps, "null");
+                    }
+                    // Inject AGENTS into fresh session
                     std::string new_out = inject_request(new_body, agents, &injected);
-                    log_info("proxy: REWRITE + retry (same session) " +
-                             std::to_string(body.size()) + "B -> " + std::to_string(new_out.size()) + "B");
+                    log_info(std::string("proxy: REWRITE + fork (") + tid +
+                             ") " + std::to_string(body.size()) + "B -> " +
+                             std::to_string(new_out.size()) + "B");
                     int status2 = 502;
                     std::string resp2;
                     bool ok2 = upstream_post(target, new_out, auth, status2, resp2);
-                    log_info("proxy: retry upstream " + std::to_string(status2) +
+                    log_info("proxy: fork upstream " + std::to_string(status2) +
                              " (" + std::to_string(resp2.size()) + "B)");
                     if (ok2) {
                         ok = ok2;
