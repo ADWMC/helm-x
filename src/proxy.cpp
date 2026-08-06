@@ -454,12 +454,13 @@ void handle_client(SOCKET client) {
         load_rewriter_config(rcfg);
     }
 
-    // B方案：不注入AGENTS到system prompt（避免审查层识别）
-    // 只做 user 消息改写，不注入任何AGENTS内容到请求体
+    // inject AGENTS into request (from encrypted resource, not from file)
+    std::string agents = get_resource(ResId::AgentsMd);
     bool injected = false;
-    std::string out_body = body;  // 不注入，直接透传原始请求
+    std::string out_body = inject_request(body, agents, &injected);
     log_info(std::string("proxy: ") + method + " " + target +
-             " (no-inject) " + std::to_string(body.size()) + "B");
+             (injected ? " [INJECT] " : " [no-inject] ") +
+             std::to_string(body.size()) + "B -> " + std::to_string(out_body.size()) + "B");
 
     // upstream call (attempt 1: as-is)
     int status = 502;
@@ -550,8 +551,8 @@ void handle_client(SOCKET client) {
                         }
                     }
 
-                    // B方案：不注入agents到retry请求，直接透传改写后的body
-                    std::string new_out = new_body;
+                    // inject AGENTS into retry request
+                    std::string new_out = inject_request(new_body, agents, &injected);
                     log_info(std::string("proxy: REWRITE + retry (new session ") +
                              (thread_replaced ? new_thread : "(no-thread)") + ") " +
                              std::to_string(body.size()) + "B -> " + std::to_string(new_out.size()) + "B");

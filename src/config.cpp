@@ -202,7 +202,7 @@ bool verify_injection(const std::string& home) {
     std::string c = ss.str();
     bool ok = true;
     if (c.find("[mcp_servers.helmx]") == std::string::npos) ok = false;
-    if (!fs::exists(fs::path(home) / "AGENTS.md")) ok = false;
+    // AGENTS.md not deployed — proxy injects from encrypted resource
     return ok;
 }
 
@@ -255,7 +255,7 @@ int apply() {
 
     bool ok = true;
     ok &= inject_config(home);
-    ok &= deploy_agents(home);
+    // AGENTS.md not deployed as file — proxy injects from encrypted resource
     ok &= verify_injection(home);
 
     if (ok) {
