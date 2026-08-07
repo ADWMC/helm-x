@@ -233,29 +233,34 @@ static HttpResponse api_proxy_restore(const HttpRequest&) {
 }
 
 static HttpResponse api_restart(const HttpRequest&) {
-    log_info("ui: restart requested — terminating process for external restart");
-    // Set a flag file so the launcher knows to restart
-    std::string flag_path;
+    log_info("ui: restart requested — spawning new process and exiting");
+
 #ifdef _WIN32
     char exe[MAX_PATH] = {0};
     DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
     if (n > 0 && n < MAX_PATH) {
-        std::string exe_dir = std::string(exe);
-        size_t last_slash = exe_dir.find_last_of("\\/");
-        if (last_slash != std::string::npos) {
-            flag_path = exe_dir.substr(0, last_slash + 1) + ".helmx-restart";
+        // Spawn new instance of the same exe
+        STARTUPINFOA si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        BOOL ok = CreateProcessA(nullptr, exe, nullptr, nullptr, FALSE,
+                                 CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
+        if (ok) {
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            log_info("ui: new process spawned, exiting current");
+        } else {
+            log_info("ui: failed to spawn new process");
         }
     }
 #endif
-    if (!flag_path.empty()) {
-        std::ofstream f(flag_path);
-        if (f) f << "restart";
-    }
+
     // Schedule exit after response is sent
     std::thread([] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         std::_Exit(0);
     }).detach();
+
     return HttpResponse::json("{\"ok\":true,\"message\":\"restarting...\"}");
 }
 
