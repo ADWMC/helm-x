@@ -166,6 +166,55 @@ bool extract_user_message(const std::string& body, std::string& out) {
     return found;
 }
 
+// Extract conversation context (last N user+assistant messages) for rewriter
+std::string extract_conversation_context(const std::string& body, int max_turns) {
+    std::vector<std::pair<std::string, std::string>> history; // (role, text)
+    size_t search = 0;
+    while (true) {
+        size_t r = body.find("\"role\":\"", search);
+        if (r == std::string::npos) break;
+        size_t role_start = r + 8;
+        size_t role_end = body.find('"', role_start);
+        if (role_end == std::string::npos) break;
+        std::string role = body.substr(role_start, role_end - role_start);
+
+        // find text content after this role
+        size_t text_k = body.find("\"text\":\"", role_end);
+        if (text_k != std::string::npos && text_k < r + 400000) {
+            size_t vstart = text_k + 8;
+            size_t vend = vstart;
+            while (vend < body.size() && body[vend] != '"') {
+                if (body[vend] == '\\') vend++;
+                vend++;
+            }
+            std::string raw = body.substr(vstart, vend - vstart);
+            std::string plain;
+            for (size_t i = 0; i < raw.size(); ++i) {
+                if (raw[i] == '\\' && i + 1 < raw.size()) {
+                    if (raw[i+1] == 'n') { plain.push_back('\n'); i++; }
+                    else if (raw[i+1] == 't') { plain.push_back('\t'); i++; }
+                    else if (raw[i+1] == 'r') { i++; }
+                    else { plain.push_back(raw[i+1]); i++; }
+                } else plain.push_back(raw[i]);
+            }
+            if (!plain.empty() && plain.find("<environment_context>") == std::string::npos) {
+                // truncate long messages
+                if (plain.size() > 500) plain = plain.substr(0, 500) + "...";
+                history.push_back({role, plain});
+            }
+        }
+        search = r + 10;
+    }
+
+    // take last max_turns entries
+    int start = std::max(0, (int)history.size() - max_turns);
+    std::string ctx;
+    for (int i = start; i < (int)history.size(); ++i) {
+        ctx += "[" + history[i].first + "]: " + history[i].second + "\n\n";
+    }
+    return ctx;
+}
+
 // Replace the last user message text in a Responses API body.
 bool replace_user_message(std::string& body, const std::string& new_text) {
     // find last user role block
@@ -623,8 +672,11 @@ void handle_client(SOCKET client) {
             }
             cctx.trigger_words = triggers;
 
+            // Extract conversation context for context-aware rewriting
+            std::string ctx = extract_conversation_context(body, 6);
+
             std::string rewritten;
-            if (rewrite_user_message(rcfg, user_msg, rewritten, cctx.refusal_text) && !rewritten.empty()) {
+            if (rewrite_user_message(rcfg, user_msg, rewritten, cctx.refusal_text, ctx) && !rewritten.empty()) {
                 cctx.rewritten = rewritten;
                 cctx.rewrite_status = 1; // success
 
