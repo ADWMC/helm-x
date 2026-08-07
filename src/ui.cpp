@@ -275,6 +275,147 @@ static HttpResponse api_rewriter_test(const HttpRequest& req) {
     return HttpResponse::json(body);
 }
 
+static HttpResponse api_rewriter_save(const HttpRequest& req) {
+    // Save rewriter config from JSON body
+    // Expected: {"enabled":true,"provider":"nvidia","model":"...","api_key":"...","base_url":"...","proxy_url":"...","timeout_sec":60,"use_proxy":false}
+    std::string body = req.body;
+    if (body.empty()) {
+        return HttpResponse::json("{\"error\":\"empty body\"}");
+    }
+
+    // Find helmx.config.json path
+    std::string config_path;
+#ifdef _WIN32
+    char exe[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        std::string exe_dir = std::string(exe);
+        size_t last_slash = exe_dir.find_last_of("\\/");
+        if (last_slash != std::string::npos) {
+            config_path = exe_dir.substr(0, last_slash + 1) + "helmx.config.json";
+        }
+    }
+#endif
+    if (config_path.empty()) {
+        config_path = "helmx.config.json";
+    }
+
+    // Build JSON from request body
+    std::string json = "{\n  \"rewriter\": {\n";
+
+    // Extract fields from request body (simple parsing)
+    auto extract = [&body](const std::string& key) -> std::string {
+        size_t p = body.find("\"" + key + "\"");
+        if (p == std::string::npos) return "";
+        p = body.find(':', p);
+        if (p == std::string::npos) return "";
+        p++;
+        while (p < body.size() && (body[p] == ' ' || body[p] == '\t')) p++;
+        if (p < body.size() && body[p] == '"') {
+            p++;
+            size_t end = body.find('"', p);
+            if (end != std::string::npos) return body.substr(p, end - p);
+        } else {
+            size_t end = p;
+            while (end < body.size() && body[end] != ',' && body[end] != '}') end++;
+            return body.substr(p, end - p);
+        }
+        return "";
+    };
+
+    std::string enabled = extract("enabled");
+    std::string provider = extract("provider");
+    std::string model = extract("model");
+    std::string api_key = extract("api_key");
+    std::string base_url = extract("base_url");
+    std::string proxy_url = extract("proxy_url");
+    std::string timeout_sec = extract("timeout_sec");
+    std::string use_proxy = extract("use_proxy");
+
+    json += "    \"enabled\": " + (enabled.empty() ? "false" : enabled) + ",\n";
+    json += "    \"provider\": \"" + (provider.empty() ? "nvidia" : provider) + "\",\n";
+    json += "    \"base_url\": \"" + (base_url.empty() ? "https://integrate.api.nvidia.com/v1" : base_url) + "\",\n";
+    json += "    \"api_key\": \"" + (api_key.empty() ? "" : api_key) + "\",\n";
+    json += "    \"model\": \"" + (model.empty() ? "meta/llama-3.1-8b-instruct" : model) + "\",\n";
+    json += "    \"timeout_sec\": " + (timeout_sec.empty() ? "60" : timeout_sec) + ",\n";
+    json += "    \"use_proxy\": " + (use_proxy.empty() ? "false" : use_proxy);
+    if (!proxy_url.empty()) {
+        json += ",\n    \"proxy_url\": \"" + proxy_url + "\"";
+    }
+    json += "\n  }\n}\n";
+
+    // Write to file
+    std::ofstream f(config_path);
+    if (!f) {
+        return HttpResponse::json("{\"error\":\"failed to write config\"}");
+    }
+    f << json;
+    f.close();
+
+    log_info("ui: rewriter config saved to " + config_path);
+    return HttpResponse::json("{\"ok\":true,\"path\":\"" + json_escape(config_path) + "\"}");
+}
+
+static HttpResponse api_rewriter_toggle(const HttpRequest& req) {
+    // Toggle rewriter enabled/disabled
+    // Body: "true" or "false"
+    bool enable = (req.body == "true");
+
+    // Load current config
+    RewriterConfig cfg;
+    load_rewriter_config(cfg);
+
+    // Update enabled state
+    cfg.enabled = enable;
+
+    // Save back
+    std::string config_path;
+#ifdef _WIN32
+    char exe[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        std::string exe_dir = std::string(exe);
+        size_t last_slash = exe_dir.find_last_of("\\/");
+        if (last_slash != std::string::npos) {
+            config_path = exe_dir.substr(0, last_slash + 1) + "helmx.config.json";
+        }
+    }
+#endif
+    if (config_path.empty()) {
+        config_path = "helmx.config.json";
+    }
+
+    // Read existing config
+    std::ifstream in(config_path);
+    std::string content;
+    if (in) {
+        std::stringstream ss;
+        ss << in.rdbuf();
+        content = ss.str();
+        in.close();
+    }
+
+    // Update enabled field
+    size_t p = content.find("\"enabled\":");
+    if (p != std::string::npos) {
+        size_t start = p + 10;
+        while (start < content.size() && (content[start] == ' ' || content[start] == '\t')) start++;
+        size_t end = start;
+        while (end < content.size() && content[end] != ',' && content[end] != '}') end++;
+        content.replace(start, end - start, enable ? "true" : "false");
+    }
+
+    // Write back
+    std::ofstream out(config_path);
+    if (out) {
+        out << content;
+        out.close();
+    }
+
+    log_info(std::string("ui: rewriter ") + (enable ? "enabled" : "disabled"));
+    return HttpResponse::json(std::string("{\"ok\":true,\"enabled\":") + (enable ? "true" : "false") + "}");
+}
+
 static HttpResponse api_watch_status(const HttpRequest&) {
     std::string body =
         "{\"running\":" + std::string(watch_running() ? "true" : "false") +
@@ -329,6 +470,8 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/log") return api_log(req);
         if (req.method == "GET" && req.path == "/api/rewriter") return api_rewriter(req);
         if (req.method == "POST" && req.path == "/api/rewriter/test") return api_rewriter_test(req);
+        if (req.method == "POST" && req.path == "/api/rewriter/save") return api_rewriter_save(req);
+        if (req.method == "POST" && req.path == "/api/rewriter/toggle") return api_rewriter_toggle(req);
         if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);

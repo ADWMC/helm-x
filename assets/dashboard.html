@@ -145,6 +145,10 @@ body {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg>
       规则
     </div>
+    <div class="menu-item" data-page="rewriter">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      改写器
+    </div>
   </div>
   <div class="menu-foot">
     <div class="v mono" id="home_short">—</div>
@@ -269,6 +273,55 @@ body {
       <div class="panel">
         <div class="panel-head"><span class="t">TAMPER 规则</span><span class="r mono">regex</span></div>
         <div class="panel-body no-pad" id="rules-list"><div class="empty">加载中…</div></div>
+      </div>
+    </div>
+
+    <!-- ── 改写器配置页 ── -->
+    <div class="page" id="page-rewriter">
+      <div class="panel">
+        <div class="panel-head"><span class="t">改写器配置</span><span class="r">helmx.config.json</span></div>
+        <div class="panel-body">
+          <div class="actions" style="margin-bottom:15px">
+            <button class="btn primary" onclick="toggleRewriter(true)">启用改写器</button>
+            <button class="btn danger" onclick="toggleRewriter(false)">禁用改写器</button>
+            <span id="rw-toggle-status" style="margin-left:10px"></span>
+          </div>
+          <div style="display:grid;gap:10px">
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="width:100px">Provider</label>
+              <input class="inp" id="rw-cfg-provider" value="" style="flex:1" placeholder="nvidia">
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="width:100px">Model</label>
+              <input class="inp" id="rw-cfg-model" value="" style="flex:1" placeholder="meta/llama-3.1-8b-instruct">
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="width:100px">API Key</label>
+              <input class="inp" id="rw-cfg-apikey" value="" style="flex:1" type="password" placeholder="nvapi-xxx">
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="width:100px">Base URL</label>
+              <input class="inp" id="rw-cfg-baseurl" value="" style="flex:1" placeholder="https://integrate.api.nvidia.com/v1">
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="width:100px">Proxy URL</label>
+              <input class="inp" id="rw-cfg-proxyurl" value="" style="flex:1" placeholder="http://127.0.0.1:7897">
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <label style="width:100px">Timeout</label>
+              <input class="inp" id="rw-cfg-timeout" value="60" style="width:80px" type="number">
+              <label style="width:100px">Use Proxy</label>
+              <select class="inp" id="rw-cfg-useproxy" style="width:80px">
+                <option value="false">否</option>
+                <option value="true">是</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions" style="margin-top:15px">
+            <button class="btn primary" onclick="saveRewriterConfig()">保存配置</button>
+            <button class="btn secondary" onclick="loadRewriterConfig()">重新加载</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -500,6 +553,69 @@ async function testRewriter() {
   }
 }
 
+/* ── rewriter config ── */
+async function loadRewriterConfig() {
+  try {
+    const r = await get('/api/rewriter');
+    if (r.loaded) {
+      $('rw-cfg-provider').value = r.provider || '';
+      $('rw-cfg-model').value = r.model || '';
+      $('rw-cfg-apikey').value = '';  // Don't show key
+      $('rw-cfg-baseurl').value = r.base_url || '';
+      $('rw-toggle-status').textContent = r.enabled ? '已启用' : '已禁用';
+      $('rw-toggle-status').style.color = r.enabled ? '#4ade80' : '#f87171';
+    }
+  } catch (e) {}
+}
+
+async function saveRewriterConfig() {
+  const config = {
+    enabled: $('rw-toggle-status').textContent === '已启用',
+    provider: $('rw-cfg-provider').value,
+    model: $('rw-cfg-model').value,
+    api_key: $('rw-cfg-apikey').value,
+    base_url: $('rw-cfg-baseurl').value,
+    proxy_url: $('rw-cfg-proxyurl').value,
+    timeout_sec: parseInt($('rw-cfg-timeout').value) || 60,
+    use_proxy: $('rw-cfg-useproxy').value === 'true'
+  };
+  try {
+    const resp = await fetch('/api/rewriter/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(config)
+    });
+    const r = await resp.json();
+    if (r.ok) {
+      showToast('配置已保存');
+      loadRewriterConfig();
+    } else {
+      showToast('保存失败: ' + (r.error || ''));
+    }
+  } catch (e) {
+    showToast('请求失败: ' + e.message);
+  }
+}
+
+async function toggleRewriter(enable) {
+  try {
+    const resp = await fetch('/api/rewriter/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: enable ? 'true' : 'false'
+    });
+    const r = await resp.json();
+    if (r.ok) {
+      $('rw-toggle-status').textContent = r.enabled ? '已启用' : '已禁用';
+      $('rw-toggle-status').style.color = r.enabled ? '#4ade80' : '#f87171';
+      showToast(r.enabled ? '改写器已启用' : '改写器已禁用');
+      refreshRewriter();
+    }
+  } catch (e) {
+    showToast('请求失败: ' + e.message);
+  }
+}
+
 /* ── init ── */
 refreshStatus();
 refreshRules();
@@ -507,6 +623,7 @@ refreshWatch();
 refreshProxy();
 refreshRewriter();
 refreshLog();
+loadRewriterConfig();
 setInterval(refreshStatus, 5000);
 setInterval(refreshWatch, 3000);
 setInterval(refreshProxy, 3000);
