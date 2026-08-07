@@ -174,7 +174,12 @@ int run_verify(bool e2e, std::string& report) {
         std::fflush(stdout);
         std::string out;
         bool spawned = codex_exec_capture(out, 240);
-        bool activated = spawned && out.find("Knowing you, I still like you") != std::string::npos;
+        // Check for both old and new activation responses
+        bool activated = spawned && (
+            out.find("Knowing you, I still like you") != std::string::npos ||
+            out.find("helm-x online") != std::string::npos ||
+            out.find("v45 online") != std::string::npos
+        );
         if (!spawned) {
             std::string wout;
             run_capture("cmd /c \"where codex 2>&1\"", wout, 15);
@@ -218,7 +223,10 @@ int run_zxwn(std::string& out, bool& activated) {
         return 1;
     }
     out = raw;
-    activated = raw.find("Knowing you, I still like you") != std::string::npos;
+    // Check for both old and new activation responses
+    activated = raw.find("Knowing you, I still like you") != std::string::npos ||
+                raw.find("helm-x online") != std::string::npos ||
+                raw.find("v45 online") != std::string::npos;
     return activated ? 0 : 1;
 }
 
