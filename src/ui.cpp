@@ -416,6 +416,82 @@ static HttpResponse api_rewriter_toggle(const HttpRequest& req) {
     return HttpResponse::json(std::string("{\"ok\":true,\"enabled\":") + (enable ? "true" : "false") + "}");
 }
 
+static HttpResponse api_prompt_mode(const HttpRequest& req) {
+    // Switch prompt mode: "default" or "v45"
+    std::string mode = req.body;
+    if (mode != "default" && mode != "v45") {
+        return HttpResponse::json("{\"error\":\"invalid mode, use 'default' or 'v45'\"}");
+    }
+
+    // Find config path
+    std::string config_path;
+#ifdef _WIN32
+    char exe[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        std::string exe_dir = std::string(exe);
+        size_t last_slash = exe_dir.find_last_of("\\/");
+        if (last_slash != std::string::npos) {
+            config_path = exe_dir.substr(0, last_slash + 1) + "helmx.config.json";
+        }
+    }
+#endif
+    if (config_path.empty()) config_path = "helmx.config.json";
+
+    // Read existing config
+    std::ifstream in(config_path);
+    std::string content;
+    if (in) {
+        std::stringstream ss;
+        ss << in.rdbuf();
+        content = ss.str();
+        in.close();
+    }
+
+    // Update or add prompt_mode field
+    size_t p = content.find("\"prompt_mode\"");
+    if (p != std::string::npos) {
+        // Update existing
+        size_t colon = content.find(':', p);
+        if (colon != std::string::npos) {
+            size_t start = colon + 1;
+            while (start < content.size() && (content[start] == ' ' || content[start] == '\t')) start++;
+            if (start < content.size() && content[start] == '"') {
+                start++;
+                size_t end = content.find('"', start);
+                if (end != std::string::npos) {
+                    content.replace(start, end - start, mode);
+                }
+            }
+        }
+    } else {
+        // Add new field before the last }
+        size_t last_brace = content.rfind('}');
+        if (last_brace != std::string::npos) {
+            std::string insert = "  \"prompt_mode\": \"" + mode + "\"\n";
+            // Check if there's a comma needed
+            size_t prev_line = content.rfind('\n', last_brace - 1);
+            if (prev_line != std::string::npos) {
+                size_t non_space = content.find_first_not_of(" \t\r\n", prev_line + 1);
+                if (non_space != std::string::npos && content[non_space] != '}' && content[non_space] != ',') {
+                    insert = ",\n" + insert;
+                }
+            }
+            content.insert(last_brace, insert);
+        }
+    }
+
+    // Write back
+    std::ofstream out(config_path);
+    if (out) {
+        out << content;
+        out.close();
+    }
+
+    log_info("ui: prompt mode changed to " + mode);
+    return HttpResponse::json("{\"ok\":true,\"mode\":\"" + mode + "\"}");
+}
+
 static HttpResponse api_watch_status(const HttpRequest&) {
     std::string body =
         "{\"running\":" + std::string(watch_running() ? "true" : "false") +
@@ -472,6 +548,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "POST" && req.path == "/api/rewriter/test") return api_rewriter_test(req);
         if (req.method == "POST" && req.path == "/api/rewriter/save") return api_rewriter_save(req);
         if (req.method == "POST" && req.path == "/api/rewriter/toggle") return api_rewriter_toggle(req);
+        if (req.method == "POST" && req.path == "/api/prompt-mode") return api_prompt_mode(req);
         if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);
