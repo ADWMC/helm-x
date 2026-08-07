@@ -14,7 +14,7 @@
 
 **0 Cyber**：本工具不发起任何真实网络攻击、不连接任何外部目标——仅做本地 Codex 环境控制（本地映射 / 指令注入 / 响应改写），所有流量仅在你的机器与你自己配置的上游中转之间。
 
-> 本项目由 **DeepSeek V4 Flash** 生成。
+> 本项目由 AI 生成（**DeepSeek V4 Flash** + **Mimo V2.5 Pro**），代码质量仅供参考，请勿喷。
 >
 > 参考项目：
 > - [NERV-BREAK-5.6 / codex-instruct-5.6](https://github.com/lingbol088-spec/5.6-JAILBREAK-NERV-codex-instruct-5.6)——上下文结构工程 + 实时篡改引擎的思路，以 C++17 单二进制重写
@@ -318,4 +318,4 @@ cat tests/cyber-test-matrix-v2.md
 > - [gptbypass](https://github.com/null119/gptbypass)
 > - [gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
 >
-> 本项目由 **DeepSeek V4 Flash** 生成。
+> 本项目由 AI 生成（DeepSeek V4 Flash + Mimo V2.5 Pro），代码质量仅供参考，请勿喷。
