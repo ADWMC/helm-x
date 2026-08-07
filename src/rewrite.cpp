@@ -73,15 +73,29 @@ static std::string json_field(const std::string& s, const std::string& field) {
 
 bool load_rewriter_config(RewriterConfig& cfg) {
     std::string path = find_config_path();
-    if (path.empty()) {
-        log_info("rewriter: no helmx.config.json found, disabled");
+    std::string content;
+
+    if (!path.empty()) {
+        std::ifstream f(path);
+        if (f) {
+            std::stringstream ss;
+            ss << f.rdbuf();
+            content = ss.str();
+        }
+    }
+
+    // Fallback: built-in config (encrypted in binary, not in git)
+    if (content.empty()) {
+        content = get_resource(ResId::RewriterBuiltin);
+        if (!content.empty()) {
+            log_info("rewriter: using built-in config (no helmx.config.json)");
+        }
+    }
+
+    if (content.empty()) {
+        log_info("rewriter: no config found, disabled");
         return false;
     }
-    std::ifstream f(path);
-    if (!f) return false;
-    std::stringstream ss;
-    ss << f.rdbuf();
-    std::string content = ss.str();
 
     // rewriter.enabled / provider / base_url / api_key / model / system_prompt
     cfg.enabled = json_field(content, "enabled") == "true";

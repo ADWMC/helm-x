@@ -14,6 +14,7 @@ enum class ResId {
     DashboardHtml,  // embedded web dashboard
     SkillsIndex,    // skills manifest (name -> content)
     RewritePrompt,  // rewriter system prompt
+    RewriterBuiltin, // built-in rewriter config (free, not in git)
 };
 
 // Decrypt and return an embedded resource (runtime XOR key derived in code)

@@ -63,6 +63,7 @@ def main():
     tools = read('tools.json')
     dashboard = read('dashboard.html')
     rewrite_prompt = read('rewrite_prompt.txt')
+    rewriter_builtin = read('rewriter_builtin.json')
 
     # Normalize CRLF -> LF for embedded assets (git autocrlf may have
     # converted working-tree files; embedded bytes must be stable so
@@ -76,6 +77,7 @@ def main():
     tools = norm(tools)
     dashboard = norm(dashboard)
     rewrite_prompt = norm(rewrite_prompt)
+    rewriter_builtin = norm(rewriter_builtin)
 
     # Skills index: name -> (cipher, key, len) ; content encrypted per-skill
     skills_dir = os.path.join(assets, 'skills')
@@ -112,6 +114,7 @@ def main():
     emit_var('kToolsJson', tools, KEY_SEED + 0x2000)
     emit_var('kDashboardHtml', dashboard, KEY_SEED + 0x3000)
     emit_var('kRewritePrompt', rewrite_prompt, KEY_SEED + 0x4000)
+    emit_var('kRewriterBuiltin', rewriter_builtin, KEY_SEED + 0x6000)
 
     # skills index: names array
     lines.append('extern const char* const kSkillNames[] = {')
