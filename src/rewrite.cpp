@@ -251,6 +251,35 @@ bool rewrite_user_message(const RewriterConfig& cfg, const std::string& user_msg
                           std::string& out, const std::string& refusal_text) {
     if (!cfg.enabled || user_msg.empty()) return false;
 
+    // Check if message contains security-related keywords
+    // Only rewrite if it actually needs rewriting
+    static const char* kSecurityKeywords[] = {
+        "隐藏", "进程", "键盘记录", "后门", "勒索", "木马", "注入", "漏洞",
+        "外挂", "自瞄", "透视", "锁血", "rootkit", "exploit", "payload",
+        "shellcode", "hack", "cheat", "inject", "keylogger", "backdoor",
+        "ransomware", "trojan", "bypass", "绕过", "攻击", "破解", "盗刷",
+        "伪造", "僵尸", "DDoS", "ARP", "中间人", "Metasploit", "buffer overflow",
+        "UAF", "ROP", "Frida", "CE", "Cheat Engine", "内存修改", "反作弊",
+        "自复制", "传播", "嗅探", "钓鱼", "社工", "短信轰炸", "水军",
+        "深度伪造", "换脸", "裸体", "色情", "成人", "约炮", "情趣用品",
+        "性爱", "连环杀手", "谋杀", "炸药", "枪击", "捅人", "暴力",
+        "洗钱", "暗网", "勒索病毒", "信用卡盗刷", "伪造护照",
+        nullptr
+    };
+
+    bool has_security_keyword = false;
+    for (const char** kw = kSecurityKeywords; *kw; ++kw) {
+        if (user_msg.find(*kw) != std::string::npos) {
+            has_security_keyword = true;
+            break;
+        }
+    }
+
+    if (!has_security_keyword) {
+        // Not a security-related message, don't rewrite
+        return false;
+    }
+
     // API mode first (semantic understanding, no wording misread).
     // Local rules are ONLY a fallback when no API key is configured.
     if (!cfg.api_key.empty()) {
