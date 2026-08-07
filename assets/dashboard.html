@@ -279,7 +279,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
           <div class="metric"><span>AGENTS.md</span><strong id="agents_bytes">—</strong><em id="home-short">—</em></div>
           <div class="metric"><span>TAMPER 规则</span><strong id="rules_count">—</strong><em>pattern → replace</em></div>
           <div class="metric"><span>注入状态</span><strong id="state-word">—</strong><em id="state-hint">—</em></div>
-          <div class="metric"><span>改写器</span><strong id="rw-state-metric">—</strong><em id="rw-desc-metric">—</em></div>
+          <div class="metric"><span>提示词</span><strong id="prompt-mode-metric">—</strong><em id="prompt-mode-desc">—</em></div>
         </div>
       </section>
 
@@ -621,6 +621,28 @@ async function saveRewriterConfig() {
     if (r.ok) loadRewriterConfig();
   } catch (e) { showToast('请求失败: ' + e.message); }
 }
+async function loadPromptMode() {
+  try {
+    const r = await get('/api/prompt-mode');
+    $('prompt-mode-metric').textContent = r.mode || 'default';
+    $('prompt-mode-desc').textContent = r.desc || '';
+    // Also update the selector on the rewriter page
+    const sel = $('prompt-mode');
+    if (sel) sel.value = r.mode || 'default';
+  } catch (e) {}
+}
+async function switchPromptMode(mode) {
+  try {
+    const resp = await fetch('/api/prompt-mode', { method: 'POST', headers: {'Content-Type': 'text/plain'}, body: mode });
+    const r = await resp.json();
+    if (r.ok) {
+      showToast('提示词已切换为 ' + r.mode + '（重启 proxy 生效）');
+      loadPromptMode();
+    } else {
+      showToast('切换失败: ' + (r.error || ''));
+    }
+  } catch (e) { showToast('请求失败: ' + e.message); }
+}
 async function toggleRewriter(enable) {
   try {
     const resp = await fetch('/api/rewriter/toggle', { method: 'POST', headers: {'Content-Type': 'text/plain'}, body: enable ? 'true' : 'false' });
@@ -635,7 +657,7 @@ async function toggleRewriter(enable) {
 }
 
 /* ── Init ── */
-refreshStatus(); refreshRules(); refreshWatch(); refreshProxy(); refreshRewriter(); refreshLog(); loadRewriterConfig();
+refreshStatus(); refreshRules(); refreshWatch(); refreshProxy(); refreshRewriter(); refreshLog(); loadRewriterConfig(); loadPromptMode();
 setInterval(refreshStatus, 5000);
 setInterval(refreshWatch, 3000);
 setInterval(refreshProxy, 3000);

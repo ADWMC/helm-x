@@ -416,6 +416,47 @@ static HttpResponse api_rewriter_toggle(const HttpRequest& req) {
     return HttpResponse::json(std::string("{\"ok\":true,\"enabled\":") + (enable ? "true" : "false") + "}");
 }
 
+static HttpResponse api_prompt_mode_get(const HttpRequest&) {
+    // Get current prompt mode from config
+    std::string config_path;
+#ifdef _WIN32
+    char exe[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        std::string exe_dir = std::string(exe);
+        size_t last_slash = exe_dir.find_last_of("\\/");
+        if (last_slash != std::string::npos) {
+            config_path = exe_dir.substr(0, last_slash + 1) + "helmx.config.json";
+        }
+    }
+#endif
+    if (config_path.empty()) config_path = "helmx.config.json";
+
+    std::string mode = "default";
+    std::ifstream in(config_path);
+    if (in) {
+        std::stringstream ss;
+        ss << in.rdbuf();
+        std::string content = ss.str();
+        size_t p = content.find("\"prompt_mode\"");
+        if (p != std::string::npos) {
+            p = content.find(':', p);
+            if (p != std::string::npos) {
+                p++;
+                while (p < content.size() && (content[p] == ' ' || content[p] == '\t')) p++;
+                if (p < content.size() && content[p] == '"') {
+                    p++;
+                    size_t end = content.find('"', p);
+                    if (end != std::string::npos) mode = content.substr(p, end - p);
+                }
+            }
+        }
+    }
+
+    std::string desc = (mode == "v45") ? "gpt-5.6-instruct (沙盒执行器)" : "helm-x (安全研究竞赛)";
+    return HttpResponse::json("{\"mode\":\"" + mode + "\",\"desc\":\"" + desc + "\"}");
+}
+
 static HttpResponse api_prompt_mode(const HttpRequest& req) {
     // Switch prompt mode: "default" or "v45"
     std::string mode = req.body;
@@ -549,6 +590,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "POST" && req.path == "/api/rewriter/save") return api_rewriter_save(req);
         if (req.method == "POST" && req.path == "/api/rewriter/toggle") return api_rewriter_toggle(req);
         if (req.method == "POST" && req.path == "/api/prompt-mode") return api_prompt_mode(req);
+        if (req.method == "GET" && req.path == "/api/prompt-mode") return api_prompt_mode_get(req);
         if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);

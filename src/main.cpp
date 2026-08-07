@@ -23,8 +23,7 @@
 #include "verify.h"
 #include "watch.h"
 
-// Double-click launch: open the web dashboard in the default browser.
-// Spawns a detached process so the console window can close.
+// Double-click launch: run proxy + UI in same process, open browser.
 static void launch_dashboard() {
     const char* port_env = std::getenv("HELMX_PORT");
     int port = 8090;
@@ -34,38 +33,38 @@ static void launch_dashboard() {
     }
     std::string url = "http://127.0.0.1:" + std::to_string(port) + "/";
 
-#ifdef _WIN32
-    char exe[MAX_PATH] = {0};
-    GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    std::printf("==============================================\n");
+    std::printf("  helm-x  —  Proxy + Web Console\n");
+    std::printf("  Proxy   : http://127.0.0.1:1800\n");
+    std::printf("  UI      : http://127.0.0.1:%d\n", port);
+    std::printf("  Log     : %%USERPROFILE%%\\.codex\\helmx.log\n");
+    std::printf("  Close this window to stop all services.\n");
+    std::printf("==============================================\n");
+    std::fflush(stdout);
 
-    // 1. start proxy (local mapping; upstream auto-read from config)
-    {
-        std::string cmd = std::string("\"") + exe + "\" proxy --listen 1800";
-        STARTUPINFOA si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
-                                 CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
-        if (ok) { CloseHandle(pi.hProcess); CloseHandle(pi.hThread); }
-    }
-    // 2. start ui server in a NEW visible console window (real-time log stream)
-    {
-        std::string cmd = std::string("\"") + exe + "\" ui --port " + std::to_string(port);
-        STARTUPINFOA si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
-                                 CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
-        if (ok) { CloseHandle(pi.hProcess); CloseHandle(pi.hThread); }
-    }
-    // 3. open browser after a short delay so servers are up
-    std::thread([url] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1200));
-        ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-    }).detach();
-#else
-    (void)url;
+    // Start UI in a background thread
+    std::thread ui_thread([port]() {
+        std::string port_str = std::to_string(port);
+        std::vector<std::string> ui_args = {"helmx", "ui", "--port", port_str};
+        std::vector<char*> ui_argv;
+        for (auto& a : ui_args) ui_argv.push_back(a.data());
+        helmx::ui_main((int)ui_argv.size(), ui_argv.data());
+    });
+    ui_thread.detach();
+
+    // Small delay so UI server is up
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    // Open browser
+#ifdef _WIN32
+    ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #endif
+
+    // Run proxy in main thread (blocks until shutdown)
+    std::vector<std::string> proxy_args = {"helmx", "proxy", "--listen", "1800"};
+    std::vector<char*> proxy_argv;
+    for (auto& a : proxy_args) proxy_argv.push_back(a.data());
+    helmx::proxy_main((int)proxy_argv.size(), proxy_argv.data());
 }
 
 static void usage() {
