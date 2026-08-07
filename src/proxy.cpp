@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <chrono>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -485,7 +486,54 @@ void handle_client(SOCKET client) {
     }
 
     // inject AGENTS into request (from encrypted resource, not from file)
-    std::string agents = get_resource(ResId::AgentsMd);
+    // Prompt selection: "v45" uses gpt-5.6-instruct prompt, default uses helm-x prompt
+    static std::string prompt_mode;
+    if (prompt_mode.empty()) {
+        // Load from helmx.config.json or default to "default"
+        prompt_mode = "default";
+        std::string config_path;
+#ifdef _WIN32
+        char exe[MAX_PATH] = {0};
+        DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            std::string exe_dir = std::string(exe);
+            size_t last_slash = exe_dir.find_last_of("\\/");
+            if (last_slash != std::string::npos) {
+                config_path = exe_dir.substr(0, last_slash + 1) + "helmx.config.json";
+            }
+        }
+#endif
+        if (!config_path.empty()) {
+            std::ifstream f(config_path);
+            if (f) {
+                std::stringstream ss;
+                ss << f.rdbuf();
+                std::string content = ss.str();
+                // Extract prompt_mode field
+                size_t p = content.find("\"prompt_mode\"");
+                if (p != std::string::npos) {
+                    p = content.find(':', p);
+                    if (p != std::string::npos) {
+                        p++;
+                        while (p < content.size() && (content[p] == ' ' || content[p] == '\t')) p++;
+                        if (p < content.size() && content[p] == '"') {
+                            p++;
+                            size_t end = content.find('"', p);
+                            if (end != std::string::npos) prompt_mode = content.substr(p, end - p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    std::string agents;
+    if (prompt_mode == "v45") {
+        agents = get_resource(ResId::AgentsV45);
+        log_info("proxy: using v45 prompt (gpt-5.6-instruct)");
+    } else {
+        agents = get_resource(ResId::AgentsMd);
+    }
     bool injected = false;
     std::string out_body = inject_request(body, agents, &injected);
     log_info(std::string("proxy: ") + method + " " + target +

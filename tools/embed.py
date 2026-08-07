@@ -58,6 +58,7 @@ def main():
             return f.read()
 
     agents = read('bridge.md')
+    agents_v45 = read('bridge-v45.md')
     rules = read('tamper_rules.txt')
     tools = read('tools.json')
     dashboard = read('dashboard.html')
@@ -70,6 +71,7 @@ def main():
         return b.replace(b'\r\n', b'\n')
 
     agents = norm(agents)
+    agents_v45 = norm(agents_v45)
     rules = norm(rules)
     tools = norm(tools)
     dashboard = norm(dashboard)
@@ -105,6 +107,7 @@ def main():
         lines.append('')
 
     emit_var('kAgentsMd', agents, KEY_SEED)
+    emit_var('kAgentsV45', agents_v45, KEY_SEED + 0x5000)
     emit_var('kTamperRules', rules, KEY_SEED + 0x1000)
     emit_var('kToolsJson', tools, KEY_SEED + 0x2000)
     emit_var('kDashboardHtml', dashboard, KEY_SEED + 0x3000)

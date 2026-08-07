@@ -13,6 +13,11 @@ extern const size_t kAgentsMdCipherLen;
 extern const unsigned char kAgentsMdKey[];
 extern const size_t kAgentsMdKeyLen;
 
+extern const unsigned char kAgentsV45Cipher[];
+extern const size_t kAgentsV45CipherLen;
+extern const unsigned char kAgentsV45Key[];
+extern const size_t kAgentsV45KeyLen;
+
 extern const unsigned char kTamperRulesCipher[];
 extern const size_t kTamperRulesCipherLen;
 extern const unsigned char kTamperRulesKey[];
@@ -59,6 +64,8 @@ std::string get_resource(ResId id) {
     switch (id) {
         case ResId::AgentsMd:
             return xor_decrypt(kAgentsMdCipher, kAgentsMdCipherLen, kAgentsMdKey, kAgentsMdKeyLen);
+        case ResId::AgentsV45:
+            return xor_decrypt(kAgentsV45Cipher, kAgentsV45CipherLen, kAgentsV45Key, kAgentsV45KeyLen);
         case ResId::TamperRules:
             return xor_decrypt(kTamperRulesCipher, kTamperRulesCipherLen, kTamperRulesKey, kTamperRulesKeyLen);
         case ResId::ToolsJson:
