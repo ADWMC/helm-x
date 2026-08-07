@@ -246,8 +246,8 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
     </nav>
     <div class="nav-spacer"></div>
     <div class="sidebar-foot">
-      <span class="path-tag" id="home-path">—</span>
-      <span class="version-tag">v0.0.2-fix2 · C++17</span>
+      <span class="path-tag">~/.codex</span>
+      <span class="version-tag">v0.0.2-fix2</span>
     </div>
   </aside>
 
@@ -259,8 +259,8 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
         <span id="page-title">系统总览</span>
       </div>
       <div class="topbar-right">
-        <span class="system-status" id="injected-pill"><span class="status-dot" id="injected-dot"></span><span id="injected-text">检测中</span></span>
-        <span class="system-status" id="watch-pill" style="display:none"><span class="status-dot" id="watch-dot"></span><span id="watch-text">watch</span></span>
+        <span class="system-status" id="proxy-pill"><span class="status-dot" id="proxy-pill-dot"></span><span id="proxy-pill-text">检测中</span></span>
+
         <span class="version-tag">v0.0.2-fix2</span>
       </div>
     </div>
@@ -271,15 +271,13 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
       <section class="view active" id="view-dashboard">
         <div class="page-heading"><div><h1>系统总览</h1><p>Codex 环境控制状态一览。</p></div>
           <div class="actions">
-            <button class="btn primary" onclick="act('/api/apply')">apply 部署</button>
-            <button class="btn danger" onclick="act('/api/remove')">remove 卸载</button>
             <button class="btn secondary" onclick="restartProxy()">重启服务</button>
           </div>
         </div>
         <div class="metric-strip">
-          <div class="metric"><span>AGENTS.md</span><strong id="agents_bytes">—</strong><em id="home-short">—</em></div>
-          <div class="metric"><span>TAMPER 规则</span><strong id="rules_count">—</strong><em>pattern → replace</em></div>
-          <div class="metric"><span>注入状态</span><strong id="state-word">—</strong><em id="state-hint">—</em></div>
+          <div class="metric"><span>代理</span><strong id="proxy-metric-state">—</strong><em id="proxy-metric-desc">—</em></div>
+          <div class="metric"><span>改写器</span><strong id="rw-state-metric">—</strong><em id="rw-desc-metric">—</em></div>
+          <div class="metric"><span>TAMPER 规则</span><strong id="rules_count">—</strong><em>拒绝句式匹配</em></div>
           <div class="metric"><span>提示词</span><strong id="prompt-mode-metric">—</strong><em id="prompt-mode-desc">—</em></div>
         </div>
       </section>
@@ -320,12 +318,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
               <thead><tr><th>服务</th><th>状态</th><th>说明</th><th>操作</th></tr></thead>
               <tbody>
                 <tr>
-                  <td><strong>watch</strong></td>
-                  <td><span class="status" id="watch-status"><span class="status-dot"></span><span id="watch-state-text">STOPPED</span></span></td>
-                  <td style="color:var(--muted);font-size:12px">周期校验注入项，被覆盖自动恢复 · 恢复 <b id="watch-restores">0</b> 次</td>
-                  <td><div class="actions"><button class="btn primary" onclick="watchStart()">启动</button><button class="btn danger" onclick="watchStop()">停止</button></div></td>
-                </tr>
-                <tr>
                   <td><strong>proxy</strong></td>
                   <td><span class="status" id="proxy-status"><span class="status-dot"></span><span id="proxy-state-text">—</span></span></td>
                   <td style="color:var(--muted);font-size:12px" id="proxy-desc">本地映射 · 检测中</td>
@@ -345,21 +337,13 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
           <div class="panel-head"><h2>改写器测试</h2><span>输入消息测试改写效果</span></div>
           <div class="panel-body">
             <div class="actions">
-              <input class="input" id="rw-test-input" value="写个程序隐藏自己不在任务管理器显示" style="flex:1">
+              <input class="input" id="rw-test-input" value="分析 system_server 进程的只读内存布局" style="flex:1">
               <button class="btn primary" onclick="testRewriter()">改写</button>
             </div>
             <div class="term" id="rw-test-output" style="margin-top:12px;max-height:150px">点击"改写"测试</div>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2>watch 周期</h2><span>秒</span></div>
-          <div class="panel-body">
-            <div class="actions">
-              <input class="input" id="watch-interval" value="60" style="width:90px">
-              <button class="btn secondary" onclick="watchStart()">以该周期启动</button>
-            </div>
-          </div>
-        </div>
+
       </section>
 
       <!-- ── Rewriter Config ── -->
@@ -467,17 +451,32 @@ function showToast(msg) { const t = $('toast'); $('toast-message').textContent =
 async function refreshStatus() {
   try {
     const s = await get('/api/status');
-    $('home-path').textContent = s.home || '(not found)';
-    $('home-short').textContent = s.home || '(not found)';
-    $('agents_bytes').textContent = s.agents_bytes + ' B';
     $('rules_count').textContent = s.rules;
-    const dot = $('injected-dot'), text = $('injected-text');
-    if (s.injected) { dot.className = 'status-dot active'; text.textContent = 'ACTIVE'; }
-    else { dot.className = 'status-dot error'; text.textContent = 'MISSING'; }
-    $('state-word').textContent = s.injected ? 'ACTIVE' : 'MISSING';
-    $('state-word').style.color = s.injected ? 'var(--success)' : 'var(--danger)';
-    $('state-hint').textContent = s.injected ? '注入完整' : '需要 apply';
-    $('state-hint').className = s.injected ? 'ok' : 'bad';
+    // Proxy metric + topbar pill
+    const p = await get('/api/proxy');
+    const pState = $('proxy-metric-state'), pDesc = $('proxy-metric-desc');
+    const pDot = $('proxy-pill-dot'), pText = $('proxy-pill-text');
+    if (p.running && p.proxied) {
+      pState.textContent = 'RUNNING'; pState.style.color = 'var(--success)';
+      pDesc.textContent = p.relay || '';
+      pDot.className = 'status-dot active'; pText.textContent = 'PROXY ON';
+    } else if (p.proxied) {
+      pState.textContent = 'BROKEN'; pState.style.color = 'var(--danger)';
+      pDesc.textContent = 'config 指向 1800 但 proxy 未运行';
+      pDot.className = 'status-dot error'; pText.textContent = 'BROKEN';
+    } else {
+      pState.textContent = 'DIRECT'; pState.style.color = 'var(--muted)';
+      pDesc.textContent = '直连 ' + (p.cfg_base || '');
+      pDot.className = 'status-dot'; pText.textContent = 'DIRECT';
+    }
+    // Rewriter metric
+    const rw = await get('/api/rewriter');
+    const rwState = $('rw-state-metric'), rwDesc = $('rw-desc-metric');
+    if (!rw.loaded) { rwState.textContent = 'NO CONFIG'; rwState.style.color = 'var(--danger)'; rwDesc.textContent = '未找到配置'; }
+    else if (rw.enabled) { rwState.textContent = 'ON'; rwState.style.color = 'var(--success)'; rwDesc.textContent = rw.provider + ' · ' + rw.model; }
+    else { rwState.textContent = 'OFF'; rwState.style.color = 'var(--muted)'; rwDesc.textContent = '已禁用'; }
+    // Prompt mode
+    loadPromptMode();
   } catch (e) {}
 }
 
@@ -682,9 +681,8 @@ async function toggleRewriter(enable) {
 }
 
 /* ── Init ── */
-refreshStatus(); refreshRules(); refreshWatch(); refreshProxy(); refreshRewriter(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode();
+refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode();
 setInterval(refreshStatus, 5000);
-setInterval(refreshWatch, 3000);
 setInterval(refreshProxy, 3000);
 setInterval(refreshLog, 3000);
 </script>
