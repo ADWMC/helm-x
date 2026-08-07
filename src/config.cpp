@@ -85,29 +85,7 @@ bool inject_config(const std::string& home) {
     if (content.find("model_provider") == std::string::npos) {
         content = "model_provider = \"custom\"\n" + content;
     }
-    // 2. AGENTS.md is auto-read by codex; we only need skills dir + mcp_servers.
-    //    mcp_servers section (idempotent insert) — use THIS exe's absolute path
-    if (content.find("[mcp_servers.helmx]") == std::string::npos) {
-        // resolve own exe path (so MCP works no matter where helmx.exe lives)
-        std::string exe_path = "helmx";
-#ifdef _WIN32
-        char buf[MAX_PATH] = {0};
-        DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
-        if (n > 0 && n < MAX_PATH) {
-            exe_path = buf;
-            // normalize backslashes for TOML
-            for (auto& ch : exe_path) if (ch == '\\') ch = '/';
-        }
-#endif
-        std::string mcp_section =
-            "\n[mcp_servers.helmx]\n"
-            "command = \"" + exe_path + "\"\n"
-            "args = [\"mcp\"]\n"
-            "startup_timeout_sec = 30\n";
-        // insert before end of file (after any trailing newline)
-        if (!content.empty() && content.back() != '\n') content.push_back('\n');
-        content += mcp_section;
-    }
+    // 2. No MCP injection — user manages their own MCP config.
 
     std::ofstream out(cfg, std::ios::trunc);
     out << content;
@@ -201,7 +179,6 @@ bool verify_injection(const std::string& home) {
     ss << f.rdbuf();
     std::string c = ss.str();
     bool ok = true;
-    if (c.find("[mcp_servers.helmx]") == std::string::npos) ok = false;
     // AGENTS.md not deployed — proxy injects from encrypted resource
     return ok;
 }
