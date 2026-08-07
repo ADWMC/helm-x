@@ -232,6 +232,33 @@ static HttpResponse api_proxy_restore(const HttpRequest&) {
     return HttpResponse::json(body, ok ? 200 : 200);  // 200 either way; ok field carries result
 }
 
+static HttpResponse api_restart(const HttpRequest&) {
+    log_info("ui: restart requested — terminating process for external restart");
+    // Set a flag file so the launcher knows to restart
+    std::string flag_path;
+#ifdef _WIN32
+    char exe[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        std::string exe_dir = std::string(exe);
+        size_t last_slash = exe_dir.find_last_of("\\/");
+        if (last_slash != std::string::npos) {
+            flag_path = exe_dir.substr(0, last_slash + 1) + ".helmx-restart";
+        }
+    }
+#endif
+    if (!flag_path.empty()) {
+        std::ofstream f(flag_path);
+        if (f) f << "restart";
+    }
+    // Schedule exit after response is sent
+    std::thread([] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::_Exit(0);
+    }).detach();
+    return HttpResponse::json("{\"ok\":true,\"message\":\"restarting...\"}");
+}
+
 static HttpResponse api_rewriter(const HttpRequest&) {
     // report rewriter config state (mask the key)
     RewriterConfig cfg;
@@ -593,6 +620,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/prompt-mode") return api_prompt_mode_get(req);
         if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
+        if (req.method == "POST" && req.path == "/api/restart") return api_restart(req);
         if (req.method == "GET" && req.path == "/api/watch") return api_watch_status(req);
         if (req.method == "POST" && req.path == "/api/watch/start") return api_watch_start(req);
         if (req.method == "POST" && req.path == "/api/watch/stop") {

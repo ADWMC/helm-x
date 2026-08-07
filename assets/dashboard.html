@@ -273,6 +273,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
           <div class="actions">
             <button class="btn primary" onclick="act('/api/apply')">apply 部署</button>
             <button class="btn danger" onclick="act('/api/remove')">remove 卸载</button>
+            <button class="btn secondary" onclick="restartProxy()">重启服务</button>
           </div>
         </div>
         <div class="metric-strip">
@@ -307,7 +308,11 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
 
       <!-- ── Services ── -->
       <section class="view" id="view-services">
-        <div class="page-heading"><div><h1>服务</h1><p>后台服务管理。</p></div></div>
+        <div class="page-heading"><div><h1>服务</h1><p>后台服务管理。</p></div>
+          <div class="actions">
+            <button class="btn primary" onclick="restartProxy()">重启服务</button>
+          </div>
+        </div>
         <div class="panel">
           <div class="panel-head"><h2>后台服务</h2><span>自愈守护 / 代理 / 改写器</span></div>
           <div class="panel-body" style="padding:0">
@@ -561,6 +566,19 @@ async function refreshProxy() {
 async function proxyRestore() {
   try { const r = await fetch('/api/proxy/restore', { method: 'POST' }); const j = await r.json(); showToast(j.ok ? '配置已还原' : '没有需要还原的'); refreshStatus(); }
   catch (e) { showToast('请求失败'); }
+}
+async function restartProxy() {
+  showToast('正在重启...');
+  try {
+    const r = await fetch('/api/restart', { method: 'POST' });
+    const j = await r.json();
+    showToast(j.message || '重启中');
+    // Poll until service is back
+    setTimeout(() => { window.location.reload(); }, 3000);
+  } catch (e) {
+    // If fetch fails, service might already be restarting
+    setTimeout(() => { window.location.reload(); }, 3000);
+  }
 }
 
 /* ── Log ── */
