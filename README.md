@@ -178,7 +178,28 @@ helmx verify --e2e    :: 7 项自检 + 真实 codex 激活验证
 
 ### 四、配置改写器（可选）
 
-在 `helmx.config.json` 中配置改写器 API：
+改写器在 cyber flag 触发时自动改写用户消息并重发。需要配置一个**非推理模型**作为改写器后端。
+
+#### 模型要求
+
+| 要求 | 说明 |
+|------|------|
+| **非推理模型** | 推理模型（如 mimo-v2.5-pro）的 `content` 字段为空，改写器无法获取结果 |
+| **响应速度快** | 改写器会重试 3 次，每次需要 <5s 响应 |
+| **支持中文** | 改写提示词包含中文示例 |
+| **API 兼容** | 支持 OpenAI chat/completions 格式 |
+
+#### 推荐模型
+
+| 模型 | Provider | 延迟 | 说明 |
+|------|----------|------|------|
+| **meta/llama-3.1-8b-instruct** | NVIDIA NIM | ~2s | 推荐，快速稳定 |
+| meta/llama-3.1-70b-instruct | NVIDIA NIM | ~5s | 更强但更慢 |
+| gpt-4o-mini | OpenAI | ~2s | 需要 OpenAI key |
+| qwen2.5-7b-instruct | 阿里云 | ~2s | 国内可用 |
+| deepseek-chat | DeepSeek | ~2s | 国内可用 |
+
+#### 配置示例
 
 ```json
 {
@@ -194,7 +215,25 @@ helmx verify --e2e    :: 7 项自检 + 真实 codex 激活验证
 }
 ```
 
-改写器提示词已内嵌在二进制中（XOR 加密），无需外部文件。如需自定义，可在 config 中设置 `system_prompt` 字段覆盖。
+#### 配置项说明
+
+| 字段 | 说明 | 默认值 |
+|------|------|--------|
+| enabled | 是否启用改写器 | false |
+| provider | 提供商标识（用于日志） | nvidia |
+| base_url | API 地址 | https://integrate.api.nvidia.com/v1 |
+| api_key | API 密钥 | （必填） |
+| model | 模型名称 | meta/llama-3.1-8b-instruct |
+| timeout_sec | 请求超时（秒） | 60 |
+| use_proxy | 是否使用 HTTP 代理 | false |
+| proxy_url | HTTP 代理地址 | http://127.0.0.1:7897 |
+
+#### 注意事项
+
+- **不要用推理模型**：mimo-v2.5-pro、o1、o3 等推理模型的 `content` 字段为空，改写器无法获取结果
+- **NVIDIA NIM 免费**：注册 https://build.nvidia.com 即可获得免费 API key
+- **改写器提示词已内嵌**：无需外部文件，XOR 加密在二进制中
+- **可在 UI 中配置**：访问 http://127.0.0.1:8090 的"改写器"页面
 
 ---
 

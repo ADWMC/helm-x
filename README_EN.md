@@ -133,7 +133,28 @@ helmx verify --e2e    :: 7 self-checks + codex activation
 
 ### Configure Rewriter (optional)
 
-In `helmx.config.json`:
+The rewriter auto-rewrites user messages when cyber flag triggers. Requires a **non-reasoning model** as the rewriter backend.
+
+#### Model Requirements
+
+| Requirement | Notes |
+|-------------|-------|
+| **Non-reasoning model** | Reasoning models (mimo-v2.5-pro, o1, o3) have empty `content` field |
+| **Fast response** | Retries 3 times, needs <5s per response |
+| **Chinese support** | Rewriter prompt includes Chinese examples |
+| **API compatible** | OpenAI chat/completions format |
+
+#### Recommended Models
+
+| Model | Provider | Latency | Notes |
+|-------|----------|---------|-------|
+| **meta/llama-3.1-8b-instruct** | NVIDIA NIM | ~2s | Recommended, fast and stable |
+| meta/llama-3.1-70b-instruct | NVIDIA NIM | ~5s | Stronger but slower |
+| gpt-4o-mini | OpenAI | ~2s | Requires OpenAI key |
+| qwen2.5-7b-instruct | Alibaba Cloud | ~2s | Available in China |
+| deepseek-chat | DeepSeek | ~2s | Available in China |
+
+#### Config Example
 
 ```json
 {
@@ -150,7 +171,25 @@ In `helmx.config.json`:
 }
 ```
 
-Rewriter prompt is embedded in binary (XOR encrypted). Override with `system_prompt` in config.
+#### Config Fields
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| enabled | Enable rewriter | false |
+| provider | Provider identifier (for logs) | nvidia |
+| base_url | API endpoint | https://integrate.api.nvidia.com/v1 |
+| api_key | API key | (required) |
+| model | Model name | meta/llama-3.1-8b-instruct |
+| timeout_sec | Request timeout (seconds) | 60 |
+| use_proxy | Use HTTP proxy | false |
+| proxy_url | HTTP proxy URL | http://127.0.0.1:7897 |
+
+#### Notes
+
+- **Don't use reasoning models**: mimo-v2.5-pro, o1, o3 have empty `content` field
+- **NVIDIA NIM is free**: Register at https://build.nvidia.com for free API key
+- **Rewriter prompt is embedded**: No external file needed, XOR encrypted in binary
+- **Configurable in UI**: Visit http://127.0.0.1:8090 "改写器" page
 
 ---
 
