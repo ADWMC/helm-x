@@ -652,8 +652,27 @@ void handle_client(SOCKET client) {
                     cctx.upstream_status = status2;
                 }
             } else {
+                // Rewrite failed — user input is innocent, model response triggered cyber.
+                // Fallback: clean session with original message (model may give different answer).
+                log_info("proxy: rewrite failed, trying clean session with original message");
                 cctx.rewrite_status = 2; // failed
-                cctx.result = "rewrite_failed";
+                std::string clean_body = build_clean_session(body, user_msg);
+                log_info(std::string("proxy: clean-session (no-rewrite) ") +
+                         std::to_string(body.size()) + "B -> " +
+                         std::to_string(clean_body.size()) + "B");
+                int status2 = 502;
+                std::string resp2;
+                bool ok2 = upstream_post(target, clean_body, auth, status2, resp2);
+                if (ok2 && !is_cyber_flag(status2, resp2)) {
+                    ok = ok2;
+                    status = status2;
+                    resp_body = resp2;
+                    cctx.result = "retry_pass";
+                    cctx.upstream_status = status2;
+                } else {
+                    cctx.result = "retry_fail";
+                    cctx.upstream_status = status2;
+                }
             }
         }
         log_info("proxy: calling log_cyber with result=" + cctx.result);
