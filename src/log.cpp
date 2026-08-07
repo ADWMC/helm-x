@@ -90,9 +90,11 @@ void log_cyber(const CyberContext& ctx) {
     std::ofstream f(cyber_log_path(), std::ios::app | std::ios::binary);
     if (f) {
         f << entry << "---\n";
+        f.flush();
     }
-    // Also log to main log
-    log_info("CYBER: result=" + ctx.result + " status=" + std::to_string(ctx.upstream_status));
+    // Echo to console (don't call log_info — we already hold the mutex)
+    std::printf("[CYBER] result=%s status=%d\n", ctx.result.c_str(), ctx.upstream_status);
+    std::fflush(stdout);
 }
 
 }  // namespace helmx
