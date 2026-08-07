@@ -178,6 +178,20 @@ static HttpResponse api_log(const HttpRequest&) {
     return HttpResponse::json(body);
 }
 
+static HttpResponse api_cyber_log(const HttpRequest&) {
+    // return cyber log
+    std::string path = cyber_log_path();
+    std::string content;
+    if (read_file(path, content)) {
+        // keep last 5000 chars
+        if (content.size() > 5000) content = content.substr(content.size() - 5000);
+    } else {
+        content = "(no cyber events)";
+    }
+    std::string body = "{\"log\":\"" + json_escape(content) + "\"}";
+    return HttpResponse::json(body);
+}
+
 static HttpResponse api_proxy_status(const HttpRequest&) {
     // local mapping status: is proxy listening? what's the relay?
     bool listening = false;
@@ -635,6 +649,7 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/zxwn") return api_zxwn(req);
         if (req.method == "POST" && req.path == "/api/zxwn/start") return api_zxwn_start(req);
         if (req.method == "GET" && req.path == "/api/log") return api_log(req);
+        if (req.method == "GET" && req.path == "/api/cyber-log") return api_cyber_log(req);
         if (req.method == "GET" && req.path == "/api/rewriter") return api_rewriter(req);
         if (req.method == "POST" && req.path == "/api/rewriter/test") return api_rewriter_test(req);
         if (req.method == "POST" && req.path == "/api/rewriter/save") return api_rewriter_save(req);

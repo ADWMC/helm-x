@@ -420,7 +420,11 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
       <section class="view" id="view-logs">
         <div class="page-heading"><div><h1>运行日志</h1><p>代理运行日志。</p></div></div>
         <div class="panel">
-          <div class="panel-head"><h2>日志</h2><span>~/.codex/helmx.log</span></div>
+          <div class="panel-head"><h2>Cyber 日志</h2><span>~/.codex/helmx-cyber.log</span></div>
+          <div class="panel-body"><div class="term" id="cyber-log-output" style="max-height:300px">加载中…</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>代理日志</h2><span>~/.codex/helmx.log</span></div>
           <div class="panel-body"><div class="term" id="log-output" style="max-height:400px">加载中…</div></div>
         </div>
       </section>
@@ -585,6 +589,9 @@ async function restartProxy() {
 async function refreshLog() {
   try { const j = await get('/api/log'); $('log-output').textContent = j.log || '(空)'; $('log-output').scrollTop = $('log-output').scrollHeight; } catch (e) {}
 }
+async function refreshCyberLog() {
+  try { const j = await get('/api/cyber-log'); $('cyber-log-output').textContent = j.log || '(无 cyber 事件)'; $('cyber-log-output').scrollTop = $('cyber-log-output').scrollHeight; } catch (e) {}
+}
 
 /* ── Rewriter ── */
 async function refreshRewriter() {
@@ -675,7 +682,7 @@ async function toggleRewriter(enable) {
 }
 
 /* ── Init ── */
-refreshStatus(); refreshRules(); refreshWatch(); refreshProxy(); refreshRewriter(); refreshLog(); loadRewriterConfig(); loadPromptMode();
+refreshStatus(); refreshRules(); refreshWatch(); refreshProxy(); refreshRewriter(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode();
 setInterval(refreshStatus, 5000);
 setInterval(refreshWatch, 3000);
 setInterval(refreshProxy, 3000);

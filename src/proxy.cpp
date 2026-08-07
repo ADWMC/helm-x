@@ -601,15 +601,10 @@ void handle_client(SOCKET client) {
             std::string rewritten;
             if (rewrite_user_message(rcfg, user_msg, rewritten, refusal_text) && !rewritten.empty()) {
                 // ── Clean session rebuild ──
-                // Build a completely fresh request with ONLY the rewritten user message.
-                // This strips all conversation history (which contains injected AGENTS
-                // with trigger words like "隐藏进程", "键盘记录器" etc.)
                 std::string clean_body = build_clean_session(body, rewritten);
                 log_info(std::string("proxy: REWRITE + clean-session ") +
                          std::to_string(body.size()) + "B -> " +
                          std::to_string(clean_body.size()) + "B (history stripped)");
-                // Debug: log first 500 chars of clean request
-                log_info(std::string("proxy: clean-body preview: ") + clean_body.substr(0, 500));
                 int status2 = 502;
                 std::string resp2;
                 bool ok2 = upstream_post(target, clean_body, auth, status2, resp2);
@@ -619,11 +614,20 @@ void handle_client(SOCKET client) {
                     ok = ok2;
                     status = status2;
                     resp_body = resp2;
+                    log_cyber(user_msg, rewritten, "rewritten_pass", status2);
                 } else {
                     log_info("proxy: clean-session also flagged, returning original error");
+                    log_cyber(user_msg, rewritten, "rewritten_fail", status2);
                 }
+            } else {
+                log_cyber(user_msg, "", "rewrite_failed", status);
             }
         }
+    } else if (cyber_flagged) {
+        // Cyber detected but rewriter disabled
+        std::string user_msg;
+        extract_user_message(body, user_msg);
+        log_cyber(user_msg, "", "blocked_no_rewriter", status);
     }
 
     // TAMPER: rewrite refusals in the response body — only inside a valid
