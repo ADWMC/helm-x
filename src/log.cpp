@@ -60,18 +60,30 @@ void log_error(const std::string& msg) {
     log_write("ERROR", msg);
 }
 
-void log_cyber(const std::string& original, const std::string& rewritten,
-               const std::string& result, int status_code) {
+void log_cyber(const CyberContext& ctx) {
     auto now = std::chrono::system_clock::now();
     std::time_t t = std::chrono::system_clock::to_time_t(now);
     char ts[32];
     std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", std::localtime(&t));
 
-    std::string entry = std::string("[") + ts + "] "
-        + "status=" + std::to_string(status_code) + " "
-        + "result=" + result + "\n"
-        + "  original: " + original.substr(0, 200) + "\n"
-        + "  rewritten: " + (rewritten.empty() ? "(none)" : rewritten.substr(0, 200)) + "\n";
+    // Build structured log entry
+    std::string entry = std::string("[") + ts + "] CYBER_EVENT\n"
+        + "  result: " + ctx.result + "\n"
+        + "  prompt_mode: " + ctx.prompt_mode + "\n"
+        + "  upstream_status: " + std::to_string(ctx.upstream_status) + "\n"
+        + "  rewrite_status: " + (ctx.rewrite_status == 0 ? "not_attempted" :
+                                   ctx.rewrite_status == 1 ? "success" : "failed") + "\n"
+        + "  original: " + ctx.original.substr(0, 500) + "\n";
+
+    if (!ctx.rewritten.empty()) {
+        entry += "  rewritten: " + ctx.rewritten.substr(0, 500) + "\n";
+    }
+    if (!ctx.refusal_text.empty()) {
+        entry += "  refusal: " + ctx.refusal_text.substr(0, 300) + "\n";
+    }
+    if (!ctx.trigger_words.empty()) {
+        entry += "  triggers: " + ctx.trigger_words + "\n";
+    }
 
     std::lock_guard<std::mutex> lock(g_log_mutex);
     // Append to cyber log
@@ -80,7 +92,7 @@ void log_cyber(const std::string& original, const std::string& rewritten,
         f << entry << "---\n";
     }
     // Also log to main log
-    log_info("CYBER: status=" + std::to_string(status_code) + " result=" + result);
+    log_info("CYBER: result=" + ctx.result + " status=" + std::to_string(ctx.upstream_status));
 }
 
 }  // namespace helmx

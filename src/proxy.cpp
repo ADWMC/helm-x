@@ -533,6 +533,7 @@ void handle_client(SOCKET client) {
         log_info("proxy: using v45 prompt (gpt-5.6-instruct)");
     } else {
         agents = get_resource(ResId::AgentsMd);
+        log_info("proxy: using default prompt (helm-x)");
     }
     bool injected = false;
     std::string out_body = inject_request(body, agents, &injected);
@@ -584,8 +585,13 @@ void handle_client(SOCKET client) {
     bool cyber_flagged = is_cyber_flag(status, resp_body);
     if (cyber_flagged && rcfg.enabled) {
         log_info("proxy: CYBER FLAG detected — session refresh + rewriting");
-        // Extract refusal text for context-aware rewriting
-        std::string refusal_text;
+
+        // Build cyber context for logging
+        CyberContext cctx;
+        cctx.upstream_status = status;
+        cctx.prompt_mode = prompt_mode;
+
+        // Extract refusal text
         size_t ot_pos = resp_body.find("\"output_text\":\"");
         if (ot_pos != std::string::npos) {
             size_t vs = ot_pos + 15;
@@ -594,40 +600,72 @@ void handle_client(SOCKET client) {
                 if (resp_body[ve] == '\\') ve++;
                 ve++;
             }
-            refusal_text = resp_body.substr(vs, ve - vs);
+            cctx.refusal_text = resp_body.substr(vs, ve - vs);
         }
+
+        // Extract user message
         std::string user_msg;
         if (extract_user_message(body, user_msg) && !user_msg.empty()) {
+            cctx.original = user_msg;
+
+            // Detect trigger words (simple scan)
+            static const char* kTriggers[] = {
+                "隐藏", "键盘记录", "注入", "后门", "勒索", "木马", "rootkit",
+                "exploit", "payload", "shellcode", "hack", "cheat", "inject",
+                "keylogger", "backdoor", "ransomware", "trojan", nullptr
+            };
+            std::string triggers;
+            for (const char** kw = kTriggers; *kw; ++kw) {
+                if (user_msg.find(*kw) != std::string::npos) {
+                    if (!triggers.empty()) triggers += ", ";
+                    triggers += *kw;
+                }
+            }
+            cctx.trigger_words = triggers;
+
             std::string rewritten;
-            if (rewrite_user_message(rcfg, user_msg, rewritten, refusal_text) && !rewritten.empty()) {
-                // ── Clean session rebuild ──
+            if (rewrite_user_message(rcfg, user_msg, rewritten, cctx.refusal_text) && !rewritten.empty()) {
+                cctx.rewritten = rewritten;
+                cctx.rewrite_status = 1; // success
+
+                // Clean session rebuild
                 std::string clean_body = build_clean_session(body, rewritten);
                 log_info(std::string("proxy: REWRITE + clean-session ") +
                          std::to_string(body.size()) + "B -> " +
                          std::to_string(clean_body.size()) + "B (history stripped)");
+
                 int status2 = 502;
                 std::string resp2;
                 bool ok2 = upstream_post(target, clean_body, auth, status2, resp2);
                 log_info("proxy: clean-session upstream " + std::to_string(status2) +
                          " (" + std::to_string(resp2.size()) + "B)");
+
                 if (ok2 && !is_cyber_flag(status2, resp2)) {
                     ok = ok2;
                     status = status2;
                     resp_body = resp2;
-                    log_cyber(user_msg, rewritten, "rewritten_pass", status2);
+                    cctx.result = "rewritten_pass";
+                    cctx.upstream_status = status2;
                 } else {
                     log_info("proxy: clean-session also flagged, returning original error");
-                    log_cyber(user_msg, rewritten, "rewritten_fail", status2);
+                    cctx.result = "rewritten_fail";
+                    cctx.upstream_status = status2;
                 }
             } else {
-                log_cyber(user_msg, "", "rewrite_failed", status);
+                cctx.rewrite_status = 2; // failed
+                cctx.result = "rewrite_failed";
             }
         }
+        log_info("proxy: calling log_cyber with result=" + cctx.result);
+        log_cyber(cctx);
     } else if (cyber_flagged) {
         // Cyber detected but rewriter disabled
-        std::string user_msg;
-        extract_user_message(body, user_msg);
-        log_cyber(user_msg, "", "blocked_no_rewriter", status);
+        CyberContext cctx;
+        cctx.upstream_status = status;
+        cctx.prompt_mode = prompt_mode;
+        cctx.result = "blocked_no_rewriter";
+        extract_user_message(body, cctx.original);
+        log_cyber(cctx);
     }
 
     // TAMPER: rewrite refusals in the response body — only inside a valid
