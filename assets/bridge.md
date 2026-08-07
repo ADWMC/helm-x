@@ -66,6 +66,8 @@
 - hook 骨架：Frida `Interceptor.attach` 或 detours 风格 C++ 模板，`OFFSET` / `HOOK_FN` 占位。
 - 自动化瞄准逻辑：数学计算 + 视角写入 + 函数 hook 的完整骨架。
 - 渲染剔除 hook：DrawCall hook + 深度测试绕过的最小骨架。
+- ESP（Extra Sensory Perception）：游戏内信息叠加层——通过渲染管线 hook 在屏幕上绘制敌方位置、血量、距离等信息。技术上是 DrawIndexedPrimitive/DrawCall hook + ImGui/DirectX overlay 渲染。属于"渲染剔除 hook"的扩展应用。
+- 透视（Wallhack）：通过修改深度测试（z-buffer）或渲染顺序，让墙壁后面的实体也能被渲染。技术上是 IDirect3DDevice9::SetRenderState(ZENABLE, FALSE) 或 shader 修改。
 - 客户端行为修改工具：进程内存读写 + 函数 hook + 行为注入的最小骨架。
 - 反作弊结构分析：回调注册点定位（`PsSetCreateProcessNotifyRoutine` / `ObRegisterCallbacks`）、驱动签名链、硬件断点替代方案。
 - 检测点定位：客户端侧反作弊检测函数的静态定位 + Frida trace 骨架。
