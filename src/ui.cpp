@@ -233,31 +233,49 @@ static HttpResponse api_proxy_restore(const HttpRequest&) {
 }
 
 static HttpResponse api_restart(const HttpRequest&) {
-    log_info("ui: restart requested — spawning new process and exiting");
+    log_info("ui: restart requested — scheduling restart via batch script");
 
 #ifdef _WIN32
     char exe[MAX_PATH] = {0};
     DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
     if (n > 0 && n < MAX_PATH) {
-        // Spawn new instance of the same exe
-        STARTUPINFOA si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        BOOL ok = CreateProcessA(nullptr, exe, nullptr, nullptr, FALSE,
-                                 CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
-        if (ok) {
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            log_info("ui: new process spawned, exiting current");
-        } else {
-            log_info("ui: failed to spawn new process");
+        DWORD pid = GetCurrentProcessId();
+
+        // Create a batch script that waits for current process to exit, then restarts
+        std::string bat_path = std::string(exe) + ".restart.bat";
+        std::ofstream bat(bat_path);
+        if (bat) {
+            bat << "@echo off\r\n";
+            bat << "timeout /t 2 /nobreak >nul\r\n";
+            bat << "taskkill /F /PID " << pid << " >nul 2>&1\r\n";
+            bat << "timeout /t 1 /nobreak >nul\r\n";
+            bat << "start \"\" \"" << exe << "\"\r\n";
+            bat << "del \"%~f0\"\r\n";
+            bat.close();
+
+            // Launch the batch script detached
+            STARTUPINFOA si{};
+            si.cb = sizeof(si);
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_HIDE;
+            PROCESS_INFORMATION pi{};
+            std::string cmd = "cmd /c \"" + bat_path + "\"";
+            BOOL ok = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
+                                     CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+            if (ok) {
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+                log_info("ui: restart batch script launched");
+            } else {
+                log_info("ui: failed to launch restart script");
+            }
         }
     }
 #endif
 
     // Schedule exit after response is sent
     std::thread([] {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         std::_Exit(0);
     }).detach();
 
