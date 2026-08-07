@@ -8,8 +8,6 @@
 
 **If you find this project helpful, please give it a Star!**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ADWMC/helm-x&type=Date)](https://star-history.com/#ADWMC/helm-x&Date)
-
 ---
 
 **Codex CLI local mapping control tool** · Single binary · C++17 · Zero external DLL dependencies

@@ -1,5 +1,29 @@
 # 更新日志
 
+## v0.0.2-fix1 (2026-08-07)
+
+### 改进
+- **UI 全面重写**：移植 SHVMP 设计系统（浅色/暗色主题、响应式、动画、metric-strip）
+- **改写器配置页面**：启用/禁用、Provider/Model/API Key/Base URL/Proxy URL/Timeout 配置
+- **系统字体**：全部使用系统字体栈（ui-monospace、-apple-system、PingFang SC）
+- **改写器模型要求文档**：添加推荐模型和注意事项
+
+### 修复
+- **Clean Session JSON 格式**：从原始 body 提取字段重建请求，避免 JSON 解析错误
+- **改写器提示词内嵌**：rewrite_prompt.txt XOR 加密嵌入二进制
+- **版本号统一**：version.h 单一来源（CMake/MCP/User-Agent）
+
+### 测试
+- **改写器成功率**：91.4% (32/35)
+- **总通过率**：100% (10/10)
+- **AGENTS 注入率**：100% (37/37)
+
+### 文档
+- **README**：添加改写器模型要求、推荐模型、配置说明
+- **FAQ**：20+ 常见问题
+- **ARCHITECTURE**：架构图、请求流程、数据流
+- **TEST_STANDARD**：测试标准、评分算法
+
 ## v0.0.2-beta (2026-08-07)
 
 ### 新功能

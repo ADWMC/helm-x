@@ -8,8 +8,6 @@
 
 **如果这个项目对你有帮助，请给个 Star 支持一下！**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ADWMC/helm-x&type=Date)](https://star-history.com/#ADWMC/helm-x&Date)
-
 ---
 
 **Codex CLI 本地映射控制工具** · 单二进制 · C++17 · 零外部 DLL 依赖
