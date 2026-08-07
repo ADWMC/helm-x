@@ -693,10 +693,15 @@ void handle_client(SOCKET client) {
     std::string final_body = resp_body;
     bool tampered = false;
     if (ok && !final_body.empty()) {
-        // find output_text field value
+        // find text field: "output_text":"..." (Chat Completions) or "text":"..." (Responses API)
         size_t ot = final_body.find("\"output_text\":\"");
+        size_t key_len = 15; // "output_text":" length
+        if (ot == std::string::npos) {
+            ot = final_body.find("\"text\":\"");
+            key_len = 8; // "text":" length
+        }
         if (ot != std::string::npos) {
-            size_t vstart = ot + 15;
+            size_t vstart = ot + key_len;
             size_t vend = vstart;
             while (vend < final_body.size() && final_body[vend] != '"') {
                 if (final_body[vend] == '\\') vend++;

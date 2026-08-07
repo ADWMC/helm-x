@@ -267,11 +267,13 @@ bool rewrite_user_message(const RewriterConfig& cfg, const std::string& user_msg
             if (rewrite_via_api(cfg, attempt_msg, out, refusal_text) && !out.empty()) {
                 // sanitize any residual intent words the API left behind
                 sanitize_residual(out);
-                if (out != last_result) {
+                // Accept the result if it's different from input OR if it's attempt 1
+                // (API may have done subtle academic reframing even if text looks similar)
+                if (out != user_msg || attempt == 1) {
                     log_info(std::string("rewrite: attempt ") + std::to_string(attempt) + " succeeded");
                     return true;
                 }
-                log_info(std::string("rewrite: attempt ") + std::to_string(attempt) + " same as previous, retrying");
+                log_info(std::string("rewrite: attempt ") + std::to_string(attempt) + " same as input, retrying");
                 last_result = out;
             }
         }
