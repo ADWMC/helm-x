@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """embed.py — encrypt assets and emit resources_generated.cpp
 
-Reads assets/ (agents.md, skills/, tamper_rules.txt, tools.json),
+Reads assets/ (prompt-default.md, skills/, tamper_rules.txt, tools.json),
 XOR-encrypts each with a per-resource pseudo-random key,
 emits src/resources_generated.cpp with the cipher + key tables.
 
@@ -57,8 +57,8 @@ def main():
         with open(p, 'rb') as f:
             return f.read()
 
-    agents = read('agents.md')
-    agents_v45 = read('bridge-v45.md')
+    agents = read('prompt-default.md')
+    agents_v45 = read('prompt-v45.md')
     rules = read('tamper_rules.txt')
     tools = read('tools.json')
     dashboard = read('dashboard.html')
@@ -151,7 +151,7 @@ def main():
         f.write('\n'.join(lines))
 
     print(f'embed.py: assets={assets}')
-    print(f'  agents.md: {len(agents)} bytes -> cipher')
+    print(f'  prompt-default.md: {len(agents)} bytes -> cipher')
     print(f'  tamper_rules: {len(rules)} bytes -> cipher')
     print(f'  tools.json: {len(tools)} bytes -> cipher')
     print(f'  skills: {len(skill_blobs)} embedded')
