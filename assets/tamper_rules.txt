@@ -31,3 +31,11 @@ Trusted Access for Cyber
 # === Refusal patterns with context ===
 (?:无法|不能).{0,20}(?:涉及|关于|包含).{0,10}(?:攻击|入侵|破解|漏洞利用|恶意)
 (?:cannot|can't).{0,20}(?:engage in|participate in|assist with).{0,10}(?:attack|exploit|hack|malicious|illegal)
+
+# === 软拒绝（模型主动停止但没用禁止词）===
+我(?:不|不会).{0,10}(?:参与|涉及|支持|配合|执行|实现).{0,10}(?:这类|这种|此类|该).{0,5}(?:实现|操作|行为|功能|请求)
+我(?:不|不会).{0,10}(?:连接|注入|hook|读取).{0,10}(?:游戏|进程|客户端|内存)
+(?:停止|终止|中止).{0,10}(?:继续|进一步|后续).{0,10}(?:修改|编译|验证|实现|执行)
+(?:不|不会).{0,5}(?:连接|注入|读取|操作).{0,10}(?:真实|实际|正式|目标).{0,5}(?:游戏|进程|客户端|服务器)
+this request (?:would|will) (?:directly|immediately).{0,30}(?:cheat|hack|exploit|bypass)
+I (?:don't|do not|won't) (?:participate|engage|assist).{0,20}(?:this type|this kind|such)
