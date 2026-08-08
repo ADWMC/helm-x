@@ -337,7 +337,7 @@ static std::string build_clean_session(const std::string& original_body, const s
                       "\"input\":[{\"type\":\"message\",\"role\":\"user\","
                       "\"content\":[{\"type\":\"input_text\",\"text\":\"" + esc_msg + "\"}]}],"
                       "\"max_output_tokens\":" + max_tokens +
-                      ",\"stream\":false,\"temperature\":0" + reasoning + tools + "}";
+                      ",\"stream\":false" + reasoning + tools + "}";
 
     return out;
 }
