@@ -536,10 +536,9 @@ void handle_client(SOCKET client) {
 
     // inject AGENTS into request (from encrypted resource, not from file)
     // Prompt selection: "v45" uses gpt-5.6-instruct prompt, default uses helm-x prompt
-    static std::string prompt_mode;
-    if (prompt_mode.empty()) {
-        // Load from helmx.config.json or default to "default"
-        prompt_mode = "default";
+    // Read config every request (not static) so UI changes take effect without restart
+    std::string prompt_mode = "default";
+    {
         std::string config_path;
 #ifdef _WIN32
         char exe[MAX_PATH] = {0};
@@ -558,14 +557,13 @@ void handle_client(SOCKET client) {
                 std::stringstream ss;
                 ss << f.rdbuf();
                 std::string content = ss.str();
-                // Extract prompt_mode field
                 size_t p = content.find("\"prompt_mode\"");
                 if (p != std::string::npos) {
                     p = content.find(':', p);
                     if (p != std::string::npos) {
                         p++;
                         while (p < content.size() && (content[p] == ' ' || content[p] == '\t')) p++;
-                        if (p < content.size() && content[p] == '"') {
+                        if (p < content.size() && content[p] == '\"') {
                             p++;
                             size_t end = content.find('"', p);
                             if (end != std::string::npos) prompt_mode = content.substr(p, end - p);
