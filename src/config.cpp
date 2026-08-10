@@ -187,22 +187,55 @@ bool restore_config_proxy(const std::string& home) {
 }
 
 std::string read_relay_url(const std::string& home) {
-    // prefer backup (live config may point at the proxy itself)
-    fs::path bak = fs::path(home) / "config.toml.helmx-proxy-bak";
+    // Read the CURRENT config.toml directly — the backup is only for restore_config_proxy.
+    // If base_url points at our proxy (127.0.0.1:1800), we can't extract the real relay
+    // from it, so fall back to backup in that case only.
     fs::path cfg = fs::path(home) / "config.toml";
-    fs::path src = fs::exists(bak) ? bak : cfg;
-    std::ifstream f(src);
-    if (!f) return "";
-    std::stringstream ss;
-    ss << f.rdbuf();
-    std::string content = ss.str();
-    size_t p = content.find("base_url");
-    if (p == std::string::npos) return "";
-    size_t q1 = content.find('"', p);
-    if (q1 == std::string::npos) return "";
-    size_t q2 = content.find('"', q1 + 1);
-    if (q2 == std::string::npos) return "";
-    return content.substr(q1 + 1, q2 - q1 - 1);
+    fs::path bak = fs::path(home) / "config.toml.helmx-proxy-bak";
+
+    // Try current config first
+    std::ifstream f(cfg);
+    if (f) {
+        std::stringstream ss;
+        ss << f.rdbuf();
+        std::string content = ss.str();
+        size_t p = content.find("base_url");
+        if (p != std::string::npos) {
+            size_t q1 = content.find('"', p);
+            if (q1 != std::string::npos) {
+                size_t q2 = content.find('"', q1 + 1);
+                if (q2 != std::string::npos) {
+                    std::string url = content.substr(q1 + 1, q2 - q1 - 1);
+                    // If it's our proxy, fall back to backup
+                    if (url.find("127.0.0.1:1800") == std::string::npos) {
+                        return url;
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: backup file (contains original base_url before proxy modified it)
+    if (fs::exists(bak)) {
+        std::ifstream bf(bak);
+        if (bf) {
+            std::stringstream ss;
+            ss << bf.rdbuf();
+            std::string content = ss.str();
+            size_t p = content.find("base_url");
+            if (p != std::string::npos) {
+                size_t q1 = content.find('"', p);
+                if (q1 != std::string::npos) {
+                    size_t q2 = content.find('"', q1 + 1);
+                    if (q2 != std::string::npos) {
+                        return content.substr(q1 + 1, q2 - q1 - 1);
+                    }
+                }
+            }
+        }
+    }
+
+    return "";
 }
 
 bool verify_injection(const std::string& home) {
