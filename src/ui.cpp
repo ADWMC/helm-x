@@ -1,3 +1,4 @@
+#include "proxy.h"
 // ui.cpp — Web dashboard: status / rules / actions / services
 #include "ui.h"
 
