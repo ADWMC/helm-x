@@ -208,7 +208,9 @@ static HttpResponse api_proxy_status(const HttpRequest&) {
     }
 #endif
     std::string home = find_codex_home();
-    std::string relay = !home.empty() ? read_relay_url(home) : "";
+    // Prefer proxy's runtime relay URL (always correct), fallback to config file
+    std::string relay = get_relay_url();
+    if (relay.empty() && !home.empty()) relay = read_relay_url(home);
     std::string cfg_base;
     if (!home.empty()) {
         std::ifstream f(fs::path(home) / "config.toml");

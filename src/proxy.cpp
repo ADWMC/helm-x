@@ -1030,4 +1030,8 @@ int proxy_main(int argc, char** argv) {
     return 0;
 }
 
+std::string get_relay_url() {
+    return g_upstream;
+}
+
 }  // namespace helmx
