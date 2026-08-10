@@ -107,9 +107,9 @@ bool inject_config_proxy(const std::string& home, int port) {
     fs::path cfg = fs::path(home) / "config.toml";
     if (!fs::exists(cfg)) return false;
 
-    // back up original base_url once (proxy-mode backup)
+    // Always update backup with current config before modifying
     fs::path bak = cfg.string() + ".helmx-proxy-bak";
-    if (!fs::exists(bak)) {
+    {
         std::error_code ec;
         fs::copy_file(cfg, bak, fs::copy_options::overwrite_existing, ec);
     }
