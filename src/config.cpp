@@ -145,9 +145,43 @@ bool restore_config_proxy(const std::string& home) {
     fs::path cfg = fs::path(home) / "config.toml";
     fs::path bak = cfg.string() + ".helmx-proxy-bak";
     if (!fs::exists(bak)) return false;
-    std::error_code ec;
-    fs::copy_file(bak, cfg, fs::copy_options::overwrite_existing, ec);
-    if (ec) return false;
+
+    // Read current config (may have user-added MCP/other settings)
+    std::ifstream cur_f(cfg);
+    std::stringstream cur_ss;
+    cur_ss << cur_f.rdbuf();
+    std::string current = cur_ss.str();
+
+    // Read backup to get original base_url
+    std::ifstream bak_f(bak);
+    std::stringstream bak_ss;
+    bak_ss << bak_f.rdbuf();
+    std::string backup = bak_ss.str();
+
+    // Extract original base_url from backup
+    size_t bak_base = backup.find("base_url");
+    if (bak_base == std::string::npos) {
+        // No base_url in backup, just delete backup
+        fs::remove(bak);
+        return true;
+    }
+    size_t bak_eq = backup.find('=', bak_base);
+    size_t bak_q1 = backup.find('"', bak_eq);
+    size_t bak_q2 = backup.find('"', bak_q1 + 1);
+    std::string original_url = backup.substr(bak_q1 + 1, bak_q2 - bak_q1 - 1);
+
+    // Replace base_url in current config with original
+    size_t cur_base = current.find("base_url");
+    if (cur_base != std::string::npos) {
+        size_t cur_eq = current.find('=', cur_base);
+        size_t cur_q1 = current.find('"', cur_eq);
+        size_t cur_q2 = current.find('"', cur_q1 + 1);
+        current.replace(cur_q1 + 1, cur_q2 - cur_q1 - 1, original_url);
+        std::ofstream out(cfg, std::ios::trunc);
+        out << current;
+        out.close();
+    }
+
     fs::remove(bak);
     return true;
 }
