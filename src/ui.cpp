@@ -119,7 +119,7 @@ static HttpResponse api_apply(const HttpRequest&) {
         log_error("ui: apply failed (codex home not found)");
         return HttpResponse::json("{\"ok\":false,\"error\":\"codex home not found\"}", 500);
     }
-    bool ok = inject_config(home) && deploy_agents(home) && verify_injection(home);
+    bool ok = inject_config(home) && verify_injection(home);
     log_info(std::string("ui: apply ") + (ok ? "OK" : "FAILED"));
     return HttpResponse::json(std::string("{\"ok\":") + (ok ? "true" : "false") + "}", ok ? 200 : 500);
 }

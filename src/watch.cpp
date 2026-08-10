@@ -24,7 +24,6 @@ bool watch_pass(const std::string& home) {
     std::fflush(stdout);
     log_info("watch: injection broken, restoring");
     inject_config(home);
-    deploy_agents(home);
     if (verify_injection(home)) {
         g_watch_restores++;
         g_last_restore_ts = (long long)std::chrono::duration_cast<std::chrono::seconds>(
