@@ -362,16 +362,14 @@ std::string inject_request(const std::string& body, const std::string& agents, b
         else esc.push_back(c);
     }
 
-    // 1. Try top-level "instructions" (some API formats)
-    if (json_set_string(out, "instructions", agents)) injected = true;
-
-    // 2. Responses API: inject system message at the START of input[]
-    if (!injected) {
+    // 1. Inject AGENTS as system message at the START of input[] (Responses API)
+    //    This works for both regular requests AND compaction requests.
+    //    Don't overwrite "instructions" — compaction uses it for its own prompt.
+    {
         size_t arr = out.find("\"input\"");
         if (arr != std::string::npos) {
             size_t bracket = out.find('[', arr);
             if (bracket != std::string::npos) {
-                // Insert system message after the opening [
                 std::string system_msg =
                     "{\"type\":\"message\",\"role\":\"system\",\"content\":"
                     "[{\"type\":\"input_text\",\"text\":\"" + esc + "\"}]},";
@@ -381,7 +379,7 @@ std::string inject_request(const std::string& body, const std::string& agents, b
         }
     }
 
-    // 3. Force stream=false (avoid SSE stall with upstream)
+    // 2. Force stream=false (avoid SSE stall with upstream)
     json_set_string(out, "stream", "false");
     {
         size_t p = out.find("\"stream\":\"false\"");
