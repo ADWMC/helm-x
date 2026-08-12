@@ -130,6 +130,68 @@ class TestConfig(unittest.TestCase):
             out, _ = proc.communicate()
         self.assertIn("auto relay: https://beta.example/v1", out)
 
+    def test_proxy_rejects_corrupt_config_without_replacing_backup(self):
+        backup = self.codex_home / "config.toml.helmx-proxy-bak"
+        backup.write_text('model_provider = "custom"\n', encoding="utf-8")
+        self.cfg.write_text(
+            'model_provider = "custom"\n'
+            '[model_providers.custom]\n'
+            'base_url = "https://example.com/v1"desktop]\n',
+            encoding="utf-8",
+        )
+        rc, _ = self._run("proxy", ["--listen", "0"])
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(backup.read_text(encoding="utf-8"), 'model_provider = "custom"\n')
+
+    def test_proxy_refreshes_stale_backup_and_restores_valid_toml(self):
+        backup = self.codex_home / "config.toml.helmx-proxy-bak"
+        backup.write_text('broken]p]\n', encoding="utf-8")
+        original = self.cfg.read_text(encoding="utf-8")
+
+        proc = subprocess.Popen(
+            [str(HELMX), "proxy", "--listen", "0"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            cwd=self.tmp, env={**os.environ, **self.env},
+        )
+        try:
+            proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+
+        if backup.exists():
+            self.assertEqual(backup.read_text(encoding="utf-8"), original)
+            rc, out = self._run("proxy", ["--restore"])
+            self.assertEqual(rc, 0, out)
+        self.assertEqual(self.cfg.read_text(encoding="utf-8"), original)
+
+    def test_proxy_preserves_following_line_when_url_lengths_change(self):
+        self.cfg.write_text(
+            'model_provider = "custom"\n'
+            '[model_providers.custom]\n'
+            'base_url = "https://a.co/v1"\n'
+            '[desktop]\n'
+            'followUpQueueMode = "queue"\n',
+            encoding="utf-8",
+        )
+        original = self.cfg.read_text(encoding="utf-8")
+        proc = subprocess.Popen(
+            [str(HELMX), "proxy", "--listen", "1800"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            cwd=self.tmp, env={**os.environ, **self.env},
+        )
+        try:
+            proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+
+        backup = self.codex_home / "config.toml.helmx-proxy-bak"
+        if backup.exists():
+            rc, out = self._run("proxy", ["--restore"])
+            self.assertEqual(rc, 0, out)
+        self.assertEqual(self.cfg.read_text(encoding="utf-8"), original)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -46,26 +46,79 @@ bool backup_config(const std::string& cfg_path) {
     return !ec;
 }
 
-static bool toml_valid(const std::string& path) {
-    // Minimal validation: braces balance per line-section. Full TOML parse
-    // would need a parser; we keep injection line-based and validate by
-    // re-reading key presence + bracket balance.
-    std::ifstream f(path);
-    if (!f) return false;
+static bool read_file(const fs::path& path, std::string& content) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+    std::stringstream ss;
+    ss << in.rdbuf();
+    content = ss.str();
+    return in.good() || in.eof();
+}
+
+static bool toml_valid_content(const std::string& content) {
+    std::istringstream lines(content);
     std::string line;
-    int depth = 0;
-    while (std::getline(f, line)) {
-        // strip comments (naive: outside quotes)
-        size_t comment = line.find('#');
-        std::string core = comment == std::string::npos ? line : line.substr(0, comment);
-        for (char c : core) {
-            if (c == '[') depth++;
-            if (c == ']') {
-                if (--depth < 0) return false;
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') continue;
+        if (line[first] == '[') {
+            const bool array_table = first + 1 < line.size() && line[first + 1] == '[';
+            size_t close = line.find(array_table ? "]]" : "]", first + 1);
+            if (close == std::string::npos || close == first + 1) return false;
+            size_t tail = line.find_first_not_of(" \t\r", close + (array_table ? 2 : 1));
+            if (tail != std::string::npos && line[tail] != '#') return false;
+            continue;
+        }
+        size_t eq = line.find('=', first);
+        if (eq == std::string::npos || eq == first) return false;
+        size_t value = line.find_first_not_of(" \t", eq + 1);
+        if (value == std::string::npos) return false;
+        if (line[value] == '"') {
+            bool escaped = false;
+            size_t close = std::string::npos;
+            for (size_t i = value + 1; i < line.size(); ++i) {
+                if (line[i] == '"' && !escaped) {
+                    close = i;
+                    break;
+                }
+                escaped = line[i] == '\\' && !escaped;
+                if (line[i] != '\\') escaped = false;
             }
+            if (close == std::string::npos) return false;
+            size_t tail = line.find_first_not_of(" \t\r", close + 1);
+            if (tail != std::string::npos && line[tail] != '#') return false;
         }
     }
-    return depth == 0;
+    return true;
+}
+
+static bool atomic_write(const fs::path& path, const std::string& content) {
+    if (!toml_valid_content(content)) return false;
+    fs::path tmp = path;
+    tmp += ".helmx-tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out || !out.write(content.data(), static_cast<std::streamsize>(content.size()))) {
+            std::error_code ec;
+            fs::remove(tmp, ec);
+            return false;
+        }
+    }
+#ifdef _WIN32
+    if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        std::error_code ec;
+        fs::remove(tmp, ec);
+        return false;
+    }
+#else
+    std::error_code ec;
+    fs::rename(tmp, path, ec);
+    if (ec) {
+        fs::remove(tmp, ec);
+        return false;
+    }
+#endif
+    return true;
 }
 
 // Read a simple TOML string assignment without matching comments or table names.
@@ -181,8 +234,13 @@ static bool replace_provider_base_url(std::string& content, const std::string& p
                            line[first + header.size()] == '\t' ||
                            line[first + header.size()] == '\r' ||
                            line[first + header.size()] == '#');
-        } else if (in_provider && replace_string_assignment(line, "base_url", value)) {
-            content.replace(offset, line.size(), line);
+        } else if (in_provider) {
+            const size_t original_size = line.size();
+            if (!replace_string_assignment(line, "base_url", value)) {
+                offset += original_size + 1;
+                continue;
+            }
+            content.replace(offset, original_size, line);
             return true;
         }
         offset += line.size() + 1;
@@ -206,11 +264,8 @@ bool inject_config(const std::string& home) {
         return false;
     }
 
-    std::ifstream in(cfg);
-    if (!in) return false;
-    std::stringstream ss;
-    ss << in.rdbuf();
-    std::string content = ss.str();
+    std::string content;
+    if (!read_file(cfg, content) || !toml_valid_content(content)) return false;
 
     // 1. model_provider = "custom" (ensure present)
     if (!has_model_provider_custom(content)) {
@@ -221,56 +276,31 @@ bool inject_config(const std::string& home) {
         } else replace_string_assignment(content, "model_provider", "custom");
     }
 
-    std::ofstream out(cfg, std::ios::trunc);
-    if (!out) return false;
-    out << content;
-    out.close();
-
-    if (!toml_valid(cfg.string())) {
-        std::fprintf(stderr, "[helm-x] TOML invalid after inject, restoring\n");
-        fs::path bak = cfg.string() + ".helmx-bak";
-        if (fs::exists(bak)) {
-            std::error_code ec;
-            fs::copy_file(bak, cfg, fs::copy_options::overwrite_existing, ec);
-        }
-        return false;
-    }
-    return true;
+    return atomic_write(cfg, content);
 }
 
 bool inject_config_proxy(const std::string& home, int port) {
     fs::path cfg = fs::path(home) / "config.toml";
     if (!fs::exists(cfg)) return false;
 
-    // Back up original config ONCE before first modification
-    fs::path bak = cfg.string() + ".helmx-proxy-bak";
-    if (!fs::exists(bak)) {
-        std::error_code ec;
-        fs::copy_file(cfg, bak, fs::copy_options::overwrite_existing, ec);
-        if (ec) return false;
-    }
+    std::string content;
+    if (!read_file(cfg, content) || !toml_valid_content(content)) return false;
 
-    std::ifstream in(cfg);
-    if (!in) return false;
-    std::stringstream ss;
-    ss << in.rdbuf();
-    std::string content = ss.str();
-
-    // already pointed at this proxy?
     std::string current_url;
     std::string new_url = "http://127.0.0.1:" + std::to_string(port) + "/v1";
     std::string provider;
-    if (!active_provider(content, provider)) return false;
-    if (provider_base_url(content, provider, current_url) && current_url == new_url) return true;
+    if (!active_provider(content, provider) ||
+        !provider_base_url(content, provider, current_url)) return false;
+    if (current_url == new_url) return true;
+
+    // Refresh the restore point from each valid, non-proxy configuration.
+    fs::path bak = cfg.string() + ".helmx-proxy-bak";
+    if (current_url.find("127.0.0.1") == std::string::npos &&
+        !atomic_write(bak, content)) return false;
 
     // replace base_url with local proxy
     if (!replace_provider_base_url(content, provider, new_url)) return false;
-
-    std::ofstream out(cfg, std::ios::trunc);
-    if (!out) return false;
-    out << content;
-    out.close();
-    return true;
+    return atomic_write(cfg, content);
 }
 
 bool restore_config_proxy(const std::string& home) {
@@ -279,18 +309,12 @@ bool restore_config_proxy(const std::string& home) {
     if (!fs::exists(bak)) return false;
 
     // Read current config and preserve unrelated user settings.
-    std::ifstream cur_f(cfg);
-    if (!cur_f) return false;
-    std::stringstream cur_ss;
-    cur_ss << cur_f.rdbuf();
-    std::string current = cur_ss.str();
+    std::string current;
+    if (!read_file(cfg, current) || !toml_valid_content(current)) return false;
 
     // Read backup to get original base_url
-    std::ifstream bak_f(bak);
-    if (!bak_f) return false;
-    std::stringstream bak_ss;
-    bak_ss << bak_f.rdbuf();
-    std::string backup = bak_ss.str();
+    std::string backup;
+    if (!read_file(bak, backup) || !toml_valid_content(backup)) return false;
 
     // Extract original base_url from backup
     std::string provider;
@@ -304,10 +328,7 @@ bool restore_config_proxy(const std::string& home) {
     std::string current_url;
     if (provider_base_url(current, provider, current_url) &&
         replace_provider_base_url(current, provider, original_url)) {
-        std::ofstream out(cfg, std::ios::trunc);
-        if (!out) return false;
-        out << current;
-        out.close();
+        if (!atomic_write(cfg, current)) return false;
     }
 
     else return false;
