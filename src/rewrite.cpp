@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <string>
 
@@ -26,20 +27,19 @@ namespace fs = std::filesystem;
 
 namespace helmx {
 
-// find config: exe dir / helmx.config.json, then ./helmx.config.json
-static std::string find_config_path() {
+// User-owned configuration lives in the roaming AppData directory.
+static std::string config_path(bool require_existing) {
 #ifdef _WIN32
-    char exe[MAX_PATH] = {0};
-    DWORD n = GetModuleFileNameA(nullptr, exe, MAX_PATH);
-    if (n > 0 && n < MAX_PATH) {
-        fs::path exe_dir = fs::path(exe).parent_path();
-        fs::path p1 = exe_dir / "helmx.config.json";
-        if (fs::exists(p1)) return p1.string();
-    }
-#endif
-    fs::path p2 = fs::path(".") / "helmx.config.json";
-    if (fs::exists(p2)) return p2.string();
+    const char* appdata = std::getenv("APPDATA");
+    if (!appdata || !*appdata) return "";
+    fs::path path = fs::path(appdata) / "helmx.config.json";
+    if (!require_existing || fs::exists(path)) return path.string();
     return "";
+#else
+    fs::path path = fs::path(".") / "helmx.config.json";
+    if (!require_existing || fs::exists(path)) return path.string();
+    return "";
+#endif
 }
 
 // minimal JSON string field extraction
@@ -72,15 +72,21 @@ static std::string json_field(const std::string& s, const std::string& field) {
 }
 
 bool load_rewriter_config(RewriterConfig& cfg) {
-    // Cached — only loads once, subsequent calls return cached result
+    static std::mutex cache_mutex;
     static RewriterConfig cached;
-    static bool loaded_once = false;
-    if (loaded_once) {
+    static bool cached_valid = false;
+    static std::string cached_path;
+    static fs::file_time_type cached_mtime{};
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    cfg = RewriterConfig{};
+    std::string path = config_path(true);
+    std::error_code time_ec;
+    fs::file_time_type mtime = path.empty() ? fs::file_time_type{} : fs::last_write_time(path, time_ec);
+    if (cached_valid && path == cached_path &&
+        (path.empty() || (!time_ec && mtime == cached_mtime))) {
         cfg = cached;
-        return cfg.enabled || !cfg.model.empty();
+        return true;
     }
-
-    std::string path = find_config_path();
     std::string content;
 
     if (!path.empty()) {
@@ -101,8 +107,16 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     }
 
     if (content.empty()) {
-        log_info("rewriter: no config found, disabled");
-        return false;
+        // helmx.config.json is optional. Keep local-rule fallback usable even
+        // when a clean build has no optional embedded provider config.
+        cfg.enabled = false;
+        cfg.system_prompt = get_resource(ResId::RewritePrompt);
+        log_info("rewriter: using local-rule defaults (no helmx.config.json)");
+        cached = cfg;
+        cached_path = path;
+        cached_mtime = mtime;
+        cached_valid = true;
+        return true;
     }
 
     // rewriter.enabled / provider / base_url / api_key / model / system_prompt
@@ -153,14 +167,40 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     cfg.use_proxy = json_field(content, "use_proxy") == "true";
     std::string pu = json_field(content, "proxy_url");
     if (!pu.empty()) cfg.proxy_url = pu;
+    std::string prompt_mode = json_field(content, "prompt_mode");
+    if (prompt_mode == "default" || prompt_mode == "v45") cfg.prompt_mode = prompt_mode;
 
     log_info(std::string("rewriter: ") + (cfg.enabled ? "enabled" : "disabled") +
              " model=" + cfg.model +
              " proxy=" + (cfg.use_proxy ? cfg.proxy_url : "direct") +
              " key=" + (cfg.api_key.empty() ? "(none)" : cfg.api_key.substr(0, 8) + "..."));
     cached = cfg;
-    loaded_once = true;
+    cached_path = path;
+    cached_mtime = mtime;
+    cached_valid = true;
     return true;
+}
+
+static std::string json_escape(const std::string& s);
+
+bool save_rewriter_config(const RewriterConfig& cfg, std::string& path) {
+    path = config_path(false);
+    if (path.empty()) return false;
+    std::ofstream out(path, std::ios::trunc);
+    if (!out) return false;
+    out << "{\n  \"prompt_mode\": \"" << json_escape(cfg.prompt_mode) << "\",\n"
+        << "  \"rewriter\": {\n"
+        << "    \"enabled\": " << (cfg.enabled ? "true" : "false") << ",\n"
+        << "    \"provider\": \"" << json_escape(cfg.provider) << "\",\n"
+        << "    \"base_url\": \"" << json_escape(cfg.base_url) << "\",\n"
+        << "    \"api_key\": \"" << json_escape(cfg.api_key) << "\",\n"
+        << "    \"model\": \"" << json_escape(cfg.model) << "\",\n"
+        << "    \"system_prompt\": \"" << json_escape(cfg.system_prompt) << "\",\n"
+        << "    \"timeout_sec\": " << cfg.timeout_sec << ",\n"
+        << "    \"use_proxy\": " << (cfg.use_proxy ? "true" : "false") << ",\n"
+        << "    \"proxy_url\": \"" << json_escape(cfg.proxy_url) << "\"\n"
+        << "  }\n}\n";
+    return out.good();
 }
 
 static void split_url(const std::string& url, std::string& host, int& port, std::string& path) {

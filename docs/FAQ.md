@@ -25,7 +25,7 @@ A: 在 `~/.codex/config.toml` 的 `[model_providers.custom]` 中设置 `base_url
 A: 当请求触发 cyber flag 时，改写器自动把用户消息改写为技术描述，然后重发。参考 gptbypass 的实现。
 
 ### Q: 改写器需要配置吗？
-A: 可选。在 `helmx.config.json` 中配置改写器 API（如 NVIDIA NIM）。不配置则使用本地规则 fallback。
+A: 可选。在 `%APPDATA%\helmx.config.json` 中配置改写器 API（如 NVIDIA NIM）。不配置则使用本地规则 fallback。
 
 ### Q: 代理端口怎么改？
 A: `helmx proxy --listen 8080`。默认 1800。
@@ -47,7 +47,7 @@ A: XOR 流密钥加密。`tools/embed.py` 在构建时加密 `assets/` 下的文
 A: 编辑 `assets/bridge.md`，重新运行 `python tools/embed.py`，重新编译。
 
 ### Q: 怎么自定义改写器提示词？
-A: 在 `helmx.config.json` 中设置 `system_prompt` 字段，或编辑 `assets/rewrite_prompt.txt` 后重新内嵌。
+A: 在 `%APPDATA%\helmx.config.json` 中设置 `system_prompt` 字段，或编辑 `assets/rewrite_prompt.txt` 后重新内嵌。
 
 ### Q: TAMPER 规则怎么扩展？
 A: 编辑 `assets/tamper_rules.txt`（每行一个正则），重新内嵌。
@@ -63,7 +63,7 @@ A: 检查端口 1800 是否被占用。`netstat -ano | findstr 1800`。
 A: 检查 `~/.codex/config.toml` 的 `base_url` 是否指向 `http://127.0.0.1:1800/v1`。
 
 ### Q: 改写器不工作？
-A: 检查 `helmx.config.json` 是否存在且 `enabled: true`。查看日志 `~/.codex/helmx.log`。
+A: 检查 `%APPDATA%\helmx.config.json` 是否存在且 `enabled: true`。查看日志 `~/.codex/helmx.log`。
 
 ### Q: 上游返回 401？
 A: API key 无效或过期。检查 `~/.codex/config.toml` 的 `api_key`。

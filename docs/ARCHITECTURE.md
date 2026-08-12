@@ -106,8 +106,8 @@ codex 请求
 │  bridge.md        │ 改写器提示词      │ TAMPER 规则         │
 │  (AGENTS 注入)    │ (上下文感知改写)  │ (拒绝句式匹配)      │
 ├─────────────────────────────────────────────────────────────┤
-│  dashboard.html   │ tools.json        │ skills/             │
-│  (Web 控制台)     │ (MCP 工具定义)    │ (技能包)            │
+│  dashboard.html   │ skills/                              │
+│  (Web 控制台)     │ (技能包)                             │
 └─────────────────────────────────────────────────────────────┘
          │
          ▼ 运行时解密
@@ -135,7 +135,6 @@ main thread
     │       │
     │       └─→ periodic verify + restore
     │
-    └─→ MCP thread (stdio server)
             │
             └─→ tool handlers
 ```
@@ -153,7 +152,7 @@ main thread
 └── .helmx-bak           ← 原始配置备份
 
 F:/projects/helm-x/
-├── helmx.config.json    ← 改写器配置 (gitignored)
+%APPDATA%\helmx.config.json    ← 改写器配置
 │   rewriter.enabled = true
 │   rewriter.api_key = nvapi-xxx
 │   rewriter.model = meta/llama-3.1-8b-instruct

@@ -23,11 +23,6 @@ extern const size_t kTamperRulesCipherLen;
 extern const unsigned char kTamperRulesKey[];
 extern const size_t kTamperRulesKeyLen;
 
-extern const unsigned char kToolsJsonCipher[];
-extern const size_t kToolsJsonCipherLen;
-extern const unsigned char kToolsJsonKey[];
-extern const size_t kToolsJsonKeyLen;
-
 extern const unsigned char kDashboardHtmlCipher[];
 extern const size_t kDashboardHtmlCipherLen;
 extern const unsigned char kDashboardHtmlKey[];
@@ -57,6 +52,7 @@ extern const SkillEntry kSkills[];
 // XOR decrypt with per-resource key
 static std::string xor_decrypt(const unsigned char* data, size_t len,
                                const unsigned char* key, size_t key_len) {
+    if (!data || !key || len == 0 || key_len == 0) return {};
     std::string out;
     out.reserve(len);
     for (size_t i = 0; i < len; ++i) {
@@ -73,8 +69,6 @@ std::string get_resource(ResId id) {
             return xor_decrypt(kAgentsV45Cipher, kAgentsV45CipherLen, kAgentsV45Key, kAgentsV45KeyLen);
         case ResId::TamperRules:
             return xor_decrypt(kTamperRulesCipher, kTamperRulesCipherLen, kTamperRulesKey, kTamperRulesKeyLen);
-        case ResId::ToolsJson:
-            return xor_decrypt(kToolsJsonCipher, kToolsJsonCipherLen, kToolsJsonKey, kToolsJsonKeyLen);
         case ResId::DashboardHtml:
             return xor_decrypt(kDashboardHtmlCipher, kDashboardHtmlCipherLen, kDashboardHtmlKey, kDashboardHtmlKeyLen);
         case ResId::RewritePrompt:

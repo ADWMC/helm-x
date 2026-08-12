@@ -41,9 +41,9 @@ bool watch_pass(const std::string& home) {
 }  // namespace
 
 void watch_start(int interval_sec) {
-    if (g_watch_running.load()) return;
     if (interval_sec < 5) interval_sec = 5;
-    g_watch_running = true;
+    bool expected = false;
+    if (!g_watch_running.compare_exchange_strong(expected, true)) return;
     log_info("watch: start (interval " + std::to_string(interval_sec) + "s)");
     g_watch_thread = std::thread([interval_sec] {
         std::string home = find_codex_home();

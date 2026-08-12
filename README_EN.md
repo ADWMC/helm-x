@@ -87,7 +87,6 @@ helmx.exe (single binary)
 ├─ proxy    HTTP MITM (WinHTTP upstream, inject, TAMPER, rewriter)
 ├─ ui       Web console (embedded HTML, 4 pages)
 ├─ watch    Self-healing daemon (auto-restore when injection overwritten)
-├─ mcp      MCP stdio server (Content-Length frame protocol, 6 built-in tools)
 ├─ apply/remove   Deploy/undeploy AGENTS + config injection
 ├─ activate/verify  Activation verification / integrity check
 ```

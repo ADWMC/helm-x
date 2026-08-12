@@ -7,7 +7,6 @@
 - **TAMPER 规则**：扩充 `tamper.cpp` 的拒绝句式匹配（当前只有 1 条占位正则）
 - **UI 改进**：`assets/dashboard.html` 的界面与交互
 - **proxy 增强**：SSE 流式转发、多上游轮询、请求日志审计
-- **MCP 工具**：扩充 `mcp.cpp` 内置工具列表
 - **文档**：README、使用示例、FAQ
 - **测试**：verify 自检项扩充、端到端测试脚本
 

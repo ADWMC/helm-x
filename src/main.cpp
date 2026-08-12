@@ -12,11 +12,11 @@
 #endif
 #include <windows.h>
 #include <shellapi.h>
+#include <winsock2.h>
 #endif
 
 #include "config.h"
 #include "log.h"
-#include "mcp.h"
 #include "proxy.h"
 #include "resources.h"
 #include "ui.h"
@@ -52,12 +52,34 @@ static void launch_dashboard() {
     });
     ui_thread.detach();
 
-    // Small delay so UI server is up
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // Wait until the UI is accepting connections before opening the browser.
+#ifdef _WIN32
+    WSADATA wsa{};
+    bool ui_ready = WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
+    if (ui_ready) {
+        ui_ready = false;
+        for (int attempt = 0; attempt < 50 && !ui_ready; ++attempt) {
+            SOCKET s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            if (s != INVALID_SOCKET) {
+                sockaddr_in addr{};
+                addr.sin_family = AF_INET;
+                addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                addr.sin_port = htons((u_short)port);
+                ui_ready = ::connect(s, (sockaddr*)&addr, sizeof(addr)) == 0;
+                ::closesocket(s);
+            }
+            if (!ui_ready) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        WSACleanup();
+    }
+#else
+    bool ui_ready = true;
+#endif
 
     // Open browser
 #ifdef _WIN32
-    ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (ui_ready) ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    else std::fprintf(stderr, "[helm-x] UI failed to start at %s\n", url.c_str());
 #endif
 
     // Run proxy in main thread (blocks until shutdown)
@@ -80,7 +102,6 @@ static void usage() {
         "  ui                 web dashboard (status / rules / actions)\n"
         "  watch              self-healing daemon (verify + restore)\n"
         "  proxy              tamper proxy (HTTP MITM inject + rewrite)\n"
-        "  mcp                built-in MCP server (stdio JSON-RPC)\n"
         "  remove             uninstall and restore backups\n"
         "\n");
 }
@@ -107,8 +128,6 @@ int main(int argc, char** argv) {
         return helmx::watch(argc > 2 ? std::atoi(argv[2]) : 60);
     } else if (cmd == "proxy") {
         return helmx::proxy_main(argc, argv);
-    } else if (cmd == "mcp") {
-        return helmx::mcp_main();
     } else if (cmd == "remove") {
         return helmx::remove();
     } else if (cmd == "help" || cmd == "-h" || cmd == "--help") {

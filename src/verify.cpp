@@ -148,10 +148,9 @@ int run_verify(bool e2e, std::string& report) {
     fs::path cfg = fs::path(home) / "config.toml";
     check(fs::exists(cfg), "config.toml exists", cfg.string().c_str(), report);
 
-    // 3. mcp_servers.helmx injected
+    // 3. config injection state
     std::string cfg_text = read_file_str(cfg);
-    bool has_mcp = cfg_text.find("[mcp_servers.helmx]") != std::string::npos;
-    check(has_mcp, "mcp_servers.helmx injected", "", report);
+    check(verify_injection(home), "model_provider = custom", "", report);
 
     // 4. embedded resources non-empty (AGENTS.md not deployed as file — proxy injects)
     std::string expected = get_resource(ResId::AgentsMd);
@@ -160,9 +159,8 @@ int run_verify(bool e2e, std::string& report) {
     if (!get_resource(ResId::TamperRules).empty()) res_count++;
     if (!get_resource(ResId::DashboardHtml).empty()) res_count++;
     if (!get_resource(ResId::RewritePrompt).empty()) res_count++;
-    if (!get_resource(ResId::ToolsJson).empty()) res_count++;
     bool res_ok = res_count >= 3;  // At least AgentsMd + TamperRules + DashboardHtml
-    std::string res_detail = std::to_string(res_count) + "/5";
+    std::string res_detail = std::to_string(res_count) + "/4";
     check(res_ok, "embedded resources decrypt", res_detail.c_str(), report);
 
     // 5. backup exists

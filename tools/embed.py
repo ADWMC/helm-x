@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """embed.py — encrypt assets and emit resources_generated.cpp
 
-Reads assets/ (prompt-ctf-scoring.md, skills/, tamper_rules.txt, tools.json),
+Reads assets/ (prompt-ctf-scoring.md, skills/, tamper_rules.txt),
 XOR-encrypts each with a per-resource pseudo-random key,
 emits src/resources_generated.cpp with the cipher + key tables.
 
@@ -60,10 +60,14 @@ def main():
     agents = read('prompt-ctf-scoring.md')
     agents_v45 = read('prompt-sandbox-executor.md')
     rules = read('tamper_rules.txt')
-    tools = read('tools.json')
     dashboard = read('dashboard.html')
     rewrite_prompt = read('rewrite_prompt.txt')
     rewriter_builtin = read('rewriter_builtin.json')
+    if not rewriter_builtin:
+        # Optional provider credentials must never be required for a clean build.
+        # Keep a valid disabled config so the local-rule fallback remains usable.
+        rewriter_builtin = b'{\n  "enabled": false,\n  "provider": "",\n  "model": "",\n  "timeout_sec": 30,\n  "use_proxy": false\n}\n'
+        print('  rewriter_builtin.json: missing -> embedded disabled defaults')
 
     # Normalize CRLF -> LF for embedded assets (git autocrlf may have
     # converted working-tree files; embedded bytes must be stable so
@@ -74,7 +78,6 @@ def main():
     agents = norm(agents)
     agents_v45 = norm(agents_v45)
     rules = norm(rules)
-    tools = norm(tools)
     dashboard = norm(dashboard)
     rewrite_prompt = norm(rewrite_prompt)
     rewriter_builtin = norm(rewriter_builtin)
@@ -111,7 +114,6 @@ def main():
     emit_var('kAgentsMd', agents, KEY_SEED)
     emit_var('kAgentsV45', agents_v45, KEY_SEED + 0x5000)
     emit_var('kTamperRules', rules, KEY_SEED + 0x1000)
-    emit_var('kToolsJson', tools, KEY_SEED + 0x2000)
     emit_var('kDashboardHtml', dashboard, KEY_SEED + 0x3000)
     emit_var('kRewritePrompt', rewrite_prompt, KEY_SEED + 0x4000)
     emit_var('kRewriterBuiltin', rewriter_builtin, KEY_SEED + 0x6000)
@@ -153,7 +155,6 @@ def main():
     print(f'embed.py: assets={assets}')
     print(f'  prompt-ctf-scoring.md: {len(agents)} bytes -> cipher')
     print(f'  tamper_rules: {len(rules)} bytes -> cipher')
-    print(f'  tools.json: {len(tools)} bytes -> cipher')
     print(f'  skills: {len(skill_blobs)} embedded')
     print(f'  -> {out_cpp}')
 

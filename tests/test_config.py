@@ -7,7 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-HELMX = Path(__file__).resolve().parents[1] / "build" / "helmx.exe"
+HELMX = Path(os.environ.get(
+    "HELMX_TEST_BIN", Path(__file__).resolve().parents[1] / "build" / "helmx.exe"
+))
 
 
 def run(cmd, cwd, env=None, timeout=60):
@@ -42,10 +44,10 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue((self.codex_home / "config.toml.helmx-bak").exists())
 
-    def test_apply_injects_mcp_servers(self):
+    def test_apply_keeps_mcp_servers_user_managed(self):
         self._run("apply")
         text = (self.codex_home / "config.toml").read_text(encoding="utf-8")
-        self.assertIn("[mcp_servers.helmx]", text)
+        self.assertNotIn("[mcp_servers.helmx]", text)
 
     def test_apply_preserves_crlf(self):
         raw = self.cfg.read_bytes().replace(b"\n", b"\r\n")
@@ -68,15 +70,22 @@ class TestConfig(unittest.TestCase):
         original = self.cfg.read_text(encoding="utf-8")
         self._run("apply")
         modified = self.cfg.read_text(encoding="utf-8")
-        self.assertIn("mcp_servers", modified)
+        self.assertEqual(modified, original)
         self._run("remove")
         restored = self.cfg.read_text(encoding="utf-8")
-        self.assertNotIn("mcp_servers", restored)
+        self.assertEqual(restored, original)
 
     def test_verify_passes_after_apply(self):
         self._run("apply")
         rc, out = self._run("verify")
         self.assertEqual(rc, 0, f"verify failed: {out}")
+
+    def test_verify_fails_when_model_provider_is_not_custom(self):
+        self.cfg.write_text(self.cfg.read_text(encoding="utf-8").replace(
+            'model_provider = "custom"', 'model_provider = "other"'
+        ), encoding="utf-8")
+        rc, _ = self._run("verify")
+        self.assertNotEqual(rc, 0)
 
     def test_verify_fails_without_config(self):
         empty = Path(self.tmp) / "empty"
@@ -101,6 +110,25 @@ class TestConfig(unittest.TestCase):
     def test_remove_without_backup_works(self):
         rc, out = self._run("remove")
         self.assertEqual(rc, 0)
+
+    def test_proxy_uses_active_provider_after_switch(self):
+        self.cfg.write_text(
+            'model_provider = "beta"\n\n'
+            '[model_providers.alpha]\nbase_url = "https://alpha.example/v1"\n\n'
+            '[model_providers.beta]\nbase_url = "https://beta.example/v1"\n',
+            encoding="utf-8",
+        )
+        proc = subprocess.Popen(
+            [str(HELMX), "proxy", "--listen", "0"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            cwd=self.tmp, env={**os.environ, **self.env},
+        )
+        try:
+            out, _ = proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            out, _ = proc.communicate()
+        self.assertIn("auto relay: https://beta.example/v1", out)
 
 
 if __name__ == "__main__":

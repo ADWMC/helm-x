@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -59,10 +60,139 @@ static bool toml_valid(const std::string& path) {
         std::string core = comment == std::string::npos ? line : line.substr(0, comment);
         for (char c : core) {
             if (c == '[') depth++;
-            if (c == ']') depth--;
+            if (c == ']') {
+                if (--depth < 0) return false;
+            }
         }
     }
     return depth == 0;
+}
+
+// Read a simple TOML string assignment without matching comments or table names.
+static bool read_string_assignment(const std::string& content, const char* key,
+                                   std::string& value) {
+    std::istringstream lines(content);
+    std::string line;
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') continue;
+        size_t key_start = first;
+        size_t key_len = std::strlen(key);
+        if (line.compare(key_start, key_len, key) != 0) continue;
+        if (key_start + key_len < line.size() &&
+            line[key_start + key_len] != ' ' && line[key_start + key_len] != '\t' &&
+            line[key_start + key_len] != '=') continue;
+        size_t eq = line.find('=', key_start + key_len);
+        if (eq == std::string::npos) continue;
+        size_t q1 = line.find('"', eq + 1);
+        if (q1 == std::string::npos) continue;
+        size_t q2 = line.find('"', q1 + 1);
+        if (q2 == std::string::npos) continue;
+        value = line.substr(q1 + 1, q2 - q1 - 1);
+        return true;
+    }
+    return false;
+}
+
+static bool read_top_level_string_assignment(const std::string& content, const char* key,
+                                              std::string& value) {
+    std::istringstream lines(content);
+    std::string line;
+    bool in_table = false;
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') continue;
+        if (line[first] == '[') {
+            in_table = true;
+            continue;
+        }
+        if (in_table) continue;
+        std::string one_line = line;
+        if (read_string_assignment(one_line, key, value)) return true;
+    }
+    return false;
+}
+
+static bool provider_base_url(const std::string& content, const std::string& provider,
+                              std::string& value) {
+    const std::string header = "[model_providers." + provider + "]";
+    std::istringstream lines(content);
+    std::string line;
+    bool in_provider = false;
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') continue;
+        if (line[first] == '[') {
+            in_provider = line.compare(first, header.size(), header) == 0 &&
+                          (first + header.size() == line.size() ||
+                           line[first + header.size()] == ' ' ||
+                           line[first + header.size()] == '\t' ||
+                           line[first + header.size()] == '\r' ||
+                           line[first + header.size()] == '#');
+            continue;
+        }
+        if (in_provider && read_string_assignment(line, "base_url", value)) return true;
+    }
+    return false;
+}
+
+static bool active_provider(const std::string& content, std::string& provider) {
+    return read_top_level_string_assignment(content, "model_provider", provider);
+}
+
+static bool replace_string_assignment(std::string& content, const char* key,
+                                      const std::string& value) {
+    size_t offset = 0;
+    std::string line;
+    std::istringstream lines(content);
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        size_t key_len = std::strlen(key);
+        if (first != std::string::npos && line[first] != '#' &&
+            line.compare(first, key_len, key) == 0 &&
+            (first + key_len == line.size() || line[first + key_len] == ' ' ||
+             line[first + key_len] == '\t' || line[first + key_len] == '=')) {
+            size_t eq = line.find('=', first + key_len);
+            size_t q1 = eq == std::string::npos ? std::string::npos : line.find('"', eq + 1);
+            size_t q2 = q1 == std::string::npos ? std::string::npos : line.find('"', q1 + 1);
+            if (q1 != std::string::npos && q2 != std::string::npos) {
+                content.replace(offset + q1 + 1, q2 - q1 - 1, value);
+                return true;
+            }
+        }
+        offset += line.size() + 1;
+    }
+    return false;
+}
+
+static bool replace_provider_base_url(std::string& content, const std::string& provider,
+                                      const std::string& value) {
+    const std::string header = "[model_providers." + provider + "]";
+    size_t offset = 0;
+    std::istringstream lines(content);
+    std::string line;
+    bool in_provider = false;
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first != std::string::npos && line[first] == '[') {
+            in_provider = line.compare(first, header.size(), header) == 0 &&
+                          (first + header.size() == line.size() ||
+                           line[first + header.size()] == ' ' ||
+                           line[first + header.size()] == '\t' ||
+                           line[first + header.size()] == '\r' ||
+                           line[first + header.size()] == '#');
+        } else if (in_provider && replace_string_assignment(line, "base_url", value)) {
+            content.replace(offset, line.size(), line);
+            return true;
+        }
+        offset += line.size() + 1;
+    }
+    return false;
+}
+
+static bool has_model_provider_custom(const std::string& content) {
+    std::string provider;
+    return active_provider(content, provider) && provider == "custom";
 }
 
 bool inject_config(const std::string& home) {
@@ -77,17 +207,22 @@ bool inject_config(const std::string& home) {
     }
 
     std::ifstream in(cfg);
+    if (!in) return false;
     std::stringstream ss;
     ss << in.rdbuf();
     std::string content = ss.str();
 
     // 1. model_provider = "custom" (ensure present)
-    if (content.find("model_provider") == std::string::npos) {
-        content = "model_provider = \"custom\"\n" + content;
+    if (!has_model_provider_custom(content)) {
+        // Keep an existing assignment intact when it has the required value.
+        std::string provider;
+        if (!read_string_assignment(content, "model_provider", provider)) {
+            content = "model_provider = \"custom\"\n" + content;
+        } else replace_string_assignment(content, "model_provider", "custom");
     }
-    // 2. No MCP injection — user manages their own MCP config.
 
     std::ofstream out(cfg, std::ios::trunc);
+    if (!out) return false;
     out << content;
     out.close();
 
@@ -112,30 +247,27 @@ bool inject_config_proxy(const std::string& home, int port) {
     if (!fs::exists(bak)) {
         std::error_code ec;
         fs::copy_file(cfg, bak, fs::copy_options::overwrite_existing, ec);
+        if (ec) return false;
     }
 
     std::ifstream in(cfg);
+    if (!in) return false;
     std::stringstream ss;
     ss << in.rdbuf();
     std::string content = ss.str();
 
     // already pointed at this proxy?
-    std::string needle = "127.0.0.1:" + std::to_string(port);
-    if (content.find(needle) != std::string::npos) return true;
+    std::string current_url;
+    std::string new_url = "http://127.0.0.1:" + std::to_string(port) + "/v1";
+    std::string provider;
+    if (!active_provider(content, provider)) return false;
+    if (provider_base_url(content, provider, current_url) && current_url == new_url) return true;
 
     // replace base_url with local proxy
-    size_t p = content.find("base_url");
-    if (p == std::string::npos) return false;
-    size_t eq = content.find('=', p);
-    if (eq == std::string::npos) return false;
-    size_t q1 = content.find('"', eq);
-    if (q1 == std::string::npos) return false;
-    size_t q2 = content.find('"', q1 + 1);
-    if (q2 == std::string::npos) return false;
-    std::string new_url = "http://127.0.0.1:" + std::to_string(port) + "/v1";
-    content.replace(q1 + 1, q2 - q1 - 1, new_url);
+    if (!replace_provider_base_url(content, provider, new_url)) return false;
 
     std::ofstream out(cfg, std::ios::trunc);
+    if (!out) return false;
     out << content;
     out.close();
     return true;
@@ -146,83 +278,77 @@ bool restore_config_proxy(const std::string& home) {
     fs::path bak = cfg.string() + ".helmx-proxy-bak";
     if (!fs::exists(bak)) return false;
 
-    // Read current config (may have user-added MCP/other settings)
+    // Read current config and preserve unrelated user settings.
     std::ifstream cur_f(cfg);
+    if (!cur_f) return false;
     std::stringstream cur_ss;
     cur_ss << cur_f.rdbuf();
     std::string current = cur_ss.str();
 
     // Read backup to get original base_url
     std::ifstream bak_f(bak);
+    if (!bak_f) return false;
     std::stringstream bak_ss;
     bak_ss << bak_f.rdbuf();
     std::string backup = bak_ss.str();
 
     // Extract original base_url from backup
-    size_t bak_base = backup.find("base_url");
-    if (bak_base == std::string::npos) {
+    std::string provider;
+    std::string original_url;
+    if (!active_provider(current, provider) || !provider_base_url(backup, provider, original_url)) {
         // No base_url in backup, just delete backup
         fs::remove(bak);
         return true;
     }
-    size_t bak_eq = backup.find('=', bak_base);
-    size_t bak_q1 = backup.find('"', bak_eq);
-    size_t bak_q2 = backup.find('"', bak_q1 + 1);
-    std::string original_url = backup.substr(bak_q1 + 1, bak_q2 - bak_q1 - 1);
-
     // Replace base_url in current config with original
-    size_t cur_base = current.find("base_url");
-    if (cur_base != std::string::npos) {
-        size_t cur_eq = current.find('=', cur_base);
-        size_t cur_q1 = current.find('"', cur_eq);
-        size_t cur_q2 = current.find('"', cur_q1 + 1);
-        current.replace(cur_q1 + 1, cur_q2 - cur_q1 - 1, original_url);
+    std::string current_url;
+    if (provider_base_url(current, provider, current_url) &&
+        replace_provider_base_url(current, provider, original_url)) {
         std::ofstream out(cfg, std::ios::trunc);
+        if (!out) return false;
         out << current;
         out.close();
     }
 
-    fs::remove(bak);
+    else return false;
+
+    std::error_code remove_ec;
+    fs::remove(bak, remove_ec);
+    if (remove_ec) return false;
     return true;
 }
 
 std::string read_relay_url(const std::string& home) {
-    // Read from backup (original base_url before proxy modified it)
-    // If backup doesn't exist, read current config.toml (may work if proxy hasn't modified it yet)
+    // Prefer the active provider in the live config. Use the proxy backup only
+    // while that same provider is pointed at the local proxy.
     fs::path bak = fs::path(home) / "config.toml.helmx-proxy-bak";
     fs::path cfg = fs::path(home) / "config.toml";
 
-    auto extract_url = [](const std::string& content) -> std::string {
-        size_t p = content.find("base_url");
-        if (p == std::string::npos) return "";
-        size_t q1 = content.find('"', p);
-        if (q1 == std::string::npos) return "";
-        size_t q2 = content.find('"', q1 + 1);
-        if (q2 == std::string::npos) return "";
-        return content.substr(q1 + 1, q2 - q1 - 1);
-    };
+    std::string provider;
+    std::string url;
+    if (!read_active_provider(home, provider, url)) return "";
+    if (url.find("127.0.0.1") == std::string::npos) return url;
 
-    // Try backup first
-    if (fs::exists(bak)) {
-        std::ifstream bf(bak);
-        if (bf) {
-            std::stringstream ss;
-            ss << bf.rdbuf();
-            std::string url = extract_url(ss.str());
-            if (!url.empty() && url.find("127.0.0.1") == std::string::npos) return url;
-        }
-    }
-
-    // Fallback: read current config (works if proxy hasn't modified it yet)
-    std::ifstream cf(cfg);
-    if (cf) {
-        std::stringstream ss;
-        ss << cf.rdbuf();
-        std::string url = extract_url(ss.str());
-        if (!url.empty() && url.find("127.0.0.1") == std::string::npos) return url;
-    }
+    if (!fs::exists(bak)) return "";
+    std::ifstream bf(bak);
+    if (!bf) return "";
+    std::stringstream backup_stream;
+    backup_stream << bf.rdbuf();
+    if (provider_base_url(backup_stream.str(), provider, url) &&
+        url.find("127.0.0.1") == std::string::npos) return url;
 
     return "";
+}
+
+bool read_active_provider(const std::string& home, std::string& provider,
+                          std::string& base_url) {
+    std::ifstream cf(fs::path(home) / "config.toml");
+    if (!cf) return false;
+    std::stringstream ss;
+    ss << cf.rdbuf();
+    const std::string content = ss.str();
+    return active_provider(content, provider) &&
+           provider_base_url(content, provider, base_url);
 }
 
 bool verify_injection(const std::string& home) {
@@ -232,9 +358,8 @@ bool verify_injection(const std::string& home) {
     std::stringstream ss;
     ss << f.rdbuf();
     std::string c = ss.str();
-    bool ok = true;
-    // AGENTS.md not deployed — proxy injects from encrypted resource
-    return ok;
+    // AGENTS.md is injected by the proxy; config state is the durable marker.
+    return has_model_provider_custom(c);
 }
 
 bool deploy_agents(const std::string& home) {
@@ -252,13 +377,17 @@ bool deploy_agents(const std::string& home) {
 }
 
 bool remove_all(const std::string& home) {
+    bool ok = true;
     // restore config from backup
     fs::path cfg = fs::path(home) / "config.toml";
     fs::path bak = cfg.string() + ".helmx-bak";
     if (fs::exists(bak)) {
         std::error_code ec;
         fs::copy_file(bak, cfg, fs::copy_options::overwrite_existing, ec);
-        fs::remove(bak);
+        if (ec) ok = false;
+        std::error_code remove_ec;
+        fs::remove(bak, remove_ec);
+        if (remove_ec) ok = false;
     }
     // remove AGENTS.md only if it matches our embedded resource (avoid nuking user's own)
     fs::path agents = fs::path(home) / "AGENTS.md";
@@ -270,10 +399,12 @@ bool remove_all(const std::string& home) {
             return ss.str();
         }();
         if (current == get_resource(ResId::AgentsMd)) {
-            fs::remove(agents);
+            std::error_code ec;
+            fs::remove(agents, ec);
+            if (ec) ok = false;
         }
     }
-    return true;
+    return ok;
 }
 
 int apply() {

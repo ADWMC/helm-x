@@ -14,10 +14,14 @@ struct RewriterConfig {
     int timeout_sec = 90;
     bool use_proxy = false;
     std::string proxy_url = "http://127.0.0.1:7897";  // HTTP proxy for upstream
+    std::string prompt_mode = "default";
 };
 
-// Load config from helmx.config.json next to the exe (or ./helmx.config.json)
+// Load config from %APPDATA%/helmx.config.json.
 bool load_rewriter_config(RewriterConfig& cfg);
+
+// Save all user-editable settings to %APPDATA%/helmx.config.json.
+bool save_rewriter_config(const RewriterConfig& cfg, std::string& path);
 
 // Rewrite a user message through the configured LLM.
 // refusal_text: the model's refusal response (for context-aware rewriting).

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>helm-x 控制台 · v0.0.3</title>
+<title>helm-x 控制台 · v0.0.5</title>
 <style>
 /* ── Design tokens (from SHVMP) ── */
 :root {
@@ -211,7 +211,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
   .field-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
-  .topbar-path, .system-status { display: none; }
+  #page-title, .system-status { display: none; }
   .page-heading { display: grid; align-items: start; }
   .content { padding: 20px 12px 44px; }
   .topbar { padding: 0 12px; }
@@ -249,7 +249,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
     <div class="nav-spacer"></div>
     <div class="sidebar-foot">
       <span class="path-tag">~/.codex</span>
-      <span class="version-tag">v0.0.3</span>
+      <span class="version-tag">v0.0.5</span>
     </div>
   </aside>
 
@@ -263,7 +263,8 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
       <div class="topbar-right">
         <span class="system-status" id="proxy-pill"><span class="status-dot" id="proxy-pill-dot"></span><span id="proxy-pill-text">检测中</span></span>
 
-        <span class="version-tag">v0.0.3</span>
+        <span class="system-status" id="watch-pill" style="display:none"><span class="status-dot" id="watch-dot"></span><span id="watch-text">watch</span></span>
+        <span class="version-tag">v0.0.5</span>
       </div>
     </div>
 
@@ -331,6 +332,12 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
                   <td style="color:var(--muted);font-size:12px" id="rw-desc">cyber 自动改写 · 检测中</td>
                   <td><div class="actions"><button class="btn secondary" onclick="refreshRewriter()">刷新</button></div></td>
                 </tr>
+                <tr>
+                  <td><strong>watch</strong></td>
+                  <td><span class="status" id="watch-status"><span class="status-dot"></span><span id="watch-state-text">—</span></span></td>
+                  <td style="color:var(--muted);font-size:12px">自动恢复配置 · 已恢复 <span id="watch-restores">0</span> 次</td>
+                  <td><div class="actions"><input class="input" id="watch-interval" type="number" min="5" value="60" style="width:76px" aria-label="检查间隔（秒）"><button class="btn secondary" onclick="watchStart()">启动</button><button class="btn secondary" onclick="watchStop()">停止</button></div></td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -347,9 +354,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
         </div>
 
       </section>
-
-      </section>
-
       <!-- ── Prompt ── -->
       <section class="view" id="view-prompt">
         <div class="page-heading"><div><h1>提示词</h1><p>选择代理注入的 AGENTS 提示词。</p></div></div>
@@ -381,12 +385,12 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>API 配置</h2><span>helmx.config.json</span></div>
+          <div class="panel-head"><h2>API 配置</h2><span>%APPDATA%\helmx.config.json</span></div>
           <div class="panel-body">
             <div class="field-grid">
               <div class="field"><label>Provider</label><input class="input" id="rw-cfg-provider" placeholder="nvidia"></div>
               <div class="field"><label>Model</label><input class="input" id="rw-cfg-model" placeholder="meta/llama-3.1-8b-instruct"></div>
-              <div class="field"><label>API Key</label><input class="input" id="rw-cfg-apikey" type="password" placeholder="nvapi-xxx"></div>
+              <div class="field"><label>API Key</label><input class="input" id="rw-cfg-apikey" type="password" placeholder="留空保留现有密钥"></div>
               <div class="field"><label>Base URL</label><input class="input" id="rw-cfg-baseurl" placeholder="https://integrate.api.nvidia.com/v1"></div>
               <div class="field"><label>Proxy URL</label><input class="input" id="rw-cfg-proxyurl" placeholder="http://127.0.0.1:7897"></div>
               <div class="field"><label>Timeout (秒)</label><input class="input" id="rw-cfg-timeout" value="60" type="number"></div>
@@ -440,6 +444,7 @@ document.querySelectorAll('.nav-button').forEach(el => {
     const viewId = 'view-' + el.dataset.view;
     $(viewId).classList.add('active');
     $('page-title').textContent = el.textContent.trim();
+    $('sidebar').classList.remove('open');
   });
 });
 
@@ -452,8 +457,14 @@ const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 if (prefersDark) document.documentElement.classList.add('dark-mode');
 
 /* ── Helpers ── */
-async function get(path) { const r = await fetch(path); return r.json(); }
-async function post(path, body) { const r = await fetch(path, { method: 'POST', body: body || '' }); return r.json(); }
+async function request(path, options) {
+  const r = await fetch(path, options);
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+  return body;
+}
+async function get(path) { return request(path); }
+async function post(path, body) { return request(path, { method: 'POST', body: body || '' }); }
 function showToast(msg) { const t = $('toast'); $('toast-message').textContent = msg; t.hidden = false; setTimeout(() => t.hidden = true, 2400); }
 
 /* ── Status ── */
@@ -486,7 +497,13 @@ async function refreshStatus() {
     else { rwState.textContent = 'OFF'; rwState.style.color = 'var(--muted)'; rwDesc.textContent = '已禁用'; }
     // Prompt mode
     loadPromptMode();
-  } catch (e) {}
+  } catch (e) {
+    $('proxy-metric-state').textContent = 'OFFLINE';
+    $('proxy-metric-state').style.color = 'var(--danger)';
+    $('proxy-metric-desc').textContent = e.message;
+    $('proxy-pill-dot').className = 'status-dot error';
+    $('proxy-pill-text').textContent = 'OFFLINE';
+  }
 }
 
 /* ── Rules ── */
@@ -501,7 +518,7 @@ async function refreshRules() {
     });
     html += '</tbody></table>';
     box.innerHTML = html;
-  } catch (e) {}
+  } catch (e) { $('rules-list').textContent = '规则加载失败: ' + e.message; }
 }
 
 /* ── Actions ── */
@@ -553,11 +570,11 @@ async function refreshWatch() {
     const st = $('watch-status'), stt = $('watch-state-text');
     if (w.running) { st.className = 'status running'; stt.textContent = 'RUNNING'; $('watch-pill').style.display = ''; $('watch-dot').className = 'status-dot active'; $('watch-text').textContent = 'watch ' + w.restores; }
     else { st.className = 'status'; stt.textContent = 'STOPPED'; $('watch-pill').style.display = 'none'; }
-  } catch (e) {}
+  } catch (e) { showToast('watch 状态读取失败: ' + e.message); }
 }
 async function watchStart() {
   const iv = parseInt($('watch-interval').value) || 60;
-  try { await post('/api/watch/start', String(iv)); showToast('watch 已启动 (' + iv + 's)'); refreshWatch(); }
+  try { await post('/api/watch/start', String(iv)); showToast('watch 已启动 (' + Math.max(iv, 5) + 's)'); refreshWatch(); }
   catch (e) { showToast('启动失败'); }
 }
 async function watchStop() {
@@ -573,7 +590,7 @@ async function refreshProxy() {
     if (p.running && p.proxied) { st.className = 'status running'; stt.textContent = 'RUNNING'; $('proxy-desc').textContent = 'codex → 127.0.0.1:1800 → ' + p.relay; }
     else if (p.proxied) { st.className = 'status error'; stt.textContent = 'BROKEN'; $('proxy-desc').textContent = 'config 指向 1800 但 proxy 未运行'; }
     else { st.className = 'status'; stt.textContent = 'DIRECT'; $('proxy-desc').textContent = '直连 ' + (p.cfg_base || ''); }
-  } catch (e) {}
+  } catch (e) { $('proxy-desc').textContent = '状态读取失败: ' + e.message; }
 }
 async function proxyRestore() {
   try { const r = await fetch('/api/proxy/restore', { method: 'POST' }); const j = await r.json(); showToast(j.ok ? '配置已还原' : '没有需要还原的'); refreshStatus(); }
@@ -606,7 +623,7 @@ async function refreshRewriter() {
   try {
     const r = await get('/api/rewriter');
     const st = $('rw-status'), stt = $('rw-state-text');
-    if (!r.loaded) { st.className = 'status error'; stt.textContent = 'NO CONFIG'; $('rw-desc').textContent = '未找到 helmx.config.json'; $('rw-state-metric').textContent = 'NO CONFIG'; $('rw-desc-metric').textContent = '未找到配置'; }
+    if (!r.loaded) { st.className = 'status error'; stt.textContent = 'NO CONFIG'; $('rw-desc').textContent = '改写器配置加载失败'; $('rw-state-metric').textContent = 'NO CONFIG'; $('rw-desc-metric').textContent = '配置加载失败'; }
     else if (r.enabled) { st.className = 'status running'; stt.textContent = 'ON'; $('rw-desc').textContent = r.provider + ' · ' + r.model + ' · key ' + (r.key || '无'); $('rw-state-metric').textContent = 'ON'; $('rw-desc-metric').textContent = r.provider + ' · ' + r.model; }
     else { st.className = 'status'; stt.textContent = 'OFF'; $('rw-desc').textContent = '改写器关闭'; $('rw-state-metric').textContent = 'OFF'; $('rw-desc-metric').textContent = '已禁用'; }
   } catch (e) {}
@@ -631,6 +648,10 @@ async function loadRewriterConfig() {
       $('rw-cfg-model').value = r.model || '';
       $('rw-cfg-apikey').value = '';
       $('rw-cfg-baseurl').value = r.base_url || '';
+      $('rw-cfg-proxyurl').value = r.proxy_url || '';
+      $('rw-cfg-timeout').value = r.timeout_sec || 60;
+      $('rw-cfg-useproxy').value = r.use_proxy ? 'true' : 'false';
+      $('rw-cfg-apikey').placeholder = r.key ? '已配置，留空保留' : '输入 API Key';
       $('rw-toggle-status').textContent = r.enabled ? '已启用' : '已禁用';
       $('rw-toggle-status').style.color = r.enabled ? 'var(--success)' : 'var(--danger)';
     }
@@ -690,9 +711,10 @@ async function toggleRewriter(enable) {
 }
 
 /* ── Init ── */
-refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode();
+refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshWatch(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode();
 setInterval(refreshStatus, 5000);
 setInterval(refreshProxy, 3000);
+setInterval(refreshWatch, 5000);
 setInterval(refreshLog, 3000);
 </script>
 </body>
