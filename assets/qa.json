@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "updated_at": "2026-08-13",
+  "items": [
+    {
+      "question": "出现 no helmx.config.json 怎么办？",
+      "answer": "helmx.config.json 是可选配置。v0.0.7 会使用内置默认值；需要改写器时，在 WebUI 的“改写器”页面保存一次配置即可自动创建到 %APPDATA%\\helmx.config.json。"
+    },
+    {
+      "question": "为什么启动后提示 config has no base_url？",
+      "answer": "当前 Codex 供应商没有可用的 base_url。先在 Codex 或 CC Switch 中选好供应商，再重启 helm-x。"
+    },
+    {
+      "question": "为什么 Codex 的 config.toml 语法损坏？",
+      "answer": "先关闭正在运行的旧版 helm-x，使用最新版重新启动。最新版采用原子写入并校验 TOML，避免 URL 与下一节配置粘连。"
+    },
+    {
+      "question": "Context Gardener 如何配置？",
+      "answer": "进入 WebUI 的“上下文”页面，可设置启用状态、工具输出裁剪阈值、工具输出 token 上限、自动压缩阈值和计算范围。"
+    },
+    {
+      "question": "为什么日志一直刷 /api/zxwn？",
+      "answer": "这是旧版页面轮询产生的请求日志。最新版已对轮询接口降噪；关闭旧进程后再运行新版。"
+    }
+  ]
+}

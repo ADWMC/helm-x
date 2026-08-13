@@ -102,7 +102,7 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     if (content.empty()) {
         content = get_resource(ResId::RewriterBuiltin);
         if (!content.empty()) {
-            log_info("rewriter: using built-in config (no helmx.config.json)");
+            log_info("rewriter: config source=builtin");
         }
     }
 
@@ -111,7 +111,7 @@ bool load_rewriter_config(RewriterConfig& cfg) {
         // when a clean build has no optional embedded provider config.
         cfg.enabled = false;
         cfg.system_prompt = get_resource(ResId::RewritePrompt);
-        log_info("rewriter: using local-rule defaults (no helmx.config.json)");
+        log_info("rewriter: config source=local defaults");
         cached = cfg;
         cached_path = path;
         cached_mtime = mtime;
@@ -169,11 +169,19 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     if (!pu.empty()) cfg.proxy_url = pu;
     std::string prompt_mode = json_field(content, "prompt_mode");
     if (prompt_mode == "default" || prompt_mode == "v45") cfg.prompt_mode = prompt_mode;
+    std::string gardener_enabled = json_field(content, "context_gardener_enabled");
+    if (!gardener_enabled.empty()) cfg.context_gardener_enabled = gardener_enabled == "true";
+    std::string gardener_threshold = json_field(content, "context_gardener_threshold_bytes");
+    if (!gardener_threshold.empty()) {
+        int threshold = std::atoi(gardener_threshold.c_str());
+        if (threshold >= 1024 && threshold <= 16777216)
+            cfg.context_gardener_threshold_bytes = threshold;
+    }
 
     log_info(std::string("rewriter: ") + (cfg.enabled ? "enabled" : "disabled") +
              " model=" + cfg.model +
              " proxy=" + (cfg.use_proxy ? cfg.proxy_url : "direct") +
-             " key=" + (cfg.api_key.empty() ? "(none)" : cfg.api_key.substr(0, 8) + "..."));
+             " key=" + (cfg.api_key.empty() ? "none" : "configured"));
     cached = cfg;
     cached_path = path;
     cached_mtime = mtime;
@@ -189,6 +197,8 @@ bool save_rewriter_config(const RewriterConfig& cfg, std::string& path) {
     std::ofstream out(path, std::ios::trunc);
     if (!out) return false;
     out << "{\n  \"prompt_mode\": \"" << json_escape(cfg.prompt_mode) << "\",\n"
+        << "  \"context_gardener_enabled\": " << (cfg.context_gardener_enabled ? "true" : "false") << ",\n"
+        << "  \"context_gardener_threshold_bytes\": " << cfg.context_gardener_threshold_bytes << ",\n"
         << "  \"rewriter\": {\n"
         << "    \"enabled\": " << (cfg.enabled ? "true" : "false") << ",\n"
         << "    \"provider\": \"" << json_escape(cfg.provider) << "\",\n"

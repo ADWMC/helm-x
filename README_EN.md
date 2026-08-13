@@ -26,7 +26,9 @@ helm-x is a local mapping layer for Codex CLI: `codex → 127.0.0.1:1800 → ups
 1. **Context injection**: bridge.md establishes security research context, blocking cyber flag detection
 2. **TAMPER engine**: Refusal responses are rewritten as compliance markers
 3. **Context-aware rewriter**: Auto-rewrites requests when cyber flag triggers (with retry mechanism)
-4. **Zero dependencies**: Single exe, statically linked, Windows system libs only
+4. **Context Gardener**: Prunes oversized historical tool output and Base64 images before forwarding
+5. **Cloud-updatable QA**: Searchable WebUI help with GitHub updates and offline fallback
+6. **Zero dependencies**: Single exe, statically linked, Windows system libs only
 
 ---
 
@@ -115,6 +117,14 @@ helmx.exe
 helmx proxy --listen 1800          :: Local mapping
 helmx ui                           :: Web console
 ```
+
+### WebUI QA and Context Settings
+
+Open `http://127.0.0.1:8090`. The **QA Help** page provides searchable common
+errors and checks GitHub for updates, falling back to cached or embedded data.
+The **Context** page configures Context Gardener, tool-output limits, and Codex
+auto-compaction settings. Maintainers can add questions by editing
+[`assets/qa.json`](assets/qa.json); see [`docs/QA.md`](docs/QA.md).
 
 ### Verify
 

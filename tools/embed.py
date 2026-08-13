@@ -61,6 +61,7 @@ def main():
     agents_v45 = read('prompt-sandbox-executor.md')
     rules = read('tamper_rules.txt')
     dashboard = read('dashboard.html')
+    qa_json = read('qa.json')
     rewrite_prompt = read('rewrite_prompt.txt')
     rewriter_builtin = read('rewriter_builtin.json')
     if not rewriter_builtin:
@@ -115,6 +116,7 @@ def main():
     emit_var('kAgentsV45', agents_v45, KEY_SEED + 0x5000)
     emit_var('kTamperRules', rules, KEY_SEED + 0x1000)
     emit_var('kDashboardHtml', dashboard, KEY_SEED + 0x3000)
+    emit_var('kQaJson', qa_json, KEY_SEED + 0x7000)
     emit_var('kRewritePrompt', rewrite_prompt, KEY_SEED + 0x4000)
     emit_var('kRewriterBuiltin', rewriter_builtin, KEY_SEED + 0x6000)
 

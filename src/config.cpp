@@ -253,6 +253,105 @@ static bool has_model_provider_custom(const std::string& content) {
     return active_provider(content, provider) && provider == "custom";
 }
 
+static bool has_top_level_assignment(const std::string& content, const char* key) {
+    std::istringstream lines(content);
+    std::string line;
+    bool in_table = false;
+    const size_t key_len = std::strlen(key);
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') continue;
+        if (line[first] == '[') {
+            in_table = true;
+            continue;
+        }
+        if (in_table || line.compare(first, key_len, key) != 0) continue;
+        if (first + key_len < line.size() && line[first + key_len] != ' ' &&
+            line[first + key_len] != '\t' && line[first + key_len] != '=') continue;
+        return line.find('=', first + key_len) != std::string::npos;
+    }
+    return false;
+}
+
+static bool read_top_level_int_assignment(const std::string& content, const char* key, int& value) {
+    std::istringstream lines(content);
+    std::string line;
+    bool in_table = false;
+    const size_t key_len = std::strlen(key);
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first == std::string::npos || line[first] == '#') continue;
+        if (line[first] == '[') { in_table = true; continue; }
+        if (in_table || line.compare(first, key_len, key) != 0) continue;
+        if (first + key_len < line.size() && line[first + key_len] != ' ' &&
+            line[first + key_len] != '\t' && line[first + key_len] != '=') continue;
+        size_t eq = line.find('=', first + key_len);
+        if (eq == std::string::npos) continue;
+        try { value = std::stoi(line.substr(eq + 1)); return true; } catch (...) { return false; }
+    }
+    return false;
+}
+
+static bool replace_top_level_assignment(std::string& content, const char* key,
+                                         const std::string& value) {
+    size_t offset = 0;
+    std::istringstream lines(content);
+    std::string line;
+    bool in_table = false;
+    const size_t key_len = std::strlen(key);
+    while (std::getline(lines, line)) {
+        size_t first = line.find_first_not_of(" \t\r");
+        if (first != std::string::npos && line[first] == '[') in_table = true;
+        if (!in_table && first != std::string::npos && line[first] != '#' &&
+            line.compare(first, key_len, key) == 0 &&
+            (first + key_len == line.size() || line[first + key_len] == ' ' ||
+             line[first + key_len] == '\t' || line[first + key_len] == '=')) {
+            content.replace(offset, line.size(), std::string(key) + " = " + value);
+            return true;
+        }
+        offset += line.size() + 1;
+    }
+    return false;
+}
+
+static void inject_context_request_defaults(std::string& content) {
+    const char* eol = content.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+    std::string defaults;
+    if (!has_top_level_assignment(content, "tool_output_token_limit"))
+        defaults += std::string("tool_output_token_limit = 8000") + eol;
+    if (!has_top_level_assignment(content, "model_auto_compact_token_limit"))
+        defaults += std::string("model_auto_compact_token_limit = 180000") + eol;
+    if (!has_top_level_assignment(content, "model_auto_compact_token_limit_scope"))
+        defaults += std::string("model_auto_compact_token_limit_scope = \"body_after_prefix\"") + eol;
+    content.insert(0, defaults);
+}
+
+bool read_context_request_config(const std::string& home, ContextRequestConfig& cfg) {
+    std::string content;
+    if (!read_file(fs::path(home) / "config.toml", content)) return false;
+    read_top_level_int_assignment(content, "tool_output_token_limit", cfg.tool_output_token_limit);
+    read_top_level_int_assignment(content, "model_auto_compact_token_limit", cfg.model_auto_compact_token_limit);
+    read_top_level_string_assignment(content, "model_auto_compact_token_limit_scope",
+                                     cfg.model_auto_compact_token_limit_scope);
+    return true;
+}
+
+bool write_context_request_config(const std::string& home, const ContextRequestConfig& cfg) {
+    fs::path path = fs::path(home) / "config.toml";
+    std::string content;
+    if (!read_file(path, content) || !toml_valid_content(content)) return false;
+    const char* eol = content.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+    auto set = [&](const char* key, const std::string& value) {
+        if (!replace_top_level_assignment(content, key, value))
+            content.insert(0, std::string(key) + " = " + value + eol);
+    };
+    set("tool_output_token_limit", std::to_string(cfg.tool_output_token_limit));
+    set("model_auto_compact_token_limit", std::to_string(cfg.model_auto_compact_token_limit));
+    set("model_auto_compact_token_limit_scope",
+        "\"" + cfg.model_auto_compact_token_limit_scope + "\"");
+    return toml_valid_content(content) && atomic_write(path, content);
+}
+
 bool inject_config(const std::string& home) {
     fs::path cfg = fs::path(home) / "config.toml";
     if (!fs::exists(cfg)) {
@@ -276,6 +375,11 @@ bool inject_config(const std::string& home) {
         } else replace_string_assignment(content, "model_provider", "custom");
     }
 
+    // Keep Codex request history bounded before large tool observations make
+    // every subsequent Responses API request grow by several megabytes.
+    // Existing user values are authoritative and are never overwritten.
+    inject_context_request_defaults(content);
+
     return atomic_write(cfg, content);
 }
 
@@ -285,13 +389,19 @@ bool inject_config_proxy(const std::string& home, int port) {
 
     std::string content;
     if (!read_file(cfg, content) || !toml_valid_content(content)) return false;
+    const std::string original_content = content;
+
+    // Double-click startup reaches this path without requiring a prior `apply`.
+    inject_context_request_defaults(content);
 
     std::string current_url;
     std::string new_url = "http://127.0.0.1:" + std::to_string(port) + "/v1";
     std::string provider;
     if (!active_provider(content, provider) ||
         !provider_base_url(content, provider, current_url)) return false;
-    if (current_url == new_url) return true;
+    if (current_url == new_url) {
+        return content == original_content || atomic_write(cfg, content);
+    }
 
     // Refresh the restore point from each valid, non-proxy configuration.
     fs::path bak = cfg.string() + ".helmx-proxy-bak";
@@ -380,7 +490,10 @@ bool verify_injection(const std::string& home) {
     ss << f.rdbuf();
     std::string c = ss.str();
     // AGENTS.md is injected by the proxy; config state is the durable marker.
-    return has_model_provider_custom(c);
+    return has_model_provider_custom(c) &&
+           has_top_level_assignment(c, "tool_output_token_limit") &&
+           has_top_level_assignment(c, "model_auto_compact_token_limit") &&
+           has_top_level_assignment(c, "model_auto_compact_token_limit_scope");
 }
 
 bool deploy_agents(const std::string& home) {

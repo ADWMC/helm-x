@@ -397,6 +397,10 @@ static HttpResponse api_rewriter_save(const HttpRequest& req) {
     return HttpResponse::json("{\"ok\":true,\"path\":\"" + json_escape(path) + "\"}");
 }
 
+static HttpResponse api_qa(const HttpRequest&) {
+    return HttpResponse::json(get_resource(ResId::QaJson));
+}
+
 static HttpResponse api_rewriter_toggle(const HttpRequest& req) {
     if (req.body != "true" && req.body != "false")
         return HttpResponse::json("{\"error\":\"expected true or false\"}", 400);
@@ -436,6 +440,49 @@ static HttpResponse api_prompt_mode(const HttpRequest& req) {
 
     log_info("ui: prompt mode changed to " + mode);
     return HttpResponse::json("{\"ok\":true,\"mode\":\"" + mode + "\"}");
+}
+
+static HttpResponse api_context_get(const HttpRequest&) {
+    std::string home = find_codex_home();
+    ContextRequestConfig context;
+    if (home.empty() || !read_context_request_config(home, context))
+        return HttpResponse::json("{\"error\":\"config.toml not found\"}", 404);
+    RewriterConfig cfg;
+    load_rewriter_config(cfg);
+    return HttpResponse::json(
+        std::string("{\"enabled\":") + (cfg.context_gardener_enabled ? "true" : "false") +
+        ",\"threshold_bytes\":" + std::to_string(cfg.context_gardener_threshold_bytes) +
+        ",\"tool_output_token_limit\":" + std::to_string(context.tool_output_token_limit) +
+        ",\"auto_compact_token_limit\":" + std::to_string(context.model_auto_compact_token_limit) +
+        ",\"scope\":\"" + json_escape(context.model_auto_compact_token_limit_scope) + "\"}");
+}
+
+static HttpResponse api_context_save(const HttpRequest& req) {
+    std::string value;
+    RewriterConfig cfg;
+    load_rewriter_config(cfg);
+    ContextRequestConfig context;
+    std::string home = find_codex_home();
+    if (home.empty() || !read_context_request_config(home, context))
+        return HttpResponse::json("{\"error\":\"config.toml not found\"}", 404);
+    try {
+        if (json_value(req.body, "enabled", value)) cfg.context_gardener_enabled = value == "true";
+        if (json_value(req.body, "threshold_bytes", value)) cfg.context_gardener_threshold_bytes = std::stoi(value);
+        if (json_value(req.body, "tool_output_token_limit", value)) context.tool_output_token_limit = std::stoi(value);
+        if (json_value(req.body, "auto_compact_token_limit", value)) context.model_auto_compact_token_limit = std::stoi(value);
+    } catch (...) { return HttpResponse::json("{\"error\":\"invalid number\"}", 400); }
+    if (json_value(req.body, "scope", value)) context.model_auto_compact_token_limit_scope = value;
+    if (cfg.context_gardener_threshold_bytes < 1024 || cfg.context_gardener_threshold_bytes > 16777216 ||
+        context.tool_output_token_limit < 1000 || context.tool_output_token_limit > 100000 ||
+        context.model_auto_compact_token_limit < 10000 || context.model_auto_compact_token_limit > 1000000 ||
+        (context.model_auto_compact_token_limit_scope != "body_after_prefix" &&
+         context.model_auto_compact_token_limit_scope != "total"))
+        return HttpResponse::json("{\"error\":\"value out of range\"}", 400);
+    std::string path;
+    if (!save_rewriter_config(cfg, path) || !write_context_request_config(home, context))
+        return HttpResponse::json("{\"error\":\"failed to write config\"}", 500);
+    log_info("ui: context gardener config saved");
+    return HttpResponse::json("{\"ok\":true}");
 }
 
 static HttpResponse api_watch_status(const HttpRequest&) {
@@ -486,6 +533,7 @@ int ui_main(int argc, char** argv) {
         }
         if (req.method == "GET" && req.path == "/api/status") return api_status(req);
         if (req.method == "GET" && req.path == "/api/rules") return api_rules(req);
+        if (req.method == "GET" && req.path == "/api/qa") return api_qa(req);
         if (req.method == "GET" && req.path == "/api/verify") return api_verify(req);
         if (req.method == "GET" && req.path == "/api/zxwn") return api_zxwn(req);
         if (req.method == "POST" && req.path == "/api/zxwn/start") return api_zxwn_start(req);
@@ -497,6 +545,8 @@ int ui_main(int argc, char** argv) {
         if (req.method == "POST" && req.path == "/api/rewriter/toggle") return api_rewriter_toggle(req);
         if (req.method == "POST" && req.path == "/api/prompt-mode") return api_prompt_mode(req);
         if (req.method == "GET" && req.path == "/api/prompt-mode") return api_prompt_mode_get(req);
+        if (req.method == "GET" && req.path == "/api/context") return api_context_get(req);
+        if (req.method == "POST" && req.path == "/api/context") return api_context_save(req);
         if (req.method == "GET" && req.path == "/api/proxy") return api_proxy_status(req);
         if (req.method == "POST" && req.path == "/api/proxy/restore") return api_proxy_restore(req);
         if (req.method == "POST" && req.path == "/api/restart") return api_restart(req);

@@ -15,6 +15,8 @@ struct RewriterConfig {
     bool use_proxy = false;
     std::string proxy_url = "http://127.0.0.1:7897";  // HTTP proxy for upstream
     std::string prompt_mode = "default";
+    bool context_gardener_enabled = true;
+    int context_gardener_threshold_bytes = 32768;
 };
 
 // Load config from %APPDATA%/helmx.config.json.

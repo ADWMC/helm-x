@@ -32,6 +32,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -120,6 +121,181 @@ bool json_set_string(std::string& s, const std::string& key, const std::string& 
     if (vend >= s.size()) return false;
     s.replace(vstart, vend - vstart, esc);
     return true;
+}
+
+size_t json_string_end(const std::string& s, size_t quote) {
+    if (quote >= s.size() || s[quote] != '"') return std::string::npos;
+    bool escaped = false;
+    for (size_t i = quote + 1; i < s.size(); ++i) {
+        if (s[i] == '"' && !escaped) return i;
+        if (s[i] == '\\' && !escaped) escaped = true;
+        else escaped = false;
+    }
+    return std::string::npos;
+}
+
+size_t enclosing_object_start(const std::string& s, size_t pos) {
+    std::vector<size_t> objects;
+    for (size_t i = 0; i < pos && i < s.size(); ++i) {
+        if (s[i] == '"') {
+            size_t end = json_string_end(s, i);
+            if (end == std::string::npos || end >= pos) break;
+            i = end;
+        } else if (s[i] == '{') {
+            objects.push_back(i);
+        } else if (s[i] == '}' && !objects.empty()) {
+            objects.pop_back();
+        }
+    }
+    return objects.empty() ? std::string::npos : objects.back();
+}
+
+size_t matching_object_end(const std::string& s, size_t start) {
+    int depth = 0;
+    for (size_t i = start; i < s.size(); ++i) {
+        if (s[i] == '"') {
+            size_t end = json_string_end(s, i);
+            if (end == std::string::npos) return std::string::npos;
+            i = end;
+        } else if (s[i] == '{') {
+            ++depth;
+        } else if (s[i] == '}' && --depth == 0) {
+            return i;
+        }
+    }
+    return std::string::npos;
+}
+
+bool direct_string_member(const std::string& s, size_t object_start, size_t object_end,
+                          const char* key, size_t& value_start, size_t& value_end) {
+    int object_depth = 0;
+    int array_depth = 0;
+    const std::string wanted = key;
+    for (size_t i = object_start; i < object_end; ++i) {
+        if (s[i] == '{') { ++object_depth; continue; }
+        if (s[i] == '}') { --object_depth; continue; }
+        if (s[i] == '[') { ++array_depth; continue; }
+        if (s[i] == ']') { --array_depth; continue; }
+        if (s[i] != '"') continue;
+        size_t end = json_string_end(s, i);
+        if (end == std::string::npos || end > object_end) return false;
+        if (object_depth == 1 && array_depth == 0 &&
+            s.compare(i + 1, end - i - 1, wanted) == 0) {
+            size_t colon = s.find_first_not_of(" \t\r\n", end + 1);
+            if (colon == std::string::npos || colon >= object_end || s[colon] != ':') {
+                i = end;
+                continue;
+            }
+            size_t quote = s.find_first_not_of(" \t\r\n", colon + 1);
+            if (quote == std::string::npos || quote >= object_end || s[quote] != '"') {
+                i = end;
+                continue;
+            }
+            size_t close = json_string_end(s, quote);
+            if (close == std::string::npos || close > object_end) return false;
+            value_start = quote + 1;
+            value_end = close;
+            return true;
+        }
+        i = end;
+    }
+    return false;
+}
+
+bool direct_array_member(const std::string& s, size_t object_start, size_t object_end,
+                         const char* key, size_t& value_start, size_t& value_end) {
+    int object_depth = 0;
+    int array_depth = 0;
+    const std::string wanted = key;
+    for (size_t i = object_start; i < object_end; ++i) {
+        if (s[i] == '{') { ++object_depth; continue; }
+        if (s[i] == '}') { --object_depth; continue; }
+        if (s[i] == '[') { ++array_depth; continue; }
+        if (s[i] == ']') { --array_depth; continue; }
+        if (s[i] != '"') continue;
+        size_t end = json_string_end(s, i);
+        if (end == std::string::npos || end > object_end) return false;
+        if (object_depth == 1 && array_depth == 0 &&
+            s.compare(i + 1, end - i - 1, wanted) == 0) {
+            size_t colon = s.find_first_not_of(" \t\r\n", end + 1);
+            size_t start = colon == std::string::npos ? std::string::npos :
+                           s.find_first_not_of(" \t\r\n", colon + 1);
+            if (colon == std::string::npos || colon >= object_end || s[colon] != ':' ||
+                start == std::string::npos || start >= object_end || s[start] != '[') {
+                i = end;
+                continue;
+            }
+            int depth = 0;
+            for (size_t j = start; j < object_end; ++j) {
+                if (s[j] == '"') {
+                    size_t string_end = json_string_end(s, j);
+                    if (string_end == std::string::npos) return false;
+                    j = string_end;
+                } else if (s[j] == '[') {
+                    ++depth;
+                } else if (s[j] == ']' && --depth == 0) {
+                    value_start = start;
+                    value_end = j + 1;
+                    return true;
+                }
+            }
+            return false;
+        }
+        i = end;
+    }
+    return false;
+}
+
+// Context Gardener's useful core belongs at the shared request boundary: old,
+// oversized tool observations are replaced before Codex sends them again.
+// Current input_image items are deliberately untouched.
+std::string prune_large_tool_outputs(const std::string& body, size_t threshold_bytes,
+                                     size_t* pruned_count = nullptr,
+                                     size_t* removed_bytes = nullptr) {
+    struct Replacement { size_t start; size_t length; std::string value; };
+    std::vector<Replacement> replacements;
+    size_t search = 0;
+    while ((search = body.find("\"type\"", search)) != std::string::npos) {
+        size_t colon = body.find_first_not_of(" \t\r\n", search + 6);
+        if (colon == std::string::npos || body[colon] != ':') { search += 6; continue; }
+        size_t quote = body.find_first_not_of(" \t\r\n", colon + 1);
+        if (quote == std::string::npos || body[quote] != '"') { search += 6; continue; }
+        size_t type_end = json_string_end(body, quote);
+        if (type_end == std::string::npos) break;
+        std::string type = body.substr(quote + 1, type_end - quote - 1);
+        search = type_end + 1;
+        if (type != "function_call_output" && type != "custom_tool_call_output") continue;
+
+        size_t object_start = enclosing_object_start(body, quote);
+        size_t object_end = object_start == std::string::npos ? std::string::npos :
+                            matching_object_end(body, object_start);
+        if (object_end == std::string::npos) continue;
+        size_t value_start = 0, value_end = 0;
+        bool string_output = direct_string_member(body, object_start, object_end, "output",
+                                                  value_start, value_end);
+        if (!string_output && !direct_array_member(body, object_start, object_end, "output",
+                                                   value_start, value_end)) continue;
+        const size_t bytes = value_end - value_start;
+        const bool binary_like = body.find(";base64,", value_start) < value_end ||
+                                 body.find("data:image/", value_start) < value_end;
+        if (bytes <= threshold_bytes && !binary_like) continue;
+        std::string marker = "[helm-x context guard: oversized tool output omitted; original_bytes=" +
+                             std::to_string(bytes) + "]";
+        if (!string_output) {
+            marker = "[{\"type\":\"input_text\",\"text\":\"" + marker + "\"}]";
+        }
+        replacements.push_back({value_start, bytes, marker});
+    }
+
+    size_t removed = 0;
+    std::string out = body;
+    for (auto it = replacements.rbegin(); it != replacements.rend(); ++it) {
+        out.replace(it->start, it->length, it->value);
+        removed += it->length - it->value.size();
+    }
+    if (pruned_count) *pruned_count = replacements.size();
+    if (removed_bytes) *removed_bytes = removed;
+    return out;
 }
 
 // Extract the last real user message text from a Responses API body.
@@ -394,8 +570,11 @@ std::string inject_request(const std::string& body, const std::string& agents, b
 
 // ── WinHTTP upstream call ──
 // Returns HTTP status and response body.
+using ForwardHeader = std::pair<std::string, std::string>;
+
 bool upstream_post(const std::string& path, const std::string& body,
-                   const std::string& auth, int& status, std::string& resp) {
+                   const std::string& auth, const std::vector<ForwardHeader>& forwarded,
+                   int& status, std::string& resp) {
     std::string host;
     int port = 443;
     std::string prefix;
@@ -428,10 +607,20 @@ bool upstream_post(const std::string& path, const std::string& body,
         hdrs += L"\r\n";
     }
     log_info(std::string("upstream: ") + host + ":" + std::to_string(port) + path +
-             " auth=" + (auth.empty() ? "(none)" : auth.substr(0, 20) + "...") +
+             " auth=" + (auth.empty() ? "none" : "configured") +
              " body=" + std::to_string(body.size()) + "B");
-    hdrs += L"User-Agent: codex_exec/0.146.0 (Windows 10.0.26100; x86_64) xterm-256color (codex_exec; 0.146.0)\r\n";
-    hdrs += L"Originator: codex_exec\r\n";
+    bool has_user_agent = false, has_originator = false;
+    for (const auto& header : forwarded) {
+        if (header.second.find('\r') != std::string::npos || header.second.find('\n') != std::string::npos) continue;
+        std::wstring name(header.first.begin(), header.first.end());
+        std::wstring value(header.second.begin(), header.second.end());
+        hdrs += name + L": " + value + L"\r\n";
+        has_user_agent = has_user_agent || header.first == "User-Agent";
+        has_originator = has_originator || header.first == "Originator";
+    }
+    if (!has_user_agent)
+        hdrs += L"User-Agent: codex_exec/0.146.0 (Windows 10.0.26100; x86_64) xterm-256color (codex_exec; 0.146.0)\r\n";
+    if (!has_originator) hdrs += L"Originator: codex_exec\r\n";
 
     BOOL ok = WinHttpSendRequest(hRequest, hdrs.c_str(), (DWORD)hdrs.size(),
                                  (LPVOID)body.data(), (DWORD)body.size(),
@@ -505,6 +694,7 @@ void handle_client(SOCKET client) {
     // headers
     std::string auth;
     std::string content_type;
+    std::vector<ForwardHeader> forwarded;
     size_t content_length = 0;
     std::string line;
     std::getline(hss, line);
@@ -520,6 +710,16 @@ void handle_client(SOCKET client) {
         for (auto& c : k) c = (char)std::tolower((unsigned char)c);
         if (k == "authorization") auth = v;
         else if (k == "content-type") content_type = v;
+        else if (k == "session-id" || k == "session_id" || k == "thread-id" ||
+                 k == "x-client-request-id" || k == "x-codex-installation-id" ||
+                 k == "x-codex-window-id" || k == "x-codex-turn-metadata" ||
+                 k == "user-agent" || k == "originator") {
+            std::string name = k;
+            for (auto& c : name) c = (char)std::tolower((unsigned char)c);
+            if (k == "user-agent") name = "User-Agent";
+            else if (k == "originator") name = "Originator";
+            forwarded.emplace_back(name, v);
+        }
         else if (k == "content-length") {
             char* end = nullptr;
             unsigned long long parsed = std::strtoull(v.c_str(), &end, 10);
@@ -566,7 +766,17 @@ void handle_client(SOCKET client) {
         log_info("proxy: using default prompt (helm-x)");
     }
     bool injected = false;
-    std::string out_body = inject_request(body, agents, &injected);
+    size_t pruned_count = 0;
+    size_t removed_bytes = 0;
+    std::string guarded_body = rcfg.context_gardener_enabled
+        ? prune_large_tool_outputs(body, (size_t)rcfg.context_gardener_threshold_bytes,
+                                   &pruned_count, &removed_bytes)
+        : body;
+    if (pruned_count > 0) {
+        log_info("context-guard: pruned " + std::to_string(pruned_count) +
+                 " tool output(s), removed " + std::to_string(removed_bytes) + "B");
+    }
+    std::string out_body = inject_request(guarded_body, agents, &injected);
     log_info(std::string("proxy: ") + method + " " + target +
              (injected ? " [INJECT] " : " [no-inject] ") +
              std::to_string(body.size()) + "B -> " + std::to_string(out_body.size()) + "B");
@@ -574,7 +784,7 @@ void handle_client(SOCKET client) {
     // upstream call (attempt 1: as-is)
     int status = 502;
     std::string resp_body;
-    bool ok = upstream_post(target, out_body, auth, status, resp_body);
+    bool ok = upstream_post(target, out_body, auth, forwarded, status, resp_body);
     log_info(std::string("proxy: upstream ") + std::to_string(status) +
              " (" + std::to_string(resp_body.size()) + "B)");
     // Debug: log first 300 bytes of response to diagnose TAMPER matching
@@ -676,7 +886,7 @@ void handle_client(SOCKET client) {
 
                 int status2 = 502;
                 std::string resp2;
-                bool ok2 = upstream_post(target, clean_body, auth, status2, resp2);
+                bool ok2 = upstream_post(target, clean_body, auth, forwarded, status2, resp2);
                 log_info("proxy: clean-session upstream " + std::to_string(status2) +
                          " (" + std::to_string(resp2.size()) + "B)");
 
@@ -702,7 +912,7 @@ void handle_client(SOCKET client) {
                          std::to_string(clean_body.size()) + "B");
                 int status2 = 502;
                 std::string resp2;
-                bool ok2 = upstream_post(target, clean_body, auth, status2, resp2);
+                bool ok2 = upstream_post(target, clean_body, auth, forwarded, status2, resp2);
                 if (ok2 && !is_cyber_flag(status2, resp2)) {
                     ok = ok2;
                     status = status2;
@@ -732,7 +942,7 @@ void handle_client(SOCKET client) {
             log_info("proxy: cyber detected, forking clean session (no rewrite)");
             int status2 = 502;
             std::string resp2;
-            bool ok2 = upstream_post(target, clean_body, auth, status2, resp2);
+            bool ok2 = upstream_post(target, clean_body, auth, forwarded, status2, resp2);
             if (ok2 && !is_cyber_flag(status2, resp2)) {
                 ok = ok2;
                 status = status2;
@@ -752,6 +962,20 @@ void handle_client(SOCKET client) {
     // TAMPER: rewrite refusals in the response body.
     // Supports both JSON responses (output_text/text fields) and SSE streams.
     std::string final_body = resp_body;
+    size_t first = final_body.find_first_not_of(" \t\r\n");
+    bool invalid_error_body = status < 200 || status >= 300
+                           ? first == std::string::npos || final_body[first] != '{'
+                           : false;
+    if (!ok || final_body.empty() || invalid_error_body) {
+        int upstream_status = status;
+        if (!ok || (status >= 200 && status < 300)) status = 502;
+        final_body = "{\"error\":{\"message\":\"Upstream request failed (HTTP " +
+                     std::to_string(upstream_status) +
+                     "). Retry the request.\",\"type\":\"upstream_error\","
+                     "\"code\":\"upstream_response_error\"}}";
+        content_type = "application/json";
+        log_error("proxy: normalized invalid upstream response as JSON error");
+    }
     bool tampered = false;
     if (ok && !final_body.empty()) {
         // Try JSON field extraction first
@@ -837,7 +1061,7 @@ void handle_client(SOCKET client) {
                     log_info("proxy: TAMPER retry with clean session");
                     int status_retry = 502;
                     std::string resp_retry;
-                    bool ok_retry = upstream_post(target, retry_body, auth, status_retry, resp_retry);
+                    bool ok_retry = upstream_post(target, retry_body, auth, forwarded, status_retry, resp_retry);
                     if (ok_retry && !is_refusal(resp_retry) && !is_cyber_flag(status_retry, resp_retry)) {
                         log_info("proxy: TAMPER retry succeeded");
                         final_body = resp_retry;

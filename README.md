@@ -28,7 +28,9 @@ helm-x 是 Codex CLI 的本地映射层：`codex → 127.0.0.1:1800 → 上游�
 2. **TAMPER 篡改**：拒绝响应被检测到时改写为合规标记（支持 SSE 流式 + 自动重试）
 3. **上下文感知改写器**：cyber flag 触发时自动改写请求（读取对话历史 + 重试机制）
 4. **内置免费改写 API**：开箱即用，无需额外配置
-5. **零依赖**：单 exe 静态链接，仅 Windows 系统库
+5. **Context Gardener**：自动裁剪历史大型工具输出和 Base64 图片，减少重复上下文请求
+6. **云更新 QA**：WebUI 内置常见问题，支持从 GitHub 更新并离线回退
+7. **零依赖**：单 exe 静态链接，仅 Windows 系统库
 
 ---
 
@@ -123,6 +125,28 @@ Web 控制台 → 提示词页面 → 选择模式 → 重启 proxy。
 
 Web 控制台 → 运行日志 → Cyber 日志 + 代理日志。
 
+### 六、上下文压缩
+
+Web 控制台 → 上下文，可配置：
+
+- 是否启用 Context Gardener
+- 历史工具输出裁剪阈值
+- `tool_output_token_limit`
+- `model_auto_compact_token_limit`
+- 压缩计算范围
+
+默认在 180K token 触发自动压缩，超过 32KB 的历史工具输出会在转发前裁剪。
+
+### 七、QA 帮助
+
+首次打开 WebUI 会询问是否查看 QA。QA 页面支持搜索和“检查更新”：
+
+1. 优先读取 GitHub `master/assets/qa.json`
+2. GitHub 请求失败时读取浏览器缓存
+3. 缓存也不存在时使用 EXE 内置 QA
+
+QA 内容维护方法见 [docs/QA.md](docs/QA.md)。
+
 ---
 
 ## 改写器
@@ -163,6 +187,7 @@ assets/
   tamper_rules.txt            28 条拒绝句式
   rewrite_prompt.txt          改写器系统提示词
   rewriter_builtin.json       内置改写 API 配置
+  qa.json                     WebUI QA 云更新数据
   dashboard.html              Web 控制台
 ```
 

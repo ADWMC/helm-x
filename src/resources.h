@@ -11,6 +11,7 @@ enum class ResId {
     AgentsV45,      // v45 prompt (gpt-5.6-instruct)
     TamperRules,    // TAMPER_RULES pattern list
     DashboardHtml,  // embedded web dashboard
+    QaJson,         // offline QA fallback
     SkillsIndex,    // skills manifest (name -> content)
     RewritePrompt,  // rewriter system prompt
     RewriterBuiltin, // built-in rewriter config (free, not in git)

@@ -28,6 +28,11 @@ extern const size_t kDashboardHtmlCipherLen;
 extern const unsigned char kDashboardHtmlKey[];
 extern const size_t kDashboardHtmlKeyLen;
 
+extern const unsigned char kQaJsonCipher[];
+extern const size_t kQaJsonCipherLen;
+extern const unsigned char kQaJsonKey[];
+extern const size_t kQaJsonKeyLen;
+
 extern const unsigned char kRewritePromptCipher[];
 extern const size_t kRewritePromptCipherLen;
 extern const unsigned char kRewritePromptKey[];
@@ -71,6 +76,8 @@ std::string get_resource(ResId id) {
             return xor_decrypt(kTamperRulesCipher, kTamperRulesCipherLen, kTamperRulesKey, kTamperRulesKeyLen);
         case ResId::DashboardHtml:
             return xor_decrypt(kDashboardHtmlCipher, kDashboardHtmlCipherLen, kDashboardHtmlKey, kDashboardHtmlKeyLen);
+        case ResId::QaJson:
+            return xor_decrypt(kQaJsonCipher, kQaJsonCipherLen, kQaJsonKey, kQaJsonKeyLen);
         case ResId::RewritePrompt:
             return xor_decrypt(kRewritePromptCipher, kRewritePromptCipherLen, kRewritePromptKey, kRewritePromptKeyLen);
         case ResId::RewriterBuiltin:

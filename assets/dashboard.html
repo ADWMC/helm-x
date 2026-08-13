@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>helm-x 控制台 · v0.0.6</title>
+<title>helm-x 控制台 · v0.0.7</title>
 <style>
 /* ── Design tokens (from SHVMP) ── */
 :root {
@@ -193,6 +193,15 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
 /* ── Views ── */
 .view { display: none; }
 .view.active { display: block; animation: view-in 260ms var(--ease-standard) both; }
+.qa-list { display: grid; gap: 10px; }
+.qa-item { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg); }
+.qa-item summary { padding: 14px 16px; cursor: pointer; font-weight: 600; }
+.qa-answer { padding: 0 16px 16px; color: var(--fg-2); line-height: 1.7; white-space: pre-wrap; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.44); }
+.modal-backdrop[hidden] { display: none; }
+.modal { width: min(440px, 100%); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.24); padding: 22px; }
+.modal h2 { margin: 0 0 8px; font-size: var(--text-xl); }
+.modal p { margin: 0 0 20px; color: var(--muted); line-height: 1.6; }
 @keyframes view-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── Responsive ── */
@@ -237,9 +246,11 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
       <p class="nav-label">概览</p>
       <button class="nav-button active" data-view="dashboard"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span>系统总览</button>
       <button class="nav-button" data-view="verify"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>自检</button>
+      <button class="nav-button" data-view="qa"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 1 1 3.6 2.1c-.8.4-1.3 1-1.3 1.9M12 17h.01"/></svg></span>QA 帮助</button>
       <p class="nav-label">配置</p>
       <button class="nav-button" data-view="services"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="4"/></svg></span>服务</button>
       <button class="nav-button" data-view="prompt"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>提示词</button>
+      <button class="nav-button" data-view="context"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M7 12h10M10 18h4"/></svg></span>上下文</button>
       <button class="nav-button" data-view="rewriter"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9"/></svg></span>改写器</button>
       <p class="nav-label">调试</p>
       <button class="nav-button" data-view="rules"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg></span>规则</button>
@@ -249,7 +260,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
     <div class="nav-spacer"></div>
     <div class="sidebar-foot">
       <span class="path-tag">~/.codex</span>
-      <span class="version-tag">v0.0.6</span>
+      <span class="version-tag">v0.0.7</span>
     </div>
   </aside>
 
@@ -264,7 +275,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
         <span class="system-status" id="proxy-pill"><span class="status-dot" id="proxy-pill-dot"></span><span id="proxy-pill-text">检测中</span></span>
 
         <span class="system-status" id="watch-pill" style="display:none"><span class="status-dot" id="watch-dot"></span><span id="watch-text">watch</span></span>
-        <span class="version-tag">v0.0.6</span>
+        <span class="version-tag">v0.0.7</span>
       </div>
     </div>
 
@@ -375,6 +386,37 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
         </div>
       </section>
 
+      <section class="view" id="view-context">
+        <div class="page-heading"><div><h1>上下文</h1><p>Context Gardener 与 Codex 请求压缩设置。</p></div></div>
+        <div class="panel">
+          <div class="panel-head"><h2>Context Gardener</h2><span>实时保存到配置</span></div>
+          <div class="panel-body">
+            <div class="field-grid">
+              <div class="field"><label>启用裁剪</label><select class="select" id="ctx-enabled"><option value="true">启用</option><option value="false">禁用</option></select></div>
+              <div class="field"><label>工具输出裁剪阈值（字节）</label><input class="input" id="ctx-threshold" type="number" min="1024" max="16777216"></div>
+              <div class="field"><label>工具输出 token 上限</label><input class="input" id="ctx-output-limit" type="number" min="1000" max="100000"></div>
+              <div class="field"><label>自动压缩阈值（token）</label><input class="input" id="ctx-compact-limit" type="number" min="10000" max="1000000"></div>
+              <div class="field"><label>压缩计算范围</label><select class="select" id="ctx-scope"><option value="body_after_prefix">body_after_prefix</option><option value="total">total</option></select></div>
+            </div>
+            <div class="actions" style="margin-top:18px"><button class="btn primary" onclick="saveContextConfig()">保存上下文配置</button><button class="btn secondary" onclick="loadContextConfig()">重新加载</button></div>
+            <p style="margin-top:14px;color:var(--muted);font-size:12px">历史工具输出超过阈值时会在发往上游前被替换；当前请求中的图片不裁剪。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-qa">
+        <div class="page-heading"><div><h1>QA 帮助</h1><p>常见错误和处理办法，可从 GitHub 自动更新。</p></div>
+          <div class="actions"><button class="btn secondary" onclick="loadQa(true)">检查更新</button></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>问题列表</h2><span id="qa-source">加载中</span></div>
+          <div class="panel-body">
+            <input class="input" id="qa-search" placeholder="搜索错误、配置或功能" oninput="renderQa(this.value)" style="width:100%;margin-bottom:14px">
+            <div class="qa-list" id="qa-list"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Rewriter ── -->
       <section class="view" id="view-rewriter">
         <div class="page-heading"><div><h1>改写器</h1><p>配置消息改写 API。</p></div>
@@ -431,6 +473,13 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
 </div>
 
 <div class="toast" id="toast" hidden><span id="toast-message">操作已完成</span></div>
+<div class="modal-backdrop" id="qa-welcome" hidden role="dialog" aria-modal="true" aria-labelledby="qa-welcome-title">
+  <div class="modal">
+    <h2 id="qa-welcome-title">你遇到了错误，是否查看 QA？</h2>
+    <p>这里整理了常见错误和处理方法，内容可从 GitHub 更新。</p>
+    <div class="actions"><button class="btn primary" onclick="answerQaWelcome(true)">A. 是的</button><button class="btn secondary" onclick="answerQaWelcome(false)">B. 好的</button></div>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -466,6 +515,48 @@ async function request(path, options) {
 async function get(path) { return request(path); }
 async function post(path, body) { return request(path, { method: 'POST', body: body || '' }); }
 function showToast(msg) { const t = $('toast'); $('toast-message').textContent = msg; t.hidden = false; setTimeout(() => t.hidden = true, 2400); }
+function openView(name) { const button = document.querySelector('[data-view="' + name + '"]'); if (button) button.click(); }
+
+const QA_REMOTE = 'https://raw.githubusercontent.com/ADWMC/helm-x/master/assets/qa.json';
+let qaItems = [];
+function validQa(data) { return data && Array.isArray(data.items) && data.items.every(x => typeof x.question === 'string' && typeof x.answer === 'string'); }
+async function fetchQa(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try { const r = await fetch(url, { cache: 'no-store', signal: controller.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
+  finally { clearTimeout(timer); }
+}
+async function loadQa(manual) {
+  let data, source = '内置';
+  try {
+    data = await fetchQa(QA_REMOTE + '?t=' + Date.now(), 4000);
+    if (!validQa(data)) throw new Error('格式错误');
+    localStorage.setItem('helmx-qa-cache', JSON.stringify(data));
+    source = 'GitHub · ' + (data.updated_at || '最新');
+  } catch (e) {
+    try { data = JSON.parse(localStorage.getItem('helmx-qa-cache') || 'null'); if (validQa(data)) source = '缓存 · ' + (data.updated_at || ''); else data = null; } catch (_) { data = null; }
+    if (!data) { data = await get('/api/qa'); source = '内置 · ' + (data.updated_at || ''); }
+    if (manual) showToast('GitHub 更新失败，已使用' + source);
+  }
+  qaItems = data.items;
+  $('qa-source').textContent = source + ' · ' + qaItems.length + ' 项';
+  renderQa($('qa-search').value);
+  if (manual && source.startsWith('GitHub')) showToast('QA 已更新');
+}
+function renderQa(query) {
+  const box = $('qa-list');
+  const keyword = String(query || '').trim().toLowerCase();
+  const items = qaItems.filter(x => !keyword || (x.question + ' ' + x.answer).toLowerCase().includes(keyword));
+  box.replaceChildren();
+  if (!items.length) { const empty = document.createElement('div'); empty.className = 'qa-answer'; empty.textContent = '没有匹配的问题'; box.appendChild(empty); return; }
+  items.forEach(item => {
+    const details = document.createElement('details'); details.className = 'qa-item';
+    const summary = document.createElement('summary'); summary.textContent = item.question;
+    const answer = document.createElement('div'); answer.className = 'qa-answer'; answer.textContent = item.answer;
+    details.append(summary, answer); box.appendChild(details);
+  });
+}
+function answerQaWelcome(openQa) { $('qa-welcome').hidden = true; sessionStorage.setItem('helmx-qa-welcome', '1'); if (openQa) openView('qa'); }
 
 /* ── Status ── */
 async function refreshStatus() {
@@ -697,6 +788,26 @@ async function switchPromptMode(mode) {
     }
   } catch (e) { showToast('请求失败: ' + e.message); }
 }
+async function loadContextConfig() {
+  try {
+    const r = await get('/api/context');
+    $('ctx-enabled').value = r.enabled ? 'true' : 'false';
+    $('ctx-threshold').value = r.threshold_bytes;
+    $('ctx-output-limit').value = r.tool_output_token_limit;
+    $('ctx-compact-limit').value = r.auto_compact_token_limit;
+    $('ctx-scope').value = r.scope;
+  } catch (e) { showToast('上下文配置读取失败: ' + e.message); }
+}
+async function saveContextConfig() {
+  try {
+    const r = await request('/api/context', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
+      enabled: $('ctx-enabled').value === 'true', threshold_bytes: parseInt($('ctx-threshold').value),
+      tool_output_token_limit: parseInt($('ctx-output-limit').value), auto_compact_token_limit: parseInt($('ctx-compact-limit').value),
+      scope: $('ctx-scope').value
+    })});
+    showToast(r.ok ? '上下文配置已保存' : '保存失败');
+  } catch (e) { showToast('保存失败: ' + e.message); }
+}
 async function toggleRewriter(enable) {
   try {
     const resp = await fetch('/api/rewriter/toggle', { method: 'POST', headers: {'Content-Type': 'text/plain'}, body: enable ? 'true' : 'false' });
@@ -711,7 +822,8 @@ async function toggleRewriter(enable) {
 }
 
 /* ── Init ── */
-refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshWatch(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode();
+refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshWatch(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode(); loadContextConfig(); loadQa(false);
+if (!sessionStorage.getItem('helmx-qa-welcome')) $('qa-welcome').hidden = false;
 setInterval(refreshStatus, 5000);
 setInterval(refreshProxy, 3000);
 setInterval(refreshWatch, 5000);

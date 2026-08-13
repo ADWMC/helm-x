@@ -44,6 +44,28 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue((self.codex_home / "config.toml.helmx-bak").exists())
 
+    def test_apply_injects_context_request_defaults(self):
+        self._run("apply")
+        text = self.cfg.read_text(encoding="utf-8")
+        self.assertIn("tool_output_token_limit = 8000", text)
+        self.assertIn("model_auto_compact_token_limit = 180000", text)
+        self.assertIn('model_auto_compact_token_limit_scope = "body_after_prefix"', text)
+
+    def test_apply_preserves_existing_context_request_settings(self):
+        self.cfg.write_text(
+            'tool_output_token_limit = 12000\n'
+            'model_auto_compact_token_limit = 150000\n'
+            'model_auto_compact_token_limit_scope = "total"\n' +
+            self.cfg.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        self._run("apply")
+        text = self.cfg.read_text(encoding="utf-8")
+        self.assertEqual(text.count("tool_output_token_limit"), 1)
+        self.assertIn("tool_output_token_limit = 12000", text)
+        self.assertIn("model_auto_compact_token_limit = 150000", text)
+        self.assertIn('model_auto_compact_token_limit_scope = "total"', text)
+
     def test_apply_keeps_mcp_servers_user_managed(self):
         self._run("apply")
         text = (self.codex_home / "config.toml").read_text(encoding="utf-8")
@@ -70,7 +92,7 @@ class TestConfig(unittest.TestCase):
         original = self.cfg.read_text(encoding="utf-8")
         self._run("apply")
         modified = self.cfg.read_text(encoding="utf-8")
-        self.assertEqual(modified, original)
+        self.assertNotEqual(modified, original)
         self._run("remove")
         restored = self.cfg.read_text(encoding="utf-8")
         self.assertEqual(restored, original)
@@ -160,10 +182,14 @@ class TestConfig(unittest.TestCase):
             proc.communicate()
 
         if backup.exists():
-            self.assertEqual(backup.read_text(encoding="utf-8"), original)
+            backed_up = backup.read_text(encoding="utf-8")
+            self.assertIn('base_url = "https://example.com/v1"', backed_up)
+            self.assertIn("tool_output_token_limit = 8000", backed_up)
             rc, out = self._run("proxy", ["--restore"])
             self.assertEqual(rc, 0, out)
-        self.assertEqual(self.cfg.read_text(encoding="utf-8"), original)
+        restored = self.cfg.read_text(encoding="utf-8")
+        self.assertIn('base_url = "https://example.com/v1"', restored)
+        self.assertIn("tool_output_token_limit = 8000", restored)
 
     def test_proxy_preserves_following_line_when_url_lengths_change(self):
         self.cfg.write_text(
@@ -190,7 +216,10 @@ class TestConfig(unittest.TestCase):
         if backup.exists():
             rc, out = self._run("proxy", ["--restore"])
             self.assertEqual(rc, 0, out)
-        self.assertEqual(self.cfg.read_text(encoding="utf-8"), original)
+        restored = self.cfg.read_text(encoding="utf-8")
+        self.assertIn('base_url = "https://a.co/v1"', restored)
+        self.assertIn('[desktop]\nfollowUpQueueMode = "queue"', restored)
+        self.assertIn("tool_output_token_limit = 8000", restored)
 
 
 if __name__ == "__main__":

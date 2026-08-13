@@ -194,6 +194,7 @@ static void handle_conn(SOCKET client, HttpHandler& handler) {
                       req.path == "/api/log" || req.path == "/api/rules" ||
                       req.path == "/api/proxy" || req.path == "/api/rewriter" ||
                       req.path == "/api/prompt-mode" || req.path == "/api/cyber-log" ||
+                      req.path == "/api/zxwn" ||
                       req.path == "/" || req.path == "/index.html");
         bool error = resp.status >= 400;
         if (!noisy || error) {
