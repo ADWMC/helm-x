@@ -19,10 +19,10 @@ struct RewriterConfig {
     int context_gardener_threshold_bytes = 32768;
 };
 
-// Load config from %APPDATA%/helmx.config.json.
+// Load config from %APPDATA%/helmx-claudecode.config.json.
 bool load_rewriter_config(RewriterConfig& cfg);
 
-// Save all user-editable settings to %APPDATA%/helmx.config.json.
+// Save all user-editable settings to %APPDATA%/helmx-claudecode.config.json.
 bool save_rewriter_config(const RewriterConfig& cfg, std::string& path);
 
 // Rewrite a user message through the configured LLM.

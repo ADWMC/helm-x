@@ -112,8 +112,8 @@ def main():
         lines.append(c_array(name + 'Key', key))
         lines.append('')
 
-    emit_var('kAgentsMd', agents, KEY_SEED)
-    emit_var('kAgentsV45', agents_v45, KEY_SEED + 0x5000)
+    emit_var('kPromptDefault', agents, KEY_SEED)
+    emit_var('kPromptSandbox', agents_v45, KEY_SEED + 0x5000)
     emit_var('kTamperRules', rules, KEY_SEED + 0x1000)
     emit_var('kDashboardHtml', dashboard, KEY_SEED + 0x3000)
     emit_var('kQaJson', qa_json, KEY_SEED + 0x7000)

@@ -1,168 +1,53 @@
-# 架构图
+# Architecture
 
-## 整体架构
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Codex CLI                               │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  ~/.codex/config.toml                               │    │
-│  │  base_url = http://127.0.0.1:1800/v1               │    │
-│  └─────────────────────────────────────────────────────┘    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP/HTTPS
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    helm-x proxy (:1800)                      │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  1. 接收 codex 请求                                  │    │
-│  │  2. 注入 AGENTS (bridge.md)                         │    │
-│  │  3. 转发到上游                                       │    │
-│  │  4. 检测响应                                        │    │
-│  │     ├─ 正常 → 返回给 codex                          │    │
-│  │     ├─ 拒绝 → TAMPER 改写 → 返回                    │    │
-│  │     └─ cyber flag → 改写器 → clean session → 重发   │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  改写器       │  │  TAMPER 引擎  │  │  资源解密层   │      │
-│  │  (NVIDIA/本地) │  │  (正则匹配)   │  │  (XOR 解密)  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTPS
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    上游 API 中转                              │
-│  (huablog.xyz / OpenAI / 任意兼容 API)                      │
-└─────────────────────────────────────────────────────────────┘
+```text
+Claude Code
+  ~/.claude/settings.json
+  ANTHROPIC_BASE_URL=http://127.0.0.1:1800
+             |
+             v
+helm-x proxy
+  1. parse Anthropic Messages API request
+  2. prune oversized historical tool_result content
+  3. prepend the embedded Claude system prompt
+  4. forward Anthropic headers and request body
+  5. inspect the buffered JSON or SSE response
+             |
+             v
+Anthropic API relay
 ```
 
-## 请求流程
+## Components
 
-```
-codex 请求
-    │
-    ▼
-┌─────────────────┐
-│  接收请求        │
-│  解析 JSON       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  注入 AGENTS     │  ← bridge.md 内容
-│  (system message)│
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  转发到上游      │
-│  (WinHTTP)       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  检测响应        │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌───────┐ ┌───────┐
-│ 正常   │ │ 异常   │
-└───┬───┘ └───┬───┘
-    │         │
-    │    ┌────┴────┐
-    │    │         │
-    │    ▼         ▼
-    │ ┌───────┐ ┌───────┐
-    │ │ 拒绝   │ │ cyber │
-    │ └───┬───┘ └───┬───┘
-    │     │         │
-    │     ▼         ▼
-    │ ┌───────┐ ┌───────┐
-    │ │TAMPER │ │改写器  │
-    │ │改写   │ │+clean │
-    │ └───┬───┘ │session│
-    │     │     └───┬───┘
-    │     │         │
-    │     │         ▼
-    │     │    ┌───────┐
-    │     │    │ 重发   │
-    │     │    └───┬───┘
-    │     │         │
-    ▼     ▼         ▼
-┌─────────────────────┐
-│  返回给 codex        │
-└─────────────────────┘
+| Component | Responsibility |
+|---|---|
+| `config.cpp` | Validate and update Claude Code `settings.json`; create and restore backups |
+| `proxy.cpp` | Handle `/v1/messages`, system prompt injection, forwarding and response inspection |
+| `rewrite.cpp` | Optional context-aware request rewriting and local fallback rules |
+| `tamper.cpp` | Refusal-pattern matching |
+| `resources.cpp` | Decrypt embedded prompts, dashboard, QA data and rules |
+| `ui.cpp` | Local WebUI API |
+| `verify.cpp` | Settings, resource and Claude CLI checks |
+| `watch.cpp` | Periodic proxy-setting repair |
+
+## Settings Lifecycle
+
+```text
+settings.json
+  | apply
+  +--> settings.json.helmx-bak
+  | proxy start
+  +--> settings.json.helmx-proxy-bak
+  | proxy exit / --restore
+  +<-- restore proxy backup
+  | remove
+  +<-- restore apply backup
 ```
 
-## 数据流
+All writes are JSON-validated and use a temporary file followed by an atomic replacement. The configuration layer never searches for or opens `.codex`.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    内嵌资源 (XOR 加密)                        │
-├─────────────────────────────────────────────────────────────┤
-│  bridge.md        │ 改写器提示词      │ TAMPER 规则         │
-│  (AGENTS 注入)    │ (上下文感知改写)  │ (拒绝句式匹配)      │
-├─────────────────────────────────────────────────────────────┤
-│  dashboard.html   │ skills/                              │
-│  (Web 控制台)     │ (技能包)                             │
-└─────────────────────────────────────────────────────────────┘
-         │
-         ▼ 运行时解密
-┌─────────────────────────────────────────────────────────────┐
-│                    内存中的明文                               │
-└─────────────────────────────────────────────────────────────┘
-```
+## Protocol
 
-## 线程模型
+The proxy accepts Anthropic Messages API bodies. User text is read from `messages[].content[]` blocks with `type: "text"`. The embedded prompt is prepended to the top-level `system` string or content-block array. Streaming requests remain streaming; buffered SSE is returned with `text/event-stream`.
 
-```
-main thread
-    │
-    ├─→ proxy thread (HTTP MITM)
-    │       │
-    │       ├─→ WinHTTP upstream call
-    │       ├─→ rewriter thread (NVIDIA API call)
-    │       └─→ TAMPER engine (regex match)
-    │
-    ├─→ UI thread (HTTP server)
-    │       │
-    │       └─→ API handlers
-    │
-    ├─→ watch thread (self-healing daemon)
-    │       │
-    │       └─→ periodic verify + restore
-    │
-            │
-            └─→ tool handlers
-```
-
-## 配置文件
-
-```
-~/.codex/
-├── config.toml          ← codex 配置
-│   base_url = http://127.0.0.1:1800/v1
-│   api_key = sk-xxx
-│
-├── helmx.log            ← 代理日志
-│
-└── .helmx-bak           ← 原始配置备份
-
-F:/projects/helm-x/
-%APPDATA%\helmx.config.json    ← 改写器配置
-│   rewriter.enabled = true
-│   rewriter.api_key = nvapi-xxx
-│   rewriter.model = meta/llama-3.1-8b-instruct
-│
-├── assets/              ← 源资源 (构建时加密)
-│   bridge.md
-│   rewrite_prompt.txt
-│   tamper_rules.txt
-│   dashboard.html
-│
-└── build/
-    └── helmx.exe        ← 单二进制
-```
+The proxy forwards `Authorization`, `x-api-key`, `anthropic-version`, `anthropic-beta`, `User-Agent`, and `Accept`. Hop-by-hop and compression headers are rebuilt locally.

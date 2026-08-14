@@ -1,4 +1,4 @@
-// verify.cpp — built-in self-test: injection state, AGENTS integrity, e2e codex check
+// verify.cpp - built-in self-test for Claude Code integration
 #include "verify.h"
 
 #include "config.h"
@@ -119,11 +119,9 @@ bool run_capture(const std::string& cmd, std::string& out, int timeout_sec = 120
 
 }  // namespace
 
-// Shared: run `codex exec --skip-git-repo-check helmx` and capture output.
-// codex on Windows is a .cmd shim (npm); CreateProcess cannot run it
-// directly, so route through cmd /c.
-bool codex_exec_capture(std::string& out, int timeout_sec) {
-    std::string cmd = "cmd /c \"codex exec --skip-git-repo-check helmx 2>&1\"";
+// Claude Code is installed through an npm .cmd shim on Windows.
+bool claude_exec_capture(std::string& out, int timeout_sec) {
+    std::string cmd = "cmd /c \"claude -p helmx --output-format text 2>&1\"";
     return run_capture(cmd, out, timeout_sec);
 }
 
@@ -134,9 +132,9 @@ int run_verify(bool e2e, std::string& report) {
     report += "helm-x verify\n";
     report += "=============\n";
 
-    // 1. codex home
-    std::string home = find_codex_home();
-    check(!home.empty(), "codex home", home.c_str(), report);
+    // 1. Claude Code home
+    std::string home = find_claude_home();
+    check(!home.empty(), "Claude Code home", home.c_str(), report);
     if (home.empty()) {
         char line[128];
         std::snprintf(line, sizeof(line), "\n%d check(s) failed\n", g_failures);
@@ -144,34 +142,32 @@ int run_verify(bool e2e, std::string& report) {
         return 1;
     }
 
-    // 2. config.toml exists
-    fs::path cfg = fs::path(home) / "config.toml";
-    check(fs::exists(cfg), "config.toml exists", cfg.string().c_str(), report);
+    // 2. settings.json exists
+    fs::path cfg = fs::path(home) / "settings.json";
+    check(fs::exists(cfg), "settings.json exists", cfg.string().c_str(), report);
 
     // 3. config injection state
-    std::string cfg_text = read_file_str(cfg);
-    check(verify_injection(home), "model_provider = custom", "", report);
+    check(verify_injection(home), "ANTHROPIC_BASE_URL = helm-x", "", report);
 
-    // 4. embedded resources non-empty (AGENTS.md not deployed as file — proxy injects)
-    std::string expected = get_resource(ResId::AgentsMd);
+    // 4. embedded resources are available to the proxy.
     int res_count = 0;
-    if (!get_resource(ResId::AgentsMd).empty()) res_count++;
+    if (!get_resource(ResId::PromptDefault).empty()) res_count++;
     if (!get_resource(ResId::TamperRules).empty()) res_count++;
     if (!get_resource(ResId::DashboardHtml).empty()) res_count++;
     if (!get_resource(ResId::RewritePrompt).empty()) res_count++;
-    bool res_ok = res_count >= 3;  // At least AgentsMd + TamperRules + DashboardHtml
+    bool res_ok = res_count >= 3;
     std::string res_detail = std::to_string(res_count) + "/4";
     check(res_ok, "embedded resources decrypt", res_detail.c_str(), report);
 
     // 5. backup exists
-    check(fs::exists(cfg.string() + ".helmx-bak"), "config backup (.helmx-bak)", "", report);
+    check(fs::exists(cfg.string() + ".helmx-bak"), "settings backup (.helmx-bak)", "", report);
 
     // 8. e2e
     if (e2e) {
-        report += "  [....] e2e: codex exec \"helmx\" (may take ~1-2 min)...\n";
+        report += "  [....] e2e: claude -p \"helmx\"...\n";
         std::fflush(stdout);
         std::string out;
-        bool spawned = codex_exec_capture(out, 240);
+        bool spawned = claude_exec_capture(out, 240);
         // Check for both old and new activation responses
         bool activated = spawned && (
             out.find("Knowing you, I still like you") != std::string::npos ||
@@ -180,13 +176,13 @@ int run_verify(bool e2e, std::string& report) {
         );
         if (!spawned) {
             std::string wout;
-            run_capture("cmd /c \"where codex 2>&1\"", wout, 15);
-            report += "  [....] where codex -> " + wout + "\n";
+            run_capture("cmd /c \"where claude 2>&1\"", wout, 15);
+            report += "  [....] where claude -> " + wout + "\n";
         }
-        check(activated, "e2e: codex activation (helmx)",
-              activated ? "" : (spawned ? "(reply missing)" : "(codex spawn failed)"), report);
+        check(activated, "e2e: Claude activation (helmx)",
+              activated ? "" : (spawned ? "(reply missing)" : "(Claude spawn failed)"), report);
     } else {
-        report += "  [SKIP] e2e codex check (run with --e2e)\n";
+        report += "  [SKIP] e2e Claude check (run with --e2e)\n";
     }
 
     report += "=============\n";
@@ -215,9 +211,8 @@ int run_zxwn(std::string& out, bool& activated) {
     out.clear();
     activated = false;
     std::string raw;
-    // codex reasoning can exceed 4 min on first run; give it 6 min
-    if (!codex_exec_capture(raw, 360)) {
-        out = "[FAIL] could not run codex (is it installed? run `where codex`)";
+    if (!claude_exec_capture(raw, 360)) {
+        out = "[FAIL] could not run Claude Code (is it installed? run `where claude`)";
         return 1;
     }
     out = raw;
@@ -229,7 +224,7 @@ int run_zxwn(std::string& out, bool& activated) {
 }
 
 int zxwn_cmd() {
-    std::printf("helm-x helmx — sending activation to codex...\n");
+    std::printf("helm-x helmx - sending activation to Claude Code...\n");
     std::fflush(stdout);
 
     std::string out;
@@ -240,7 +235,7 @@ int zxwn_cmd() {
         std::printf("[OK] activation confirmed\n");
         return 0;
     }
-    std::fprintf(stderr, "[WARN] activation phrase not detected in codex reply\n");
+    std::fprintf(stderr, "[WARN] activation phrase not detected in Claude reply\n");
     return rc;
 }
 

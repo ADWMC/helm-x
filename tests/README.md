@@ -1,21 +1,22 @@
-# helm-x 单元测试
+# helm-x 测试
 
-参考 [gpt-5.6-instruct/unit-tests](https://github.com/MDX-Tom/gpt-5.6-instruct/tree/main/unit-tests) 的测试方法论，
-针对 helm-x 的**部署逻辑、注入逻辑、TAMPER 引擎、改写器**编写自动化测试。
+当前自动化测试覆盖 Claude Code 配置、独立的 `helmx-claudecode.config.json`、Anthropic Messages API 代理行为、WebUI 和嵌入资源。
 
-## 测试范围
-
-| 模块 | 测试文件 | 覆盖内容 |
-|---|---|---|
-| config | `test_config.py` | apply/remove/restore、TOML 合并注入、CRLF 保留、备份回滚 |
-| inject | `test_inject.py` | inject_request（Responses API input[] 格式、chat messages 格式）、AGENTS 注入后字节匹配 |
-| tamper | `test_tamper.py` | TAMPER 规则加载、拒绝词检测、替换后文本完整性 |
-| rewrite | `test_rewrite.py` | 改写器配置加载、本地规则匹配、API 改写调用（mock） |
-| verify | `test_verify.py` | verify 检查项（config 注入、AGENTS 存在、备份存在、资源解密） |
-
-## 运行
-
-```bash
-cd F:/projects/helm-x/tests
-python -m pytest -v
+```powershell
+python -m unittest tests.test_config tests.test_ui tests.test_embed -v
 ```
+
+默认测试二进制为 `build-check/helmx.exe`。需要指定其他构建时：
+
+```powershell
+$env:HELMX_TEST_BIN = "C:\path\to\helmx.exe"
+python -m unittest tests.test_config tests.test_ui tests.test_embed -v
+```
+
+| 文件 | 覆盖内容 |
+|---|---|
+| `test_config.py` | `settings.json` 的 apply、verify、remove、备份恢复、无效 JSON 和 `.codex` 隔离 |
+| `test_ui.py` | 请求头与 UA 转发、system 注入、上下文裁剪、错误响应和 WebUI 配置 |
+| `test_embed.py` | 可选嵌入配置默认值和离线 FAQ |
+
+旧版矩阵脚本和报告保留为历史记录，不属于当前回归测试入口。

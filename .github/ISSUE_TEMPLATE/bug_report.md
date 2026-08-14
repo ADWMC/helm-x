@@ -13,7 +13,7 @@ assignees: ''
 ## 复现步骤
 
 1. 启动 helm-x：`helmx.exe`
-2. 启动 Codex CLI：`codex`
+2. 启动 Claude Code：`claude`
 3. 输入：`xxx`
 4. 观察到：`xxx`
 
@@ -29,15 +29,15 @@ assignees: ''
 
 - **操作系统**：Windows 10/11
 - **helm-x 版本**：v0.0.x
-- **Codex CLI 版本**：`codex --version`
-- **上游中转**：huablog.xyz / vip.sushuo.biz / 其他
-- **模型**：gpt-5.6-terra / gpt-5.6-sol / 其他
+- **Claude Code 版本**：`claude --version`
+- **上游中转**：Anthropic API / 自定义中转 / 其他
+- **模型**：claude-sonnet-4-5 / claude-opus-4-1 / 其他
 - **改写器**：开启/关闭
 
 ## 日志
 
 ```
-粘贴相关日志（~/.codex/helmx.log 或 ~/.codex/helmx-cyber.log）
+粘贴相关日志（~/.claude/helmx.log）
 ```
 
 ## 截图

@@ -1,4 +1,6 @@
 build/
+build-*/
+__pycache__/
 *.exe
 *.obj
 *.o

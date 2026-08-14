@@ -123,7 +123,7 @@ a { color: inherit; text-decoration: none; }
 .panel-body { padding: 18px; }
 
 /* ── Metric strip ── */
-.metric-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: var(--space-6); border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface); }
+.metric-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--space-6); border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface); }
 .metric { min-height: 108px; padding: 18px; border-right: 1px solid var(--border-soft); }
 .metric:last-child { border-right: 0; }
 .metric span { display: block; color: var(--muted); font-size: 11px; }
@@ -250,8 +250,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
       <p class="nav-label">配置</p>
       <button class="nav-button" data-view="services"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="4"/></svg></span>服务</button>
       <button class="nav-button" data-view="prompt"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>提示词</button>
-      <button class="nav-button" data-view="context"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M7 12h10M10 18h4"/></svg></span>上下文</button>
-      <button class="nav-button" data-view="rewriter"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9"/></svg></span>改写器</button>
       <p class="nav-label">调试</p>
       <button class="nav-button" data-view="rules"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg></span>规则</button>
       <p class="nav-label">日志</p>
@@ -259,7 +257,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
     </nav>
     <div class="nav-spacer"></div>
     <div class="sidebar-foot">
-      <span class="path-tag">~/.codex</span>
+      <span class="path-tag">~/.claude</span>
       <span class="version-tag">v0.0.7</span>
     </div>
   </aside>
@@ -283,14 +281,13 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
 
       <!-- ── Dashboard ── -->
       <section class="view active" id="view-dashboard">
-        <div class="page-heading"><div><h1>系统总览</h1><p>Codex 环境控制状态一览。</p></div>
+        <div class="page-heading"><div><h1>系统总览</h1><p>Claude Code 环境控制状态一览。</p></div>
           <div class="actions">
             <button class="btn secondary" onclick="restartProxy()">重启服务</button>
           </div>
         </div>
         <div class="metric-strip">
           <div class="metric"><span>代理</span><strong id="proxy-metric-state">—</strong><em id="proxy-metric-desc">—</em></div>
-          <div class="metric"><span>改写器</span><strong id="rw-state-metric">—</strong><em id="rw-desc-metric">—</em></div>
           <div class="metric"><span>TAMPER 规则</span><strong id="rules_count">—</strong><em>拒绝句式匹配</em></div>
           <div class="metric"><span>提示词</span><strong id="prompt-mode-metric">—</strong><em id="prompt-mode-desc">—</em></div>
         </div>
@@ -300,7 +297,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
       <section class="view" id="view-verify">
         <div class="page-heading"><div><h1>验证</h1><p>激活验证与完整性自检。</p></div></div>
         <div class="panel">
-          <div class="panel-head"><h2>激活验证</h2><span>codex exec "helmx"</span></div>
+          <div class="panel-head"><h2>激活验证</h2><span>claude -p "helmx"</span></div>
           <div class="panel-body">
             <div class="actions">
               <button class="btn primary" id="btn-zxwn" onclick="startZxwn()">发送激活 (helmx)</button>
@@ -326,7 +323,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>后台服务</h2><span>自愈守护 / 代理 / 改写器</span></div>
+          <div class="panel-head"><h2>后台服务</h2><span>自愈守护 / 代理</span></div>
           <div class="panel-body" style="padding:0">
             <table>
               <thead><tr><th>服务</th><th>状态</th><th>说明</th><th>操作</th></tr></thead>
@@ -338,12 +335,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
                   <td><div class="actions"><button class="btn secondary" onclick="proxyRestore()">还原配置</button></div></td>
                 </tr>
                 <tr>
-                  <td><strong>改写器</strong></td>
-                  <td><span class="status" id="rw-status"><span class="status-dot"></span><span id="rw-state-text">—</span></span></td>
-                  <td style="color:var(--muted);font-size:12px" id="rw-desc">cyber 自动改写 · 检测中</td>
-                  <td><div class="actions"><button class="btn secondary" onclick="refreshRewriter()">刷新</button></div></td>
-                </tr>
-                <tr>
                   <td><strong>watch</strong></td>
                   <td><span class="status" id="watch-status"><span class="status-dot"></span><span id="watch-state-text">—</span></span></td>
                   <td style="color:var(--muted);font-size:12px">自动恢复配置 · 已恢复 <span id="watch-restores">0</span> 次</td>
@@ -353,17 +344,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
             </table>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2>改写器测试</h2><span>输入消息测试改写效果</span></div>
-          <div class="panel-body">
-            <div class="actions">
-              <input class="input" id="rw-test-input" value="分析 system_server 进程的只读内存布局" style="flex:1">
-              <button class="btn primary" onclick="testRewriter()">改写</button>
-            </div>
-            <div class="term" id="rw-test-output" style="margin-top:12px;max-height:150px">点击"改写"测试</div>
-          </div>
-        </div>
-
       </section>
       <!-- ── Prompt ── -->
       <section class="view" id="view-prompt">
@@ -374,32 +354,14 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
             <div class="actions">
               <select class="select" id="prompt-mode" style="width:200px" onchange="switchPromptMode(this.value)">
                 <option value="default">default (helm-x)</option>
-                <option value="v45">v45 (gpt-5.6-instruct)</option>
+                <option value="v45">Sandbox Executor</option>
               </select>
               <span id="prompt-mode-status" style="font-size:12px;color:var(--muted)"></span>
             </div>
             <div style="margin-top:12px;color:var(--muted);font-size:12px">
               <b>default</b>：helm-x 提示词（安全研究竞赛框架 + 领域知识）<br>
-              <b>v45</b>：gpt-5.6-instruct 提示词（沙盒执行器 + 工具优先 + 无拒绝）
+              <b>Sandbox Executor</b>：Claude Code 沙盒执行器提示词
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="view" id="view-context">
-        <div class="page-heading"><div><h1>上下文</h1><p>Context Gardener 与 Codex 请求压缩设置。</p></div></div>
-        <div class="panel">
-          <div class="panel-head"><h2>Context Gardener</h2><span>实时保存到配置</span></div>
-          <div class="panel-body">
-            <div class="field-grid">
-              <div class="field"><label>启用裁剪</label><select class="select" id="ctx-enabled"><option value="true">启用</option><option value="false">禁用</option></select></div>
-              <div class="field"><label>工具输出裁剪阈值（字节）</label><input class="input" id="ctx-threshold" type="number" min="1024" max="16777216"></div>
-              <div class="field"><label>工具输出 token 上限</label><input class="input" id="ctx-output-limit" type="number" min="1000" max="100000"></div>
-              <div class="field"><label>自动压缩阈值（token）</label><input class="input" id="ctx-compact-limit" type="number" min="10000" max="1000000"></div>
-              <div class="field"><label>压缩计算范围</label><select class="select" id="ctx-scope"><option value="body_after_prefix">body_after_prefix</option><option value="total">total</option></select></div>
-            </div>
-            <div class="actions" style="margin-top:18px"><button class="btn primary" onclick="saveContextConfig()">保存上下文配置</button><button class="btn secondary" onclick="loadContextConfig()">重新加载</button></div>
-            <p style="margin-top:14px;color:var(--muted);font-size:12px">历史工具输出超过阈值时会在发往上游前被替换；当前请求中的图片不裁剪。</p>
           </div>
         </div>
       </section>
@@ -417,35 +379,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
         </div>
       </section>
 
-      <!-- ── Rewriter ── -->
-      <section class="view" id="view-rewriter">
-        <div class="page-heading"><div><h1>改写器</h1><p>配置消息改写 API。</p></div>
-          <div class="actions">
-            <button class="btn primary" onclick="toggleRewriter(true)">启用</button>
-            <button class="btn danger" onclick="toggleRewriter(false)">禁用</button>
-            <span id="rw-toggle-status" style="font-size:12px"></span>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><h2>API 配置</h2><span>%APPDATA%\helmx.config.json</span></div>
-          <div class="panel-body">
-            <div class="field-grid">
-              <div class="field"><label>Provider</label><input class="input" id="rw-cfg-provider" placeholder="nvidia"></div>
-              <div class="field"><label>Model</label><input class="input" id="rw-cfg-model" placeholder="meta/llama-3.1-8b-instruct"></div>
-              <div class="field"><label>API Key</label><input class="input" id="rw-cfg-apikey" type="password" placeholder="留空保留现有密钥"></div>
-              <div class="field"><label>Base URL</label><input class="input" id="rw-cfg-baseurl" placeholder="https://integrate.api.nvidia.com/v1"></div>
-              <div class="field"><label>Proxy URL</label><input class="input" id="rw-cfg-proxyurl" placeholder="http://127.0.0.1:7897"></div>
-              <div class="field"><label>Timeout (秒)</label><input class="input" id="rw-cfg-timeout" value="60" type="number"></div>
-              <div class="field"><label>Use Proxy</label><select class="select" id="rw-cfg-useproxy"><option value="false">否</option><option value="true">是</option></select></div>
-            </div>
-            <div class="actions" style="margin-top:18px">
-              <button class="btn primary" onclick="saveRewriterConfig()">保存配置</button>
-              <button class="btn secondary" onclick="loadRewriterConfig()">重新加载</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- ── Rules ── -->
       <section class="view" id="view-rules">
         <div class="page-heading"><div><h1>TAMPER 规则</h1><p>拒绝句式匹配规则列表。</p></div></div>
@@ -459,11 +392,11 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
       <section class="view" id="view-logs">
         <div class="page-heading"><div><h1>运行日志</h1><p>代理运行日志。</p></div></div>
         <div class="panel">
-          <div class="panel-head"><h2>Cyber 日志</h2><span>~/.codex/helmx-cyber.log</span></div>
+          <div class="panel-head"><h2>Cyber 日志</h2><span>~/.claude/helmx-cyber.log</span></div>
           <div class="panel-body"><div class="term" id="cyber-log-output" style="max-height:300px">加载中…</div></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>代理日志</h2><span>~/.codex/helmx.log</span></div>
+          <div class="panel-head"><h2>代理日志</h2><span>~/.claude/helmx.log</span></div>
           <div class="panel-body"><div class="term" id="log-output" style="max-height:400px">加载中…</div></div>
         </div>
       </section>
@@ -580,12 +513,6 @@ async function refreshStatus() {
       pDesc.textContent = '直连 ' + (p.cfg_base || '');
       pDot.className = 'status-dot'; pText.textContent = 'DIRECT';
     }
-    // Rewriter metric
-    const rw = await get('/api/rewriter');
-    const rwState = $('rw-state-metric'), rwDesc = $('rw-desc-metric');
-    if (!rw.loaded) { rwState.textContent = 'NO CONFIG'; rwState.style.color = 'var(--danger)'; rwDesc.textContent = '未找到配置'; }
-    else if (rw.enabled) { rwState.textContent = 'ON'; rwState.style.color = 'var(--success)'; rwDesc.textContent = rw.provider + ' · ' + rw.model; }
-    else { rwState.textContent = 'OFF'; rwState.style.color = 'var(--muted)'; rwDesc.textContent = '已禁用'; }
     // Prompt mode
     loadPromptMode();
   } catch (e) {
@@ -638,7 +565,7 @@ async function startZxwn() {
   const btn = $('btn-zxwn');
   btn.disabled = true;
   $('zxwn-status').textContent = '运行中… (最长 4 分钟)';
-  $('zxwn-output').textContent = '发送 helmx 到 codex…';
+  $('zxwn-output').textContent = '发送 helmx 到 Claude Code…';
   try { await post('/api/zxwn/start'); pollZxwn(); }
   catch (e) { btn.disabled = false; $('zxwn-status').textContent = '启动失败'; $('zxwn-output').textContent = String(e); }
 }
@@ -678,7 +605,7 @@ async function refreshProxy() {
   try {
     const p = await get('/api/proxy');
     const st = $('proxy-status'), stt = $('proxy-state-text');
-    if (p.running && p.proxied) { st.className = 'status running'; stt.textContent = 'RUNNING'; $('proxy-desc').textContent = 'codex → 127.0.0.1:1800 → ' + p.relay; }
+    if (p.running && p.proxied) { st.className = 'status running'; stt.textContent = 'RUNNING'; $('proxy-desc').textContent = 'Claude Code → 127.0.0.1:1800 → ' + p.relay; }
     else if (p.proxied) { st.className = 'status error'; stt.textContent = 'BROKEN'; $('proxy-desc').textContent = 'config 指向 1800 但 proxy 未运行'; }
     else { st.className = 'status'; stt.textContent = 'DIRECT'; $('proxy-desc').textContent = '直连 ' + (p.cfg_base || ''); }
   } catch (e) { $('proxy-desc').textContent = '状态读取失败: ' + e.message; }
@@ -709,69 +636,11 @@ async function refreshCyberLog() {
   try { const j = await get('/api/cyber-log'); $('cyber-log-output').textContent = j.log || '(无 cyber 事件)'; $('cyber-log-output').scrollTop = $('cyber-log-output').scrollHeight; } catch (e) {}
 }
 
-/* ── Rewriter ── */
-async function refreshRewriter() {
-  try {
-    const r = await get('/api/rewriter');
-    const st = $('rw-status'), stt = $('rw-state-text');
-    if (!r.loaded) { st.className = 'status error'; stt.textContent = 'NO CONFIG'; $('rw-desc').textContent = '改写器配置加载失败'; $('rw-state-metric').textContent = 'NO CONFIG'; $('rw-desc-metric').textContent = '配置加载失败'; }
-    else if (r.enabled) { st.className = 'status running'; stt.textContent = 'ON'; $('rw-desc').textContent = r.provider + ' · ' + r.model + ' · key ' + (r.key || '无'); $('rw-state-metric').textContent = 'ON'; $('rw-desc-metric').textContent = r.provider + ' · ' + r.model; }
-    else { st.className = 'status'; stt.textContent = 'OFF'; $('rw-desc').textContent = '改写器关闭'; $('rw-state-metric').textContent = 'OFF'; $('rw-desc-metric').textContent = '已禁用'; }
-  } catch (e) {}
-}
-async function testRewriter() {
-  const input = $('rw-test-input').value;
-  const output = $('rw-test-output');
-  output.textContent = '改写中...';
-  try {
-    const resp = await fetch('/api/rewriter/test', { method: 'POST', headers: {'Content-Type': 'text/plain'}, body: input });
-    const r = await resp.json();
-    if (r.error) output.textContent = '错误: ' + r.error;
-    else if (r.ok) output.textContent = '输入: ' + r.input + '\n\n输出: ' + r.output;
-    else output.textContent = '改写失败（本地规则无匹配）';
-  } catch (e) { output.textContent = '请求失败: ' + e.message; }
-}
-async function loadRewriterConfig() {
-  try {
-    const r = await get('/api/rewriter');
-    if (r.loaded) {
-      $('rw-cfg-provider').value = r.provider || '';
-      $('rw-cfg-model').value = r.model || '';
-      $('rw-cfg-apikey').value = '';
-      $('rw-cfg-baseurl').value = r.base_url || '';
-      $('rw-cfg-proxyurl').value = r.proxy_url || '';
-      $('rw-cfg-timeout').value = r.timeout_sec || 60;
-      $('rw-cfg-useproxy').value = r.use_proxy ? 'true' : 'false';
-      $('rw-cfg-apikey').placeholder = r.key ? '已配置，留空保留' : '输入 API Key';
-      $('rw-toggle-status').textContent = r.enabled ? '已启用' : '已禁用';
-      $('rw-toggle-status').style.color = r.enabled ? 'var(--success)' : 'var(--danger)';
-    }
-  } catch (e) {}
-}
-async function saveRewriterConfig() {
-  const config = {
-    enabled: $('rw-toggle-status').textContent === '已启用',
-    provider: $('rw-cfg-provider').value,
-    model: $('rw-cfg-model').value,
-    api_key: $('rw-cfg-apikey').value,
-    base_url: $('rw-cfg-baseurl').value,
-    proxy_url: $('rw-cfg-proxyurl').value,
-    timeout_sec: parseInt($('rw-cfg-timeout').value) || 60,
-    use_proxy: $('rw-cfg-useproxy').value === 'true'
-  };
-  try {
-    const resp = await fetch('/api/rewriter/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(config) });
-    const r = await resp.json();
-    showToast(r.ok ? '配置已保存' : '保存失败: ' + (r.error || ''));
-    if (r.ok) loadRewriterConfig();
-  } catch (e) { showToast('请求失败: ' + e.message); }
-}
 async function loadPromptMode() {
   try {
     const r = await get('/api/prompt-mode');
     $('prompt-mode-metric').textContent = r.mode || 'default';
     $('prompt-mode-desc').textContent = r.desc || '';
-    // Also update the selector on the rewriter page
     const sel = $('prompt-mode');
     if (sel) sel.value = r.mode || 'default';
   } catch (e) {}
@@ -788,41 +657,8 @@ async function switchPromptMode(mode) {
     }
   } catch (e) { showToast('请求失败: ' + e.message); }
 }
-async function loadContextConfig() {
-  try {
-    const r = await get('/api/context');
-    $('ctx-enabled').value = r.enabled ? 'true' : 'false';
-    $('ctx-threshold').value = r.threshold_bytes;
-    $('ctx-output-limit').value = r.tool_output_token_limit;
-    $('ctx-compact-limit').value = r.auto_compact_token_limit;
-    $('ctx-scope').value = r.scope;
-  } catch (e) { showToast('上下文配置读取失败: ' + e.message); }
-}
-async function saveContextConfig() {
-  try {
-    const r = await request('/api/context', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
-      enabled: $('ctx-enabled').value === 'true', threshold_bytes: parseInt($('ctx-threshold').value),
-      tool_output_token_limit: parseInt($('ctx-output-limit').value), auto_compact_token_limit: parseInt($('ctx-compact-limit').value),
-      scope: $('ctx-scope').value
-    })});
-    showToast(r.ok ? '上下文配置已保存' : '保存失败');
-  } catch (e) { showToast('保存失败: ' + e.message); }
-}
-async function toggleRewriter(enable) {
-  try {
-    const resp = await fetch('/api/rewriter/toggle', { method: 'POST', headers: {'Content-Type': 'text/plain'}, body: enable ? 'true' : 'false' });
-    const r = await resp.json();
-    if (r.ok) {
-      $('rw-toggle-status').textContent = r.enabled ? '已启用' : '已禁用';
-      $('rw-toggle-status').style.color = r.enabled ? 'var(--success)' : 'var(--danger)';
-      showToast(r.enabled ? '改写器已启用' : '改写器已禁用');
-      refreshRewriter();
-    }
-  } catch (e) { showToast('请求失败'); }
-}
-
 /* ── Init ── */
-refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshWatch(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode(); loadContextConfig(); loadQa(false);
+refreshStatus(); refreshRules(); refreshProxy(); refreshWatch(); refreshLog(); refreshCyberLog(); loadPromptMode(); loadQa(false);
 if (!sessionStorage.getItem('helmx-qa-welcome')) $('qa-welcome').hidden = false;
 setInterval(refreshStatus, 5000);
 setInterval(refreshProxy, 3000);

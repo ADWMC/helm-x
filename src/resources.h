@@ -7,8 +7,8 @@ namespace helmx {
 
 // Embedded resource ids
 enum class ResId {
-    AgentsMd,       // AGENTS.md content
-    AgentsV45,      // v45 prompt (gpt-5.6-instruct)
+    PromptDefault,  // default Claude system prompt
+    PromptSandbox,  // sandbox executor prompt
     TamperRules,    // TAMPER_RULES pattern list
     DashboardHtml,  // embedded web dashboard
     QaJson,         // offline QA fallback

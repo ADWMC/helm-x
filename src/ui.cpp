@@ -120,12 +120,12 @@ static bool json_value(const std::string& json, const char* key, std::string& va
 // ── API handlers ──
 
 static HttpResponse api_status(const HttpRequest&) {
-    std::string home = find_codex_home();
+    std::string home = find_claude_home();
     bool injected = !home.empty() && verify_injection(home);
     std::string body =
         "{\"home\":\"" + json_escape(home) + "\","
         "\"injected\":" + (injected ? "true" : "false") + ","
-        "\"agents_bytes\":" + std::to_string(get_resource(ResId::AgentsMd).size()) + ","
+        "\"prompt_bytes\":" + std::to_string(get_resource(ResId::PromptDefault).size()) + ","
         "\"rules\":" + std::to_string(load_tamper_rules().size()) +
         "}";
     return HttpResponse::json(body);
@@ -144,10 +144,10 @@ static HttpResponse api_rules(const HttpRequest&) {
 }
 
 static HttpResponse api_apply(const HttpRequest&) {
-    std::string home = find_codex_home();
+    std::string home = find_claude_home();
     if (home.empty()) {
-        log_error("ui: apply failed (codex home not found)");
-        return HttpResponse::json("{\"ok\":false,\"error\":\"codex home not found\"}", 500);
+        log_error("ui: apply failed (Claude Code home not found)");
+        return HttpResponse::json("{\"ok\":false,\"error\":\"Claude Code home not found\"}", 500);
     }
     bool ok = inject_config(home) && verify_injection(home);
     log_info(std::string("ui: apply ") + (ok ? "OK" : "FAILED"));
@@ -155,10 +155,10 @@ static HttpResponse api_apply(const HttpRequest&) {
 }
 
 static HttpResponse api_remove(const HttpRequest&) {
-    std::string home = find_codex_home();
+    std::string home = find_claude_home();
     if (home.empty()) {
-        log_error("ui: remove failed (codex home not found)");
-        return HttpResponse::json("{\"ok\":false,\"error\":\"codex home not found\"}", 500);
+        log_error("ui: remove failed (Claude Code home not found)");
+        return HttpResponse::json("{\"ok\":false,\"error\":\"Claude Code home not found\"}", 500);
     }
     bool ok = remove_all(home);
     log_info(std::string("ui: remove ") + (ok ? "OK" : "FAILED"));
@@ -166,7 +166,7 @@ static HttpResponse api_remove(const HttpRequest&) {
 }
 
 static HttpResponse api_verify(const HttpRequest&) {
-    // synchronous verify (fast, no codex); e2e handled via zxwn task
+    // synchronous verify (fast, no Claude process); e2e handled via zxwn task
     std::string report;
     int rc = run_verify(false, report);
     std::string body =
@@ -195,7 +195,7 @@ static HttpResponse api_zxwn_start(const HttpRequest&) {
 }
 
 static HttpResponse api_log(const HttpRequest&) {
-    // return last N lines of ~/.codex/helmx.log
+    // return last N lines of ~/.claude/helmx.log
     std::string path = log_path();
     std::string content;
     if (read_file(path, content)) {
@@ -237,8 +237,8 @@ static HttpResponse api_proxy_status(const HttpRequest&) {
         ::closesocket(s);
     }
 #endif
-    std::string home = find_codex_home();
-    // Prefer proxy's runtime relay URL (always correct), fallback to config file
+    std::string home = find_claude_home();
+    // Prefer proxy's runtime relay URL (always correct), fallback to settings file
     std::string relay = get_relay_url();
     if (relay.empty() && !home.empty()) relay = read_relay_url(home);
     std::string provider;
@@ -257,9 +257,9 @@ static HttpResponse api_proxy_status(const HttpRequest&) {
 }
 
 static HttpResponse api_proxy_restore(const HttpRequest&) {
-    std::string home = find_codex_home();
+    std::string home = find_claude_home();
     if (home.empty()) {
-        return HttpResponse::json("{\"ok\":false,\"error\":\"codex home not found\"}", 500);
+        return HttpResponse::json("{\"ok\":false,\"error\":\"Claude Code home not found\"}", 500);
     }
     bool ok = restore_config_proxy(home);
     log_info(std::string("ui: proxy restore ") + (ok ? "OK" : "(nothing to restore)"));
@@ -420,7 +420,7 @@ static HttpResponse api_prompt_mode_get(const HttpRequest&) {
     RewriterConfig cfg;
     load_rewriter_config(cfg);
     const std::string& mode = cfg.prompt_mode;
-    std::string desc = (mode == "v45") ? "gpt-5.6-instruct (沙盒执行器)" : "helm-x (安全研究竞赛)";
+    std::string desc = (mode == "v45") ? "Claude Code (沙盒执行器)" : "helm-x (安全研究竞赛)";
     return HttpResponse::json("{\"mode\":\"" + mode + "\",\"desc\":\"" + desc + "\"}");
 }
 
@@ -443,43 +443,25 @@ static HttpResponse api_prompt_mode(const HttpRequest& req) {
 }
 
 static HttpResponse api_context_get(const HttpRequest&) {
-    std::string home = find_codex_home();
-    ContextRequestConfig context;
-    if (home.empty() || !read_context_request_config(home, context))
-        return HttpResponse::json("{\"error\":\"config.toml not found\"}", 404);
     RewriterConfig cfg;
     load_rewriter_config(cfg);
     return HttpResponse::json(
         std::string("{\"enabled\":") + (cfg.context_gardener_enabled ? "true" : "false") +
-        ",\"threshold_bytes\":" + std::to_string(cfg.context_gardener_threshold_bytes) +
-        ",\"tool_output_token_limit\":" + std::to_string(context.tool_output_token_limit) +
-        ",\"auto_compact_token_limit\":" + std::to_string(context.model_auto_compact_token_limit) +
-        ",\"scope\":\"" + json_escape(context.model_auto_compact_token_limit_scope) + "\"}");
+        ",\"threshold_bytes\":" + std::to_string(cfg.context_gardener_threshold_bytes) + "}");
 }
 
 static HttpResponse api_context_save(const HttpRequest& req) {
     std::string value;
     RewriterConfig cfg;
     load_rewriter_config(cfg);
-    ContextRequestConfig context;
-    std::string home = find_codex_home();
-    if (home.empty() || !read_context_request_config(home, context))
-        return HttpResponse::json("{\"error\":\"config.toml not found\"}", 404);
     try {
         if (json_value(req.body, "enabled", value)) cfg.context_gardener_enabled = value == "true";
         if (json_value(req.body, "threshold_bytes", value)) cfg.context_gardener_threshold_bytes = std::stoi(value);
-        if (json_value(req.body, "tool_output_token_limit", value)) context.tool_output_token_limit = std::stoi(value);
-        if (json_value(req.body, "auto_compact_token_limit", value)) context.model_auto_compact_token_limit = std::stoi(value);
     } catch (...) { return HttpResponse::json("{\"error\":\"invalid number\"}", 400); }
-    if (json_value(req.body, "scope", value)) context.model_auto_compact_token_limit_scope = value;
-    if (cfg.context_gardener_threshold_bytes < 1024 || cfg.context_gardener_threshold_bytes > 16777216 ||
-        context.tool_output_token_limit < 1000 || context.tool_output_token_limit > 100000 ||
-        context.model_auto_compact_token_limit < 10000 || context.model_auto_compact_token_limit > 1000000 ||
-        (context.model_auto_compact_token_limit_scope != "body_after_prefix" &&
-         context.model_auto_compact_token_limit_scope != "total"))
+    if (cfg.context_gardener_threshold_bytes < 1024 || cfg.context_gardener_threshold_bytes > 16777216)
         return HttpResponse::json("{\"error\":\"value out of range\"}", 400);
     std::string path;
-    if (!save_rewriter_config(cfg, path) || !write_context_request_config(home, context))
+    if (!save_rewriter_config(cfg, path))
         return HttpResponse::json("{\"error\":\"failed to write config\"}", 500);
     log_info("ui: context gardener config saved");
     return HttpResponse::json("{\"ok\":true}");

@@ -1,4 +1,4 @@
-// log.cpp — file logging to codex home / helmx.log (thread-safe, append)
+// log.cpp - file logging to Claude Code home / helmx.log
 #include "log.h"
 
 #include "config.h"
@@ -18,7 +18,7 @@ std::mutex g_log_mutex;
 }
 
 std::string log_path() {
-    std::string home = find_codex_home();
+    std::string home = find_claude_home();
     if (!home.empty()) {
         return (fs::path(home) / "helmx.log").string();
     }
@@ -26,7 +26,7 @@ std::string log_path() {
 }
 
 std::string cyber_log_path() {
-    std::string home = find_codex_home();
+    std::string home = find_claude_home();
     if (!home.empty()) {
         return (fs::path(home) / "helmx-cyber.log").string();
     }

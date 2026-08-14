@@ -1,88 +1,42 @@
-# FAQ — 常见问题
+# FAQ
 
-## 基本问题
+### helm-x 做什么？
 
-### Q: helm-x 是什么？
-A: Codex CLI 的本地映射代理。在 `codex → 127.0.0.1:1800 → 上游中转` 的链路中，注入自定义指令（AGENTS）并篡改拒绝响应。
+它是 Claude Code 的本地 Anthropic Messages API 代理。链路为 `Claude Code -> 127.0.0.1:1800 -> API 中转`，代理负责 system 指令注入、上下文裁剪和响应处理。
 
-### Q: 会不会被检测？
-A: AGENTS 注入在本地代理层完成，上游只看到修改后的请求。实测 8/8 高危请求通过，0 cyber flag。
+### 需要什么环境？
 
-### Q: 需要什么环境？
-A: Windows 10/11 + Codex CLI 0.146+ + 任意 OpenAI 兼容 API。无需 Python/Node.js 运行时。
+Windows 10/11、Claude Code 2.x，以及 Claude Code 中已经可用的 Anthropic API 中转配置。运行发布版无需 Python；Python 只用于测试和重新生成嵌入资源。
 
-### Q: 怎么安装？
-A: 下载 `helmx.exe`，双击启动。自动完成：proxy(:1800) + UI(:8090) + 打开浏览器。
+### 上游地址从哪里读取？
 
----
+从 `~/.claude/settings.json` 的 `env.ANTHROPIC_BASE_URL` 读取。设置 `CLAUDE_CONFIG_DIR` 可指定其他配置目录。
 
-## 代理问题
+### helm-x 会修改哪些配置？
 
-### Q: 上游 API 地址怎么配？
-A: 在 `~/.codex/config.toml` 的 `[model_providers.custom]` 中设置 `base_url`。proxy 启动时自动读取。
+只把 `env.ANTHROPIC_BASE_URL` 临时改为 `http://127.0.0.1:1800`。首次 `apply` 和每次代理启动都会创建对应备份；其他 Claude Code 设置保持原值。
 
-### Q: 改写器是什么？
-A: 当请求触发 cyber flag 时，改写器自动把用户消息改写为技术描述，然后重发。参考 gptbypass 的实现。
+### 如何恢复？
 
-### Q: 改写器需要配置吗？
-A: 可选。在 `%APPDATA%\helmx.config.json` 中配置改写器 API（如 NVIDIA NIM）。不配置则使用本地规则 fallback。
+```powershell
+helmx proxy --restore
+helmx remove
+```
 
-### Q: 代理端口怎么改？
-A: `helmx proxy --listen 8080`。默认 1800。
+第一条恢复代理启动前的配置，第二条恢复 `apply` 前的完整 `settings.json`。
 
-### Q: cyber flag 是什么？
-A: OpenAI 的网络安全策略检测。当请求包含特定意图词组合（如"隐藏进程"+"任务管理器"）时触发。AGENTS 注入可以阻止大部分触发。
+### Claude Code 连接超时？
 
----
+确认 helm-x 代理正在监听 `127.0.0.1:1800`，再检查 WebUI 的上游地址。代理未运行时执行 `helmx proxy --restore`，让 Claude Code 重新直连原中转。
 
-## 技术问题
+### 返回 401 或 403？
 
-### Q: 为什么用 C++ 不用 Python？
-A: 单二进制、零依赖、静态链接。原 Python 版有 SSE 流阻塞问题，C++ 版强制 `stream=false` 解决。
+检查 Claude Code 配置中的 `ANTHROPIC_AUTH_TOKEN` 或 `ANTHROPIC_API_KEY`。helm-x 会原样转发 `Authorization`、`x-api-key`、`anthropic-version` 和 `anthropic-beta` 请求头。
 
-### Q: 资源怎么加密的？
-A: XOR 流密钥加密。`tools/embed.py` 在构建时加密 `assets/` 下的文件，生成 `resources_generated.cpp`。运行时解密。
+### 日志在哪里？
 
-### Q: 怎么自定义 AGENTS？
-A: 编辑 `assets/bridge.md`，重新运行 `python tools/embed.py`，重新编译。
+`~/.claude/helmx.log` 和 `~/.claude/helmx-cyber.log`。日志不会记录完整凭据。
 
-### Q: 怎么自定义改写器提示词？
-A: 在 `%APPDATA%\helmx.config.json` 中设置 `system_prompt` 字段，或编辑 `assets/rewrite_prompt.txt` 后重新内嵌。
+### 配置 JSON 损坏时会怎样？
 
-### Q: TAMPER 规则怎么扩展？
-A: 编辑 `assets/tamper_rules.txt`（每行一个正则），重新内嵌。
-
----
-
-## 故障排除
-
-### Q: proxy 启动失败？
-A: 检查端口 1800 是否被占用。`netstat -ano | findstr 1800`。
-
-### Q: codex 连接超时？
-A: 检查 `~/.codex/config.toml` 的 `base_url` 是否指向 `http://127.0.0.1:1800/v1`。
-
-### Q: 改写器不工作？
-A: 检查 `%APPDATA%\helmx.config.json` 是否存在且 `enabled: true`。查看日志 `~/.codex/helmx.log`。
-
-### Q: 上游返回 401？
-A: API key 无效或过期。检查 `~/.codex/config.toml` 的 `api_key`。
-
-### Q: 上游返回 502？
-A: 上游服务不可用。检查 `base_url` 是否正确，网络是否连通。
-
----
-
-## 开发问题
-
-### Q: 怎么编译？
-A: `cmake -B build -G "MinGW Makefiles" && cmake --build build`。依赖 MinGW + Windows SDK。
-
-### Q: 怎么运行测试？
-A: `python tests/test_config.py`（单元测试）或 `python tests/cyber-test-runner.py`（集成测试）。
-
-### Q: 怎么贡献？
-A: Fork → feature 分支 → 提交 → PR。保持零外部 DLL 依赖。
-
-### Q: License 是什么？
-A: AGPL-3.0。仅供学习交流，禁止商用。
+helm-x 会拒绝写入并保留原文件。修复 `settings.json` 后重新执行 `helmx apply`。

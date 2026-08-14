@@ -1,5 +1,18 @@
 # 更新日志
 
+## v0.0.8 (2026-08-14)
+
+### 目标切换：Codex → Claude Code
+
+- 全面迁移到 Claude Code：只读写 `~/.claude/settings.json`，不再读取或修改 `~/.codex`
+- `apply`/`verify`/`remove` 改为对 settings.json 做 JSON 校验后的原子写入，首次启动创建 `settings.json.helmx-bak`
+- 代理启动时临时把 `ANTHROPIC_BASE_URL` 指向本地端口，退出时从 `settings.json.helmx-proxy-bak` 恢复
+- 代理处理 Anthropic Messages API (`/v1/messages`) 请求，保留 system 注入、请求改写、响应检测与 Context Gardener
+- 改写器配置迁移至 `%APPDATA%\helmx-claudecode.config.json`，与 Claude Code 配置隔离
+- 日志路径改为 `~/.claude/helmx.log`
+- 透传客户端 User-Agent 与会话标识请求头，上游空响应统一转换为结构化错误
+- 更新 README、架构文档、测试标准、issue 模板与全部回归测试
+
 ## v0.0.7 (2026-08-13)
 
 - 内置 Context Gardener，裁剪历史大型工具输出和 Base64 图片，降低后续请求体积

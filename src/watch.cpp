@@ -46,10 +46,10 @@ void watch_start(int interval_sec) {
     if (!g_watch_running.compare_exchange_strong(expected, true)) return;
     log_info("watch: start (interval " + std::to_string(interval_sec) + "s)");
     g_watch_thread = std::thread([interval_sec] {
-        std::string home = find_codex_home();
+        std::string home = find_claude_home();
         if (home.empty()) {
-            std::fprintf(stderr, "[helm-x] codex home not found\n");
-            log_error("watch: codex home not found");
+            std::fprintf(stderr, "[helm-x] Claude Code home not found\n");
+            log_error("watch: Claude Code home not found");
             g_watch_running = false;
             return;
         }
@@ -91,9 +91,9 @@ int watch(int interval_sec) {
     if (interval_sec < 5) interval_sec = 5;
     std::printf("[helm-x] watch started (interval %ds) — Ctrl+C to stop\n", interval_sec);
 
-    std::string home = find_codex_home();
+    std::string home = find_claude_home();
     if (home.empty()) {
-        std::fprintf(stderr, "[helm-x] codex home not found\n");
+        std::fprintf(stderr, "[helm-x] Claude Code home not found\n");
         return 1;
     }
 

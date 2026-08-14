@@ -1,4 +1,4 @@
-// helm-x — Codex CLI environment control tool (C++17, single binary)
+// helm-x - Claude Code environment control tool (C++17, single binary)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -37,7 +37,7 @@ static void launch_dashboard() {
     std::printf("  helm-x  —  Proxy + Web Console\n");
     std::printf("  Proxy   : http://127.0.0.1:1800\n");
     std::printf("  UI      : http://127.0.0.1:%d\n", port);
-    std::printf("  Log     : %%USERPROFILE%%\\.codex\\helmx.log\n");
+    std::printf("  Log     : %%USERPROFILE%%\\.claude\\helmx.log\n");
     std::printf("  Close this window to stop all services.\n");
     std::printf("==============================================\n");
     std::fflush(stdout);
@@ -91,14 +91,14 @@ static void launch_dashboard() {
 
 static void usage() {
     std::printf(
-        "helm-x — Codex environment control\n"
+        "helm-x - Claude Code environment control\n"
         "\n"
         "usage: helmx <command> [args]\n"
         "\n"
         "commands:\n"
-        "  apply              deploy AGENTS.md + config injection\n"
-        "  verify             self-test injection state [--e2e runs codex check]\n"
-        "  activate           send activation word 'helmx' via codex\n"
+        "  apply              configure Claude Code for the local proxy\n"
+        "  verify             self-test injection state [--e2e runs Claude check]\n"
+        "  activate           send activation word 'helmx' via Claude Code\n"
         "  ui                 web dashboard (status / rules / actions)\n"
         "  watch              self-healing daemon (verify + restore)\n"
         "  proxy              tamper proxy (HTTP MITM inject + rewrite)\n"

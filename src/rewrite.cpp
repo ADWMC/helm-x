@@ -32,11 +32,11 @@ static std::string config_path(bool require_existing) {
 #ifdef _WIN32
     const char* appdata = std::getenv("APPDATA");
     if (!appdata || !*appdata) return "";
-    fs::path path = fs::path(appdata) / "helmx.config.json";
+    fs::path path = fs::path(appdata) / "helmx-claudecode.config.json";
     if (!require_existing || fs::exists(path)) return path.string();
     return "";
 #else
-    fs::path path = fs::path(".") / "helmx.config.json";
+    fs::path path = fs::path(".") / "helmx-claudecode.config.json";
     if (!require_existing || fs::exists(path)) return path.string();
     return "";
 #endif
@@ -107,7 +107,7 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     }
 
     if (content.empty()) {
-        // helmx.config.json is optional. Keep local-rule fallback usable even
+        // The Claude Code config is optional. Keep local-rule fallback usable even
         // when a clean build has no optional embedded provider config.
         cfg.enabled = false;
         cfg.system_prompt = get_resource(ResId::RewritePrompt);
