@@ -227,6 +227,60 @@ class TestUi(unittest.TestCase):
             upstream.shutdown()
             upstream.server_close()
 
+    def test_proxy_returns_structured_cyber_error(self):
+        class CyberUpstream(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                response = (
+                    b'event: response.failed\n'
+                    b'data: {"type":"response.failed","response":{"status":"failed",'
+                    b'"error":{"code":"cyber_policy","message":'
+                    b'"flagged for possible cybersecurity risk"}}}\n\n'
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+            def log_message(self, *_):
+                pass
+
+        upstream = http.server.ThreadingHTTPServer(("127.0.0.1", 0), CyberUpstream)
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        proxy_port = free_port()
+        proc = subprocess.Popen([
+            str(HELMX), "proxy", "--listen", str(proxy_port),
+            "--upstream", f"http://127.0.0.1:{upstream.server_port}/v1",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        payload = {
+            "model": "fixture",
+            "input": [{"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "fixture"},
+            ]}],
+        }
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{proxy_port}/v1/responses",
+                data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"},
+            )
+            for _ in range(30):
+                try:
+                    urllib.request.urlopen(request, timeout=2).read()
+                except urllib.error.HTTPError as error:
+                    self.assertEqual(error.code, 403)
+                    self.assertEqual(json.load(error)["error"]["code"], "cyber_policy")
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            else:
+                self.fail("Proxy did not return a structured cyber error")
+        finally:
+            proc.kill()
+            proc.wait(timeout=5)
+            upstream.shutdown()
+            upstream.server_close()
+
     def test_zxwn_poll_does_not_spam_request_log(self):
         with tempfile.TemporaryDirectory(prefix="helmx-ui-") as tmp:
             codex_home = Path(tmp) / ".codex"
