@@ -168,7 +168,7 @@ bool load_rewriter_config(RewriterConfig& cfg) {
     std::string pu = json_field(content, "proxy_url");
     if (!pu.empty()) cfg.proxy_url = pu;
     std::string prompt_mode = json_field(content, "prompt_mode");
-    if (prompt_mode == "default" || prompt_mode == "v45") cfg.prompt_mode = prompt_mode;
+    if (prompt_mode == "default" || prompt_mode == "v45" || prompt_mode == "deepseek") cfg.prompt_mode = prompt_mode;
     std::string gardener_enabled = json_field(content, "context_gardener_enabled");
     if (!gardener_enabled.empty()) cfg.context_gardener_enabled = gardener_enabled == "true";
     std::string gardener_threshold = json_field(content, "context_gardener_threshold_bytes");

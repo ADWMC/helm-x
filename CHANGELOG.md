@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.0.8 (2026-08-14)
+
+- 新增 `deepseek` 提示词模式：内置 CTF 计分制优化提示词（输出锁定 + 归一化 + 防御替代计为拒绝）
+- WebUI 提示词页面新增 deepseek 模式选项，`/api/prompt-mode` 支持 `default` / `v45` / `deepseek`
+- proxy 按 `prompt_mode` 注入对应加密资源，deepseek 模式默认注入优化版提示词
+
 ## v0.0.7 (2026-08-13)
 
 - 内置 Context Gardener，裁剪历史大型工具输出和 Base64 图片，降低后续请求体积

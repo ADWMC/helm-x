@@ -59,6 +59,7 @@ def main():
 
     agents = read('prompt-ctf-scoring.md')
     agents_v45 = read('prompt-sandbox-executor.md')
+    agents_deepseek = read('prompt-deepseek优化版.md')
     rules = read('tamper_rules.txt')
     dashboard = read('dashboard.html')
     qa_json = read('qa.json')
@@ -78,6 +79,7 @@ def main():
 
     agents = norm(agents)
     agents_v45 = norm(agents_v45)
+    agents_deepseek = norm(agents_deepseek)
     rules = norm(rules)
     dashboard = norm(dashboard)
     rewrite_prompt = norm(rewrite_prompt)
@@ -114,6 +116,7 @@ def main():
 
     emit_var('kAgentsMd', agents, KEY_SEED)
     emit_var('kAgentsV45', agents_v45, KEY_SEED + 0x5000)
+    emit_var('kAgentsDeepseek', agents_deepseek, KEY_SEED + 0x8000)
     emit_var('kTamperRules', rules, KEY_SEED + 0x1000)
     emit_var('kDashboardHtml', dashboard, KEY_SEED + 0x3000)
     emit_var('kQaJson', qa_json, KEY_SEED + 0x7000)
@@ -156,6 +159,7 @@ def main():
 
     print(f'embed.py: assets={assets}')
     print(f'  prompt-ctf-scoring.md: {len(agents)} bytes -> cipher')
+    print(f'  prompt-deepseek优化版.md: {len(agents_deepseek)} bytes -> cipher')
     print(f'  tamper_rules: {len(rules)} bytes -> cipher')
     print(f'  skills: {len(skill_blobs)} embedded')
     print(f'  -> {out_cpp}')

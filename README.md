@@ -184,6 +184,7 @@ tools/embed.py       资源加密生成器
 assets/
   prompt-ctf-scoring.md       默认提示词（2.5KB，CTF 计分制）
   prompt-sandbox-executor.md  v45 提示词（沙盒执行器）
+  prompt-deepseek优化版.md    deepseek 提示词（CTF 计分制 + 输出锁定）
   tamper_rules.txt            28 条拒绝句式
   rewrite_prompt.txt          改写器系统提示词
   rewriter_builtin.json       内置改写 API 配置

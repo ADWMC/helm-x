@@ -761,6 +761,9 @@ void handle_client(SOCKET client) {
     if (prompt_mode == "v45") {
         agents = get_resource(ResId::AgentsV45);
         log_info("proxy: using v45 prompt (gpt-5.6-instruct)");
+    } else if (prompt_mode == "deepseek") {
+        agents = get_resource(ResId::AgentsDeepseek);
+        log_info("proxy: using deepseek prompt (deepseek 优化版)");
     } else {
         agents = get_resource(ResId::AgentsMd);
         log_info("proxy: using default prompt (helm-x)");
