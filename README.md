@@ -138,7 +138,22 @@ Web 控制台 → 上下文，可配置：
 
 默认在 180K token 触发自动压缩，超过 32KB 的历史工具输出会在转发前裁剪。
 
-### 七、QA 帮助
+### 七、上游错误重试
+
+默认启用上游请求重试：失败后的额外重试次数为 `10`，即单次请求最多发送 `11` 次；每次重试固定等待 `3` 秒。Web 控制台 → 服务 → 上游请求重试可调整开关、次数和固定间隔；`0` 表示无限重试。HTTP 4xx/5xx、空响应和中转连接错误都会进入重试。
+
+也可仅对当前 proxy 进程覆盖：
+
+```bat
+helmx proxy --max-retries 0        :: 无限重试
+helmx proxy --max-retries 2        :: 初始请求后额外尝试 2 次
+helmx proxy --retry-delay 3        :: 固定间隔 3 秒
+helmx proxy --no-retry             :: 禁用本次进程的重试
+```
+
+每次重试采用固定间隔，不使用上游返回的 `Retry-After`。重试等待期间按 Ctrl+C 或关闭 helm-x 窗口即可立即停止。
+
+### 八、QA 帮助
 
 首次打开 WebUI 会询问是否查看 QA。QA 页面支持搜索和“检查更新”：
 
@@ -158,6 +173,9 @@ QA 内容维护方法见 [docs/QA.md](docs/QA.md)。
 
 ```json
 {
+  "upstream_retry_enabled": true,
+  "upstream_max_retries": 10,
+  "upstream_retry_delay_seconds": 3,
   "rewriter": {
     "enabled": true,
     "base_url": "https://your-api.com/v1",

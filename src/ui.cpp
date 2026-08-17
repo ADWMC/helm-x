@@ -12,6 +12,8 @@
 #include "watch.h"
 
 #include <atomic>
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -347,6 +349,64 @@ static HttpResponse api_rewriter(const HttpRequest&) {
     return HttpResponse::json(body);
 }
 
+static bool parse_nonnegative_int(const std::string& value, int& out) {
+    if (value.empty()) return false;
+    char* end = nullptr;
+    errno = 0;
+    long long parsed = std::strtoll(value.c_str(), &end, 10);
+    if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < 0 || parsed > INT_MAX)
+        return false;
+    out = static_cast<int>(parsed);
+    return true;
+}
+
+static HttpResponse api_upstream_retry_get(const HttpRequest&) {
+    RewriterConfig cfg;
+    bool loaded = load_rewriter_config(cfg);
+    return HttpResponse::json(
+        std::string("{\"loaded\":") + (loaded ? "true" : "false") +
+        ",\"enabled\":" + (cfg.upstream_retry_enabled ? "true" : "false") +
+        ",\"max_retries\":" + std::to_string(cfg.upstream_max_retries) +
+        ",\"delay_seconds\":" + std::to_string(cfg.upstream_retry_delay_seconds) + "}");
+}
+
+static HttpResponse api_upstream_retry_save(const HttpRequest& req) {
+    std::string enabled;
+    std::string max_retries_value;
+    std::string delay_value;
+    if (!json_value(req.body, "enabled", enabled) ||
+        (enabled != "true" && enabled != "false")) {
+        return HttpResponse::json("{\"error\":\"enabled must be true or false\"}", 400);
+    }
+    if (!json_value(req.body, "max_retries", max_retries_value)) {
+        return HttpResponse::json("{\"error\":\"max_retries is required\"}", 400);
+    }
+    int max_retries = 0;
+    if (!parse_nonnegative_int(max_retries_value, max_retries)) {
+        return HttpResponse::json("{\"error\":\"max_retries must be a non-negative integer\"}", 400);
+    }
+    const bool has_delay = json_value(req.body, "delay_seconds", delay_value);
+    int delay_seconds = 0;
+    if (has_delay && (!parse_nonnegative_int(delay_value, delay_seconds) || delay_seconds < 1)) {
+        return HttpResponse::json("{\"error\":\"delay_seconds must be a positive integer\"}", 400);
+    }
+
+    RewriterConfig cfg;
+    load_rewriter_config(cfg);
+    cfg.upstream_retry_enabled = enabled == "true";
+    cfg.upstream_max_retries = max_retries;
+    if (has_delay) cfg.upstream_retry_delay_seconds = delay_seconds;
+    std::string path;
+    if (!save_rewriter_config(cfg, path))
+        return HttpResponse::json("{\"error\":\"failed to write config\"}", 500);
+    log_info("ui: upstream retry config saved to " + path);
+    return HttpResponse::json(
+        std::string("{\"ok\":true,\"enabled\":") +
+        (cfg.upstream_retry_enabled ? "true" : "false") +
+        ",\"max_retries\":" + std::to_string(cfg.upstream_max_retries) +
+        ",\"delay_seconds\":" + std::to_string(cfg.upstream_retry_delay_seconds) + "}");
+}
+
 static HttpResponse api_rewriter_test(const HttpRequest& req) {
     // Test rewriter with a sample message
     std::string test_msg = req.body;
@@ -542,6 +602,8 @@ int ui_main(int argc, char** argv) {
         if (req.method == "GET" && req.path == "/api/log") return api_log(req);
         if (req.method == "GET" && req.path == "/api/cyber-log") return api_cyber_log(req);
         if (req.method == "GET" && req.path == "/api/rewriter") return api_rewriter(req);
+        if (req.method == "GET" && req.path == "/api/upstream-retry") return api_upstream_retry_get(req);
+        if (req.method == "POST" && req.path == "/api/upstream-retry") return api_upstream_retry_save(req);
         if (req.method == "POST" && req.path == "/api/rewriter/test") return api_rewriter_test(req);
         if (req.method == "POST" && req.path == "/api/rewriter/save") return api_rewriter_save(req);
         if (req.method == "POST" && req.path == "/api/rewriter/toggle") return api_rewriter_toggle(req);

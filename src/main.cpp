@@ -103,6 +103,11 @@ static void usage() {
         "  watch              self-healing daemon (verify + restore)\n"
         "  proxy              tamper proxy (HTTP MITM inject + rewrite)\n"
         "  remove             uninstall and restore backups\n"
+        "\n"
+        "proxy options:\n"
+        "  --max-retries N       Retry failed upstream requests N additional times (0 = unlimited)\n"
+        "  --retry-delay SECONDS Use a fixed delay between retries (default 3)\n"
+        "  --no-retry            Disable upstream retry for this proxy process\n"
         "\n");
 }
 

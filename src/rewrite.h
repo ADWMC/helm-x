@@ -17,6 +17,10 @@ struct RewriterConfig {
     std::string prompt_mode = "default";
     bool context_gardener_enabled = true;
     int context_gardener_threshold_bytes = 32768;
+    // Proxy upstream retry policy. max_retries is additional attempts; 0 is unlimited.
+    bool upstream_retry_enabled = true;
+    int upstream_max_retries = 10;
+    int upstream_retry_delay_seconds = 3;
 };
 
 // Load config from %APPDATA%/helmx.config.json.

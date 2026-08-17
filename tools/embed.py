@@ -154,7 +154,7 @@ def main():
     lines.append('')
 
     os.makedirs(os.path.dirname(out_cpp), exist_ok=True)
-    with open(out_cpp, 'w', encoding='utf-8') as f:
+    with open(out_cpp, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(lines))
 
     print(f'embed.py: assets={assets}')
