@@ -5,6 +5,8 @@
 #include "resources.h"
 #include "version.h"
 
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -178,6 +180,35 @@ bool load_rewriter_config(RewriterConfig& cfg) {
             cfg.context_gardener_threshold_bytes = threshold;
     }
 
+    std::string retry_enabled = json_field(content, "upstream_retry_enabled");
+    if (retry_enabled == "true" || retry_enabled == "false") {
+        cfg.upstream_retry_enabled = retry_enabled == "true";
+    }
+    std::string max_retries = json_field(content, "upstream_max_retries");
+    if (!max_retries.empty()) {
+        char* end = nullptr;
+        errno = 0;
+        long long parsed = std::strtoll(max_retries.c_str(), &end, 10);
+        if (errno == 0 && end != max_retries.c_str() && *end == '\0' &&
+            parsed >= 0 && parsed <= INT_MAX) {
+            cfg.upstream_max_retries = static_cast<int>(parsed);
+        } else {
+            log_error("rewriter: invalid upstream_max_retries; using default");
+        }
+    }
+    std::string retry_delay = json_field(content, "upstream_retry_delay_seconds");
+    if (!retry_delay.empty()) {
+        char* end = nullptr;
+        errno = 0;
+        long long parsed = std::strtoll(retry_delay.c_str(), &end, 10);
+        if (errno == 0 && end != retry_delay.c_str() && *end == '\0' &&
+            parsed >= 1 && parsed <= INT_MAX) {
+            cfg.upstream_retry_delay_seconds = static_cast<int>(parsed);
+        } else {
+            log_error("rewriter: invalid upstream_retry_delay_seconds; using default");
+        }
+    }
+
     log_info(std::string("rewriter: ") + (cfg.enabled ? "enabled" : "disabled") +
              " model=" + cfg.model +
              " proxy=" + (cfg.use_proxy ? cfg.proxy_url : "direct") +
@@ -199,6 +230,9 @@ bool save_rewriter_config(const RewriterConfig& cfg, std::string& path) {
     out << "{\n  \"prompt_mode\": \"" << json_escape(cfg.prompt_mode) << "\",\n"
         << "  \"context_gardener_enabled\": " << (cfg.context_gardener_enabled ? "true" : "false") << ",\n"
         << "  \"context_gardener_threshold_bytes\": " << cfg.context_gardener_threshold_bytes << ",\n"
+        << "  \"upstream_retry_enabled\": " << (cfg.upstream_retry_enabled ? "true" : "false") << ",\n"
+        << "  \"upstream_max_retries\": " << cfg.upstream_max_retries << ",\n"
+        << "  \"upstream_retry_delay_seconds\": " << cfg.upstream_retry_delay_seconds << ",\n"
         << "  \"rewriter\": {\n"
         << "    \"enabled\": " << (cfg.enabled ? "true" : "false") << ",\n"
         << "    \"provider\": \"" << json_escape(cfg.provider) << "\",\n"

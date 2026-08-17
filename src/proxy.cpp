@@ -22,6 +22,9 @@
 #include "tamper.h"
 #include "version.h"
 
+#include <algorithm>
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -53,6 +56,18 @@ namespace {
 std::string g_upstream;  // e.g. https://huablog.xyz/v1
 int g_listen_port = 1800;
 std::atomic<bool> g_running{true};
+std::atomic<unsigned long long> g_upstream_request_sequence{0};
+
+struct UpstreamRetryOptions {
+    bool enabled = true;
+    int max_retries = 10;  // additional attempts; 0 means unlimited
+    int delay_seconds = 3; // fixed delay between attempts
+};
+
+bool g_retry_cli_enabled_set = false;
+bool g_retry_cli_max_set = false;
+bool g_retry_cli_delay_set = false;
+UpstreamRetryOptions g_retry_cli_options;
 
 #ifdef _WIN32
 BOOL WINAPI ctrl_handler(DWORD type) {
@@ -569,12 +584,34 @@ std::string inject_request(const std::string& body, const std::string& agents, b
 }
 
 // ── WinHTTP upstream call ──
-// Returns HTTP status and response body.
 using ForwardHeader = std::pair<std::string, std::string>;
 
-bool upstream_post(const std::string& path, const std::string& body,
-                   const std::string& auth, const std::vector<ForwardHeader>& forwarded,
-                   int& status, std::string& resp) {
+struct UpstreamAttempt {
+    bool response_complete = false;
+    int status = 502;
+    std::string body;
+    std::string failure_stage;
+};
+
+bool parse_nonnegative_int(const std::string& value, int& out) {
+    if (value.empty()) return false;
+    char* end = nullptr;
+    errno = 0;
+    long long parsed = std::strtoll(value.c_str(), &end, 10);
+    if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < 0 || parsed > INT_MAX)
+        return false;
+    out = static_cast<int>(parsed);
+    return true;
+}
+
+bool has_non_whitespace(const std::string& body) {
+    return body.find_first_not_of(" \t\r\n") != std::string::npos;
+}
+
+UpstreamAttempt upstream_post_once(const std::string& path, const std::string& body,
+                                   const std::string& auth,
+                                   const std::vector<ForwardHeader>& forwarded) {
+    UpstreamAttempt result;
     std::string host;
     int port = 443;
     std::string prefix;
@@ -589,17 +626,32 @@ bool upstream_post(const std::string& path, const std::string& body,
     HINTERNET hSession = WinHttpOpen(L"helmx-proxy/" HELMX_VERSION_W,
                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!hSession) return false;
-
+    if (!hSession) {
+        result.failure_stage = "session_open";
+        return result;
+    }
     HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(), (INTERNET_PORT)port, 0);
-    if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
+    if (!hConnect) {
+        result.failure_stage = "connect";
+        WinHttpCloseHandle(hSession);
+        return result;
+    }
 
     DWORD flags = port == 443 ? WINHTTP_FLAG_SECURE : 0;
     HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", wpath.c_str(), nullptr,
                                             WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
-    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
+    if (!hRequest) {
+        result.failure_stage = "request_open";
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return result;
+    }
+    auto close_handles = [&]() {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+    };
 
-    // headers
     std::wstring hdrs = L"Content-Type: application/json\r\n";
     if (!auth.empty()) {
         hdrs += L"Authorization: ";
@@ -611,7 +663,8 @@ bool upstream_post(const std::string& path, const std::string& body,
              " body=" + std::to_string(body.size()) + "B");
     bool has_user_agent = false, has_originator = false;
     for (const auto& header : forwarded) {
-        if (header.second.find('\r') != std::string::npos || header.second.find('\n') != std::string::npos) continue;
+        if (header.second.find('\r') != std::string::npos || header.second.find('\n') != std::string::npos)
+            continue;
         std::wstring name(header.first.begin(), header.first.end());
         std::wstring value(header.second.begin(), header.second.end());
         hdrs += name + L": " + value + L"\r\n";
@@ -622,52 +675,136 @@ bool upstream_post(const std::string& path, const std::string& body,
         hdrs += L"User-Agent: codex_exec/0.146.0 (Windows 10.0.26100; x86_64) xterm-256color (codex_exec; 0.146.0)\r\n";
     if (!has_originator) hdrs += L"Originator: codex_exec\r\n";
 
-    BOOL ok = WinHttpSendRequest(hRequest, hdrs.c_str(), (DWORD)hdrs.size(),
-                                 (LPVOID)body.data(), (DWORD)body.size(),
-                                 (DWORD)body.size(), 0);
-    if (!ok) {
-        WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        return false;
+    if (!WinHttpSendRequest(hRequest, hdrs.c_str(), (DWORD)hdrs.size(),
+                            (LPVOID)body.data(), (DWORD)body.size(),
+                            (DWORD)body.size(), 0)) {
+        result.failure_stage = "send";
+        close_handles();
+        return result;
     }
-    ok = WinHttpReceiveResponse(hRequest, nullptr);
-    if (!ok) {
-        WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        return false;
+    if (!WinHttpReceiveResponse(hRequest, nullptr)) {
+        result.failure_stage = "receive";
+        close_handles();
+        return result;
     }
 
-    // status
     DWORD status_code = 0;
-    DWORD ssz = sizeof(status_code);
-    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                        WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &ssz, WINHTTP_NO_HEADER_INDEX);
-    status = (int)status_code;
+    DWORD status_size = sizeof(status_code);
+    if (!WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                             WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &status_size,
+                             WINHTTP_NO_HEADER_INDEX)) {
+        result.failure_stage = "status";
+        close_handles();
+        return result;
+    }
+    result.status = static_cast<int>(status_code);
 
-    // body (bounded; upstream is stream=false so this is one complete JSON)
-    resp.clear();
-    char buf[65536];
-    DWORD avail = 0;
-    while (WinHttpQueryDataAvailable(hRequest, &avail) && avail > 0) {
+    char buffer[65536];
+    while (true) {
+        DWORD available = 0;
+        if (!WinHttpQueryDataAvailable(hRequest, &available)) {
+            result.failure_stage = "query_data";
+            close_handles();
+            return result;
+        }
+        if (available == 0) break;
+
         DWORD read = 0;
-        if (WinHttpReadData(hRequest, buf, avail < sizeof(buf) ? avail : sizeof(buf), &read) && read > 0) {
-            resp.append(buf, read);
-            if (resp.size() > 16 * 1024 * 1024) {
-                log_error("upstream: response exceeds 16 MiB limit");
-                resp.clear();
-                break;
-            }
-        } else {
-            break;
+        if (!WinHttpReadData(hRequest, buffer, std::min<DWORD>(available, sizeof(buffer)), &read) ||
+            read == 0) {
+            result.failure_stage = "read_data";
+            close_handles();
+            return result;
+        }
+        result.body.append(buffer, read);
+        if (result.body.size() > 16 * 1024 * 1024) {
+            result.body.clear();
+            result.failure_stage = "response_too_large";
+            log_error("upstream: response exceeds 16 MiB limit");
+            close_handles();
+            return result;
         }
     }
 
-    WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
-    WinHttpCloseHandle(hSession);
-    return true;
+    result.response_complete = true;
+    close_handles();
+    return result;
+}
+
+bool should_retry(const UpstreamAttempt& attempt) {
+    return !attempt.response_complete || attempt.status < 200 || attempt.status >= 300 ||
+           !has_non_whitespace(attempt.body);
+}
+
+std::string retry_reason(const UpstreamAttempt& attempt) {
+    if (!attempt.response_complete) {
+        return attempt.failure_stage.empty() ? "incomplete response" : attempt.failure_stage;
+    }
+    if (attempt.status < 200 || attempt.status >= 300) {
+        return "HTTP " + std::to_string(attempt.status);
+    }
+    return "empty response";
+}
+
+int retry_delay_millis(const UpstreamRetryOptions& retry_options) {
+    if (retry_options.delay_seconds > INT_MAX / 1000) return INT_MAX;
+    return retry_options.delay_seconds * 1000;
+}
+
+bool wait_for_retry(int delay_ms) {
+    while (delay_ms > 0 && g_running.load()) {
+        const int slice = std::min(delay_ms, 100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(slice));
+        delay_ms -= slice;
+    }
+    return g_running.load();
+}
+
+bool upstream_post(const std::string& path, const std::string& body,
+                   const std::string& auth, const std::vector<ForwardHeader>& forwarded,
+                   const UpstreamRetryOptions& retry_options, int& status, std::string& resp) {
+    const unsigned long long request_id = ++g_upstream_request_sequence;
+    int attempt_number = 1;
+    while (true) {
+        UpstreamAttempt attempt = upstream_post_once(path, body, auth, forwarded);
+        const bool retry = should_retry(attempt);
+        const std::string reason = retry ? retry_reason(attempt) : "";
+        status = attempt.status;
+        resp = std::move(attempt.body);
+        if (!retry) return true;
+
+        const bool retry_available = retry_options.enabled &&
+            (retry_options.max_retries == 0 || attempt_number <= retry_options.max_retries);
+        if (!retry_available) {
+            log_error("proxy: upstream request #" + std::to_string(request_id) +
+                      " exhausted after " + std::to_string(attempt_number) + " attempt(s): " + reason);
+            return attempt.response_complete;
+        }
+
+        const int retry_number = attempt_number;
+        const int delay_ms = retry_delay_millis(retry_options);
+        const std::string limit = retry_options.max_retries == 0
+            ? "unlimited" : std::to_string(retry_number) + "/" + std::to_string(retry_options.max_retries);
+        log_info("proxy: upstream request #" + std::to_string(request_id) +
+                 " retry " + limit + " after " + reason +
+                 "; waiting " + std::to_string(delay_ms) + "ms (fixed)");
+        if (!wait_for_retry(delay_ms)) {
+            log_info("proxy: upstream request #" + std::to_string(request_id) +
+                     " retry interrupted by shutdown");
+            return attempt.response_complete;
+        }
+        ++attempt_number;
+    }
+}
+
+UpstreamRetryOptions retry_options_for_request(const RewriterConfig& config) {
+    UpstreamRetryOptions options{config.upstream_retry_enabled,
+                                 config.upstream_max_retries,
+                                 config.upstream_retry_delay_seconds};
+    if (g_retry_cli_enabled_set) options.enabled = g_retry_cli_options.enabled;
+    if (g_retry_cli_max_set) options.max_retries = g_retry_cli_options.max_retries;
+    if (g_retry_cli_delay_set) options.delay_seconds = g_retry_cli_options.delay_seconds;
+    return options;
 }
 
 // ── per-connection handling ──
@@ -752,6 +889,7 @@ void handle_client(SOCKET client) {
     // Load on each request so UI edits take effect without restarting proxy.
     RewriterConfig rcfg;
     load_rewriter_config(rcfg);
+    const UpstreamRetryOptions retry_options = retry_options_for_request(rcfg);
 
     // inject AGENTS into request (from encrypted resource, not from file)
     // Prompt mode comes from the same AppData configuration as the rewriter.
@@ -787,7 +925,7 @@ void handle_client(SOCKET client) {
     // upstream call (attempt 1: as-is)
     int status = 502;
     std::string resp_body;
-    bool ok = upstream_post(target, out_body, auth, forwarded, status, resp_body);
+    bool ok = upstream_post(target, out_body, auth, forwarded, retry_options, status, resp_body);
     log_info(std::string("proxy: upstream ") + std::to_string(status) +
              " (" + std::to_string(resp_body.size()) + "B)");
     // Debug: log first 300 bytes of response to diagnose TAMPER matching
@@ -889,7 +1027,7 @@ void handle_client(SOCKET client) {
 
                 int status2 = 502;
                 std::string resp2;
-                bool ok2 = upstream_post(target, clean_body, auth, forwarded, status2, resp2);
+                bool ok2 = upstream_post(target, clean_body, auth, forwarded, retry_options, status2, resp2);
                 log_info("proxy: clean-session upstream " + std::to_string(status2) +
                          " (" + std::to_string(resp2.size()) + "B)");
 
@@ -915,7 +1053,7 @@ void handle_client(SOCKET client) {
                          std::to_string(clean_body.size()) + "B");
                 int status2 = 502;
                 std::string resp2;
-                bool ok2 = upstream_post(target, clean_body, auth, forwarded, status2, resp2);
+                bool ok2 = upstream_post(target, clean_body, auth, forwarded, retry_options, status2, resp2);
                 if (ok2 && !is_cyber_flag(status2, resp2)) {
                     ok = ok2;
                     status = status2;
@@ -945,7 +1083,7 @@ void handle_client(SOCKET client) {
             log_info("proxy: cyber detected, forking clean session (no rewrite)");
             int status2 = 502;
             std::string resp2;
-            bool ok2 = upstream_post(target, clean_body, auth, forwarded, status2, resp2);
+            bool ok2 = upstream_post(target, clean_body, auth, forwarded, retry_options, status2, resp2);
             if (ok2 && !is_cyber_flag(status2, resp2)) {
                 ok = ok2;
                 status = status2;
@@ -1073,7 +1211,7 @@ void handle_client(SOCKET client) {
                     log_info("proxy: TAMPER retry with clean session");
                     int status_retry = 502;
                     std::string resp_retry;
-                    bool ok_retry = upstream_post(target, retry_body, auth, forwarded, status_retry, resp_retry);
+                    bool ok_retry = upstream_post(target, retry_body, auth, forwarded, retry_options, status_retry, resp_retry);
                     if (ok_retry && !is_refusal(resp_retry) && !is_cyber_flag(status_retry, resp_retry)) {
                         log_info("proxy: TAMPER retry succeeded");
                         final_body = resp_retry;
@@ -1118,14 +1256,71 @@ void handle_client(SOCKET client) {
     ::closesocket(client);
 }
 
+void proxy_usage() {
+    std::printf(
+        "usage: helmx proxy [--listen PORT] [--upstream URL] [--max-retries N | --no-retry] [--retry-delay SECONDS]\n"
+        "  --max-retries N       Retry failed upstream requests N additional times (0 = unlimited)\n"
+        "  --retry-delay SECONDS Use a fixed delay between retries\n"
+        "  --no-retry            Disable upstream retry for this proxy process\n");
+}
+
 }  // namespace
 
 int proxy_main(int argc, char** argv) {
+    g_running = true;
+    g_retry_cli_enabled_set = false;
+    g_retry_cli_max_set = false;
+    g_retry_cli_delay_set = false;
+    g_retry_cli_options = UpstreamRetryOptions{};
+    bool saw_max_retries = false;
+    bool saw_no_retry = false;
+
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
-        if (a == "--listen" && i + 1 < argc) g_listen_port = std::atoi(argv[++i]);
-        else if (a == "--upstream" && i + 1 < argc) g_upstream = argv[++i];
-        else if (a == "--restore") {
+        if (a == "--listen") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "helmx proxy: --listen requires a port\n");
+                return 1;
+            }
+            g_listen_port = std::atoi(argv[++i]);
+        } else if (a == "--upstream") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "helmx proxy: --upstream requires a URL\n");
+                return 1;
+            }
+            g_upstream = argv[++i];
+        } else if (a == "--max-retries") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "helmx proxy: --max-retries requires a non-negative integer\n");
+                return 1;
+            }
+            int max_retries = 0;
+            if (!parse_nonnegative_int(argv[++i], max_retries)) {
+                std::fprintf(stderr, "helmx proxy: --max-retries must be a non-negative integer\n");
+                return 1;
+            }
+            saw_max_retries = true;
+            g_retry_cli_max_set = true;
+            g_retry_cli_enabled_set = true;
+            g_retry_cli_options.max_retries = max_retries;
+            g_retry_cli_options.enabled = true;
+        } else if (a == "--retry-delay") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "helmx proxy: --retry-delay requires a positive integer\n");
+                return 1;
+            }
+            int delay_seconds = 0;
+            if (!parse_nonnegative_int(argv[++i], delay_seconds) || delay_seconds < 1) {
+                std::fprintf(stderr, "helmx proxy: --retry-delay must be a positive integer\n");
+                return 1;
+            }
+            g_retry_cli_delay_set = true;
+            g_retry_cli_options.delay_seconds = delay_seconds;
+        } else if (a == "--no-retry") {
+            saw_no_retry = true;
+            g_retry_cli_enabled_set = true;
+            g_retry_cli_options.enabled = false;
+        } else if (a == "--restore") {
             // manual restore: revert codex config from backup
             std::string home = find_codex_home();
             if (!home.empty() && restore_config_proxy(home)) {
@@ -1134,7 +1329,18 @@ int proxy_main(int argc, char** argv) {
             }
             std::printf("[helm-x] nothing to restore (no .helmx-proxy-bak)\n");
             return 1;
+        } else if (a == "--help" || a == "-h") {
+            proxy_usage();
+            return 0;
+        } else {
+            std::fprintf(stderr, "helmx proxy: unknown option '%s'\n", a.c_str());
+            proxy_usage();
+            return 1;
         }
+    }
+    if (saw_max_retries && saw_no_retry) {
+        std::fprintf(stderr, "helmx proxy: --max-retries and --no-retry cannot be used together\n");
+        return 1;
     }
     if (g_upstream.empty()) {
         // auto-read relay from codex config (prefers .helmx-proxy-bak)
@@ -1182,7 +1388,14 @@ int proxy_main(int argc, char** argv) {
     }
     ::listen(listen_sock, 32);
 
+    RewriterConfig startup_config;
+    load_rewriter_config(startup_config);
+    const UpstreamRetryOptions startup_retry = retry_options_for_request(startup_config);
+    const std::string retry_label = !startup_retry.enabled ? "disabled" :
+        (startup_retry.max_retries == 0 ? "unlimited" : std::to_string(startup_retry.max_retries) + " additional") +
+        (startup_retry.enabled ? ", " + std::to_string(startup_retry.delay_seconds) + "s fixed delay" : "");
     std::printf("[helm-x] proxy: http://127.0.0.1:%d -> %s\n", g_listen_port, g_upstream.c_str());
+    std::printf("[helm-x] upstream retry: %s (0 means unlimited in config)\n", retry_label.c_str());
     std::printf("[helm-x] inject: ON  tamper: ON  (close window to stop)\n");
     std::fflush(stdout);
     log_info("proxy: listening :" + std::to_string(g_listen_port) + " -> " + g_upstream);

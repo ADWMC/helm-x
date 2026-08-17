@@ -354,6 +354,23 @@ tbody tr:hover { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); 
           </div>
         </div>
         <div class="panel">
+          <div class="panel-head"><h2>上游请求重试</h2><span>中转临时错误自动恢复</span></div>
+          <div class="panel-body">
+            <div class="field-grid">
+              <div class="field"><label>启用重试</label><select class="select" id="upstream-retry-enabled"><option value="true">启用</option><option value="false">禁用</option></select></div>
+              <div class="field"><label>额外重试次数</label><input class="input" id="upstream-max-retries" type="number" min="0" step="1" value="10"><small style="color:var(--muted)">0 = 无限重试；10 表示首次失败后最多再试 10 次</small></div>
+              <div class="field"><label>固定重试间隔（秒）</label><input class="input" id="upstream-retry-delay" type="number" min="1" step="1" value="3"><small style="color:var(--muted)">每次失败固定等待；默认 3 秒，不采用上游 Retry-After</small></div>
+            </div>
+            <div class="actions" style="margin-top:18px">
+              <button class="btn primary" onclick="saveUpstreamRetryConfig()">保存重试配置</button>
+              <button class="btn secondary" onclick="loadUpstreamRetryConfig()">重新加载</button>
+              <span id="upstream-retry-status" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin:12px 0 0">配置对下一次请求生效；HTTP 4xx/5xx、空响应和中转连接错误均会重试。</p>
+          </div>
+        </div>
+
+        <div class="panel">
           <div class="panel-head"><h2>改写器测试</h2><span>输入消息测试改写效果</span></div>
           <div class="panel-body">
             <div class="actions">
@@ -733,6 +750,46 @@ async function testRewriter() {
     else output.textContent = '改写失败（本地规则无匹配）';
   } catch (e) { output.textContent = '请求失败: ' + e.message; }
 }
+async function loadUpstreamRetryConfig() {
+  try {
+    const r = await get('/api/upstream-retry');
+    if (r.loaded) {
+      $('upstream-retry-enabled').value = r.enabled ? 'true' : 'false';
+      $('upstream-max-retries').value = r.max_retries;
+      $('upstream-retry-delay').value = r.delay_seconds;
+      $('upstream-retry-status').textContent = r.enabled
+        ? (r.max_retries === 0 ? `已启用：无限重试，间隔 ${r.delay_seconds} 秒` : `已启用：额外重试 ${r.max_retries} 次，间隔 ${r.delay_seconds} 秒`)
+        : '已禁用：仅发送一次请求';
+      $('upstream-retry-status').style.color = r.enabled ? 'var(--success)' : 'var(--muted)';
+    }
+  } catch (e) {}
+}
+async function saveUpstreamRetryConfig() {
+  const raw = $('upstream-max-retries').value.trim();
+  const delayRaw = $('upstream-retry-delay').value.trim();
+  if (!/^\d+$/.test(raw) || Number(raw) > 2147483647) {
+    showToast('重试次数必须是 0 到 2147483647 的整数');
+    return;
+  }
+  if (!/^\d+$/.test(delayRaw) || Number(delayRaw) < 1 || Number(delayRaw) > 2147483) {
+    showToast('固定间隔必须是 1 到 2147483 秒的整数');
+    return;
+  }
+  const config = {
+    enabled: $('upstream-retry-enabled').value === 'true',
+    max_retries: Number(raw),
+    delay_seconds: Number(delayRaw)
+  };
+  try {
+    const resp = await fetch('/api/upstream-retry', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(config)
+    });
+    const r = await resp.json();
+    showToast(r.ok ? '重试配置已保存，将在下一次请求生效' : '保存失败: ' + (r.error || ''));
+    if (r.ok) loadUpstreamRetryConfig();
+  } catch (e) { showToast('请求失败: ' + e.message); }
+}
+
 async function loadRewriterConfig() {
   try {
     const r = await get('/api/rewriter');
@@ -824,7 +881,7 @@ async function toggleRewriter(enable) {
 }
 
 /* ── Init ── */
-refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshWatch(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadPromptMode(); loadContextConfig(); loadQa(false);
+refreshStatus(); refreshRules(); refreshProxy(); refreshRewriter(); refreshWatch(); refreshLog(); refreshCyberLog(); loadRewriterConfig(); loadUpstreamRetryConfig(); loadPromptMode(); loadContextConfig(); loadQa(false);
 if (!sessionStorage.getItem('helmx-qa-welcome')) $('qa-welcome').hidden = false;
 setInterval(refreshStatus, 5000);
 setInterval(refreshProxy, 3000);

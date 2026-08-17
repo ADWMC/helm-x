@@ -115,8 +115,22 @@ helmx.exe
 
 :: Option B — Command line
 helmx proxy --listen 1800          :: Local mapping
-helmx ui                           :: Web console
+helmx proxy --max-retries 0         :: Retry upstream failures forever
+helmx proxy --max-retries 2         :: Two retries after the initial request
+helmx proxy --retry-delay 3         :: Use a fixed three-second delay
+helmx proxy --no-retry              :: Disable retry for this process
+helmx ui                            :: Web console
 ```
+
+### Upstream Retry
+
+The proxy retries upstream transport failures, incomplete or empty responses, and every
+HTTP 4xx/5xx response by default. `upstream_max_retries` counts **additional** attempts:
+the default `10` permits up to eleven requests total, while `0` retries until the proxy is
+stopped. Retries use a fixed three-second delay by default; configure the delay in
+**Services → Upstream Retry** or in `%APPDATA%\helmx.config.json`. The proxy does not
+use an upstream `Retry-After` value. Ctrl+C or closing the helm-x window interrupts a
+pending retry wait immediately.
 
 ### WebUI QA and Context Settings
 
@@ -160,6 +174,9 @@ The rewriter auto-rewrites user messages when cyber flag triggers. Requires a **
 
 ```json
 {
+  "upstream_retry_enabled": true,
+  "upstream_max_retries": 10,
+  "upstream_retry_delay_seconds": 3,
   "rewriter": {
     "enabled": true,
     "provider": "nvidia",
@@ -177,6 +194,9 @@ The rewriter auto-rewrites user messages when cyber flag triggers. Requires a **
 
 | Field | Description | Default |
 |-------|-------------|---------|
+| upstream_retry_enabled | Enable upstream retry | true |
+| upstream_max_retries | Additional retry attempts; `0` = unlimited | 10 |
+| upstream_retry_delay_seconds | Fixed delay between retries | 3 |
 | enabled | Enable rewriter | false |
 | provider | Provider identifier (for logs) | nvidia |
 | base_url | API endpoint | https://integrate.api.nvidia.com/v1 |
