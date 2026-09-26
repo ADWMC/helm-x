@@ -8,6 +8,8 @@
 
 **If you find this project helpful, please give it a Star!**
 
+**Official QQ group**: 213266664
+
 ---
 
 **Codex CLI local mapping control tool** · Single binary · C++17 · Zero external DLL dependencies

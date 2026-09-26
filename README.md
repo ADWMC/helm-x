@@ -10,6 +10,8 @@
 
 **Telegram**：[t.me/helm_xD](https://t.me/helm_xD)
 
+**官方QQ群**：213266664
+
 ---
 
 **Codex CLI 本地映射控制工具** · 单二进制 · 零外部 DLL 依赖
