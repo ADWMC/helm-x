@@ -1,0 +1,64 @@
+version: '3'
+
+# helm-x 构建任务。
+# 结构与 wails3 生成的模板一致（includes 指向 build/ 下的平台 Taskfile）。
+#
+#   wails3 task build      构建（产出 bin/helmx.exe）
+#   wails3 task package    打包 NSIS 安装程序（需要 makensis 在 PATH 中）
+#   wails3 task dev        开发模式（前端热重载）
+
+vars:
+  APP_NAME: "helmx"
+  BIN_DIR: "bin"
+  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  GOOS: '{{.GOOS | default OS}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+
+tasks:
+  build:
+    summary: 构建应用
+    cmds:
+      - task: "{{.GOOS}}:build"
+
+  package:
+    summary: 打包生产版本（Windows 下为 NSIS 安装程序）
+    cmds:
+      - task: "{{.GOOS}}:package"
+
+  run:
+    summary: 构建并运行
+    cmds:
+      - task: "{{.GOOS}}:run"
+
+  dev:
+    summary: 开发模式（前端热重载）
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  install:msix:tools:
+    summary: 安装 MSIX 打包所需工具
+    cmds:
+      - task: windows:install:msix:tools
+
+  generate:bindings:
+    summary: 重新生成前端 TypeScript 绑定（改动 Go 侧服务方法签名后必须执行）
+    cmds:
+      - wails3 generate bindings
+
+  test:
+    summary: 运行全部测试
+    cmds:
+      - go test ./internal/... -count=1
+      - cmd: cd frontend && npx vitest run
+        platforms: [windows, linux, darwin]
+
+  verify:
+    summary: 静态检查
+    cmds:
+      - go vet ./...
+      - cmd: cd frontend && npx vue-tsc --noEmit
+        platforms: [windows, linux, darwin]

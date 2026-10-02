@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v3.json",
+  "version": "3",
+  "name": "helm-x",
+  "outputfilename": "helmx",
+  "frontend:dir": "frontend",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "frontend/src/bindings",
+  "info": {
+    "companyName": "helm-x",
+    "productName": "helm-x",
+    "productVersion": "0.1.0",
+    "comments": "codex 本地映射层"
+  }
+}

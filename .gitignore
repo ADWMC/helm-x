@@ -1,0 +1,35 @@
+# ── 构建产物（不入仓库）──
+
+# Go 二进制
+/helmx
+/helmx.exe
+/bin/
+*.exe
+
+# 测试装置（阶段 A/1 的假上游与采集器，按需本地构建）
+/fakeupstream
+/tap
+/capbody.exe
+
+# NSIS 打包中间产物（体积大，可由 wails3 重新生成）
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+
+# ── 前端 ──
+frontend/node_modules/
+frontend/dist/
+
+# 生成的 Wails 绑定：随 Go 侧方法签名变化，不入仓库以避免无意义 diff
+frontend/bindings/
+
+# ── 本地配置与凭据（INV-10：凭据不落仓库）──
+*.local.json
+helmx.config.json
+asset.key
+
+# ── 编辑器与系统 ──
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.task/

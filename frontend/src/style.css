@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+/* daisyUI 作为 Tailwind 4 插件接入。
+   include 只打进实际用到的组件，控制 CSS 体积（DESIGN-SPEC §2）。 */
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+  include: button, badge, card, input, select, textarea, toggle,
+           table, tabs, alert, modal, tooltip, progress, loading,
+           collapse, menu, navbar, drawer, stat, indicator, join,
+           fieldset, label, divider, status, toast, list;
+}
+
+/* ── 深色主题：按 Linear 四层 surface 阶梯 ──
+
+   参照 VoltAgent/awesome-design-md 的 Linear 深色系统：
+
+     canvas      #010102   页面底色
+     surface-1   #0f1011   卡片 / 面板（比底亮 5%）
+     surface-2   #141516   提升卡片（比 surface-1 亮 3%）
+     surface-3   #18191a   嵌套元素（再亮 2%）
+     surface-4   #191a1b   最深嵌套
+     hairline    #23252a   边框（比底亮 14%）
+
+   核心原则：**靠 surface 色阶本身分层，不是靠边框**。
+   边框只做细微点缀（1px hairline），真正的层级感来自背景色差异。
+
+   之前的问题（用户："界面完全不分明"）：
+   1. 卡片和页面同色（都用 base-100），看不出"浮起来"
+   2. 边框对比度太低（12 个百分点），在近黑底上等于没有
+   3. 只有 3 层，层级不够
+*/
+@plugin "daisyui/theme" {
+  name: "light";
+  default: true;
+  color-scheme: light;
+  --color-primary: oklch(58% 0.105 165);
+  --color-primary-content: oklch(98% 0.01 165);
+  --radius-box: 0.75rem;
+  --radius-field: 0.5rem;
+}
+
+@plugin "daisyui/theme" {
+  name: "dark";
+  prefersdark: true;
+  color-scheme: dark;
+
+  /* canvas：页面底色。Cursor 的理念是"warm near-black, not pure black"。
+     用暖棕色调（hue 60 = 暖橙）而非冷蓝（hue 250），
+     纯黑 OLED 屏会难受，暖黑更舒适。 */
+  --color-base-100: oklch(3% 0.005 60);
+  /* surface-1：卡片 / 面板（比底亮 3 个百分点，暖灰） */
+  --color-base-200: oklch(6% 0.006 60);
+  /* hairline：边框与分隔线（比底亮 10 个百分点） */
+  --color-base-300: oklch(13% 0.008 60);
+
+  /* 正文：暖白，不用纯白（Cursor 用 warm ink #26251e 的反面） */
+  --color-base-content: oklch(93% 0.004 60);
+
+  /* 品牌绿：暖底上保持辨识度 */
+  --color-primary: oklch(72% 0.12 165);
+  --color-primary-content: oklch(15% 0.02 165);
+
+  /* 语义色：暖底上适当降低饱和度 */
+  --color-success: oklch(72% 0.12 155);
+  --color-warning: oklch(80% 0.11 80);
+  --color-error: oklch(70% 0.14 25);
+  --color-info: oklch(72% 0.10 230);
+
+  /* 中性色：暖灰，与整体色调一致 */
+  --color-neutral: oklch(8% 0.005 60);
+  --color-neutral-content: oklch(88% 0.003 60);
+
+  --radius-box: 0.75rem;
+  --radius-field: 0.5rem;
+}
+
+/* ── 卡片分层 ──
+   daisyUI 的 .card 默认用 base-100，和页面同色。
+   改为 base-200（surface-1），让卡片"浮"在画布上。
+   这是 Linear 的做法：卡片比页面亮一档，不用边框也有层级感。 */
+.card {
+  background-color: var(--color-base-200);
+  border: 1px solid var(--color-base-300);
+}
+
+/* ── 浮层（modal / dropdown）──
+   比 surface-1 再亮一档（surface-2），与页面底色拉开距离。 */
+.modal > .modal-box {
+  background-color: var(--color-base-200);
+  border: 1px solid var(--color-base-300);
+}
+
+/* ── 输入框 ──
+   比页面亮一档（surface-1），但比卡片暗一档（surface-0.5）。
+   用 base-100 保持与页面的连续感，边框做分隔。 */
+.input, .select, .textarea {
+  background-color: var(--color-base-100);
+  border-color: var(--color-base-300);
+}
+
+/* ── 表格 ──
+   表头用 surface-1，行用 canvas，斑马纹用 surface-1。
+   交替背景比纯边框更容易读出行分隔。 */
+.table thead {
+  background-color: var(--color-base-200);
+}
+.table-zebra tbody tr:nth-child(2n) {
+  background-color: var(--color-base-100);
+}
+
+/* ── 侧边栏 ──
+   与内容区同级（surface-1），但用边框分隔。 */
+aside {
+  background-color: var(--color-base-200);
+  border-right: 1px solid var(--color-base-300);
+}
+
+/* ── 字体 ── */
+@theme {
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI", "Noto Sans SC",
+    "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-mono:
+    "Cascadia Code", Consolas, "SF Mono", ui-monospace, monospace;
+}
+
+/* 正文等宽数字：数据密集界面必须 */
+html {
+  font-variant-numeric: tabular-nums;
+  scroll-behavior: smooth;
+}
+
+/* 原 dashboard.html:228 已有此规则 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html,
+body,
+#app {
+  min-height: 100dvh;
+}
+
+/* 键盘可达性：统一焦点环 */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* 跳转到主内容 */
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  translate: 0 -200%;
+  transition: translate 150ms ease-out;
+}
+.skip-link:focus-visible {
+  translate: 0 0;
+}
+
+/* 滚动条：深色主题下默认亮色很突兀 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, currentColor 22%, transparent) transparent;
+}

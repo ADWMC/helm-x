@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!--
+    helm-x 图标 v3.1：极简舵轮
+
+    【为什么极简】v2 的轮缘+对角辐条+轮毂在 16x16 下糊成一团。
+    小尺寸图标只能有 2-3 个形状，必须砍掉所有装饰细节。
+
+    保留：
+    - 圆角方背景（品牌绿）
+    - H 三笔（两竖 + 一横）—— 这就是"舵手"的辐条
+    - 中心轮毂（一个小圆）—— 暗示舵轮轴心
+
+    砍掉：
+    - 轮缘（外圈）—— 小尺寸下变成噪点
+    - 对角辐条 —— 小尺寸下完全看不见
+
+    【几何约束 v3.1】横臂 x 与两竖外缘严格对齐（36..92），
+    不得越出竖笔；H 整体包围盒 36..92 × 28..100，中心 (64,64)。
+
+    【管线】本 SVG 是设计稿；exe 图标的实际来源是 build/appicon.png
+    （Taskfile: wails3 generate icons -input appicon.png）。
+    改本文件后必须重渲 appicon.png 再生成 ico，否则 ico 不变。
+  -->
+
+  <defs>
+    <radialGradient id="bg" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#16c49a"/>
+      <stop offset="100%" stop-color="#0d8f68"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+
+  <!-- H 三笔 = 舵轮辐条 -->
+  <g fill="#fff">
+    <rect x="36" y="28" width="13" height="72" rx="6.5"/>
+    <rect x="79" y="28" width="13" height="72" rx="6.5"/>
+    <rect x="36" y="55" width="56" height="18" rx="9"/>
+  </g>
+
+  <!-- 轮毂（中心圆）—— 唯一的"舵轮"暗示 -->
+  <circle cx="64" cy="64" r="13" fill="#fff"/>
+</svg>

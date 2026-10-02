@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MsixPackagingToolTemplate
+    xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
+    <Settings
+        AllowTelemetry="false"
+        ApplyACLsToPackageFiles="true"
+        GenerateCommandLineFile="true"
+        AllowPromptForPassword="false">
+    </Settings>
+    <Installer
+        Path="helmx"
+        Arguments=""
+        InstallLocation="C:\Program Files\helm-x\helm-x">
+    </Installer>
+    <PackageInformation
+        PackageName="helm-x"
+        PackageDisplayName="helm-x"
+        PublisherName="CN=helm-x"
+        PublisherDisplayName="helm-x"
+        Version="0.1.0.0"
+        PackageDescription="codex 本地映射层">
+        <Capabilities>
+            <Capability Name="runFullTrust" />
+            
+        </Capabilities>
+        <Applications>
+            <Application
+                Id="com.helmx.app"
+                Description="codex 本地映射层"
+                DisplayName="helm-x"
+                ExecutableName="helmx"
+                EntryPoint="Windows.FullTrustApplication">
+                
+            </Application>
+        </Applications>
+        <Resources>
+            <Resource Language="en-us" />
+        </Resources>
+        <Dependencies>
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+        </Dependencies>
+        <Properties>
+            <Framework>false</Framework>
+            <DisplayName>helm-x</DisplayName>
+            <PublisherDisplayName>helm-x</PublisherDisplayName>
+            <Description>codex 本地映射层</Description>
+            <Logo>Assets\AppIcon.png</Logo>
+        </Properties>
+    </PackageInformation>
+    <SaveLocation PackagePath="helm-x.msix" />
+    <PackageIntegrity>
+        <CertificatePath></CertificatePath>
+    </PackageIntegrity>
+</MsixPackagingToolTemplate>

@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "helm-x",
+			"FileDescription": "codex 本地映射层",
+			"LegalCopyright": "AGPL-3.0",
+			"ProductName": "helm-x",
+			"Comments": "This is a comment"
+		}
+	}
+}
