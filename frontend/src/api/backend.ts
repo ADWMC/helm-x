@@ -260,6 +260,17 @@ export interface ApplyResult {
   message: string
 }
 
+/** 运行设置（helmx.config.json 的可编辑视图）。
+ *  SaveSettings 是整体替换 —— 必须先读后写，只改需要的字段。 */
+export interface AppSettings {
+  listen_port?: number
+  prompt_mode?: string
+  passthrough?: boolean
+  /** 注入频率：每 N 次请求注入 1 次（按会话计数）。1 = 每次都注入 */
+  inject_every?: number
+  [key: string]: unknown
+}
+
 export interface QAView {
   version: number
   updatedAt: string
@@ -325,6 +336,12 @@ export const api = {
   promptModes: (): Promise<PromptModeView[]> =>
     demoGuard(() => Backend.PromptService.Modes() as never, [] as never),
   promptSet: (mode: string) => demoGuard(() => Backend.PromptService.Set(mode) as never, undefined as never),
+
+  // 运行设置（注入频率等；整体替换式保存，先读后写）
+  settings: (): Promise<AppSettings> =>
+    demoGuard(() => Backend.ConfigService.Settings() as never, { inject_every: 1 } as never),
+  saveSettings: (v: AppSettings) =>
+    demoGuard(() => Backend.ConfigService.SaveSettings(v) as never, undefined as never),
 
   // 改写器
   rewriterGet: (): Promise<RewriterView> =>

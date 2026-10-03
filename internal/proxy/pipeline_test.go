@@ -69,6 +69,7 @@ func newTestEngine(t *testing.T, up *scriptedUpstream, cfg ConfigProvider) (*Eng
 // testConfig 是固定的配置提供者。
 type testConfig struct {
 	instruction string
+	injectEvery int
 	tamper      *stubTamper
 	// retry 必须显式设置：零值表示"不重试"，是合法配置
 	retry RetryOptions
@@ -78,6 +79,12 @@ func (c *testConfig) PromptInstruction() string { return c.instruction }
 func (c *testConfig) Rewriter() Rewriter        { return nil }
 func (c *testConfig) Tamper() TamperMatcher     { return c.tamper }
 func (c *testConfig) Retry() RetryOptions       { return c.retry }
+func (c *testConfig) InjectEvery() int {
+	if c.injectEvery <= 0 {
+		return 1
+	}
+	return c.injectEvery
+}
 
 type stubTamper struct{ marker string }
 

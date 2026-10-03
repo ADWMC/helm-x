@@ -4,13 +4,18 @@
 // 主操作：应用模式。切换后**下次请求即生效** —— 代理每请求读配置（INV-5），
 // 不需要重启（旧版注释里也强调了这一点）。
 import { computed, onMounted, ref } from 'vue'
-import { api, isDemo, type PromptModeView } from '@/api/backend'
+import { api, isDemo, type AppSettings, type PromptModeView } from '@/api/backend'
 
 const modes = ref<PromptModeView[]>([])
 const selected = ref('')
 const busy = ref(false)
 const errMsg = ref('')
 const message = ref('')
+
+// ── 注入频率（整体替换式保存，必须先读后写）──
+const settings = ref<AppSettings | null>(null)
+const every = ref(1)
+const everyBusy = ref(false)
 
 const active = computed(() => modes.value.find((m) => m.active))
 const current = computed(() => modes.value.find((m) => m.id === selected.value))
@@ -22,6 +27,33 @@ async function load() {
     errMsg.value = ''
   } catch (e) {
     errMsg.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function loadSettings() {
+  try {
+    settings.value = await api.settings()
+    every.value = Math.max(1, Math.floor(Number(settings.value.inject_every ?? 1)) || 1)
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function saveEvery() {
+  if (!settings.value) return
+  everyBusy.value = true
+  message.value = ''
+  errMsg.value = ''
+  try {
+    const n = Math.max(1, Math.floor(Number(every.value)) || 1)
+    await api.saveSettings({ ...settings.value, inject_every: n })
+    every.value = n
+    message.value = '已保存，下次请求即生效'
+    await loadSettings()
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    everyBusy.value = false
   }
 }
 
@@ -41,7 +73,10 @@ async function apply() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadSettings()
+})
 </script>
 
 <template>
@@ -96,7 +131,32 @@ onMounted(load)
     <SkeletonRows v-else :rows="5" :cols="2" />
 
     <p class="mt-3 text-[11px] text-base-content/50">
-      提示词会在每次请求时插入到 input 数组的第一条（已实测被上游接受且生效）。
+      提示词按下方「注入频率」插入到 input 数组的第一条（已实测被上游接受且生效）。
+    </p>
+  </SectionCard>
+
+  <SectionCard title="注入频率" meta="按会话计数">
+    <div class="flex flex-wrap items-center gap-3">
+      <label class="flex items-center gap-2 text-[13px]">
+        每
+        <input
+          v-model.number="every"
+          type="number"
+          min="1"
+          step="1"
+          class="input input-sm w-20 text-center"
+        />
+        次请求注入 1 次
+      </label>
+      <button class="btn btn-sm btn-outline active:scale-[.97]" :disabled="everyBusy" @click="saveEvery">
+        <span v-if="everyBusy" class="loading loading-spinner loading-xs" />
+        保存
+      </button>
+    </div>
+    <p class="mt-3 text-[11px] text-base-content/50">
+      按会话（Session-Id）各自计数：每个会话的首次请求注入，之后每 N 次注入 1 次。
+      N=1 表示每次都注入。只有会注入的请求才计数；未注入的请求原样转发，
+      请求列表里不显示「注入」标记。
     </p>
   </SectionCard>
 

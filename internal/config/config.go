@@ -23,6 +23,10 @@ type Settings struct {
 	PromptMode  string `json:"prompt_mode"`
 	Passthrough bool   `json:"passthrough,omitempty"`
 
+	// 注入频率：每 N 次请求注入 1 次提示词（按会话计数，首次请求注入）。
+	// 1 = 每次都注入（默认，兼容旧行为）。<=0 一律按 1 处理。
+	InjectEvery int `json:"inject_every,omitempty"`
+
 	// 上游重试（语义与旧版一致：MaxRetries 是额外次数，0 = 无限）
 	UpstreamRetryEnabled      bool `json:"upstream_retry_enabled"`
 	UpstreamMaxRetries        int  `json:"upstream_max_retries"`
@@ -62,6 +66,7 @@ func Default() Settings {
 	return Settings{
 		ListenPort:                1800,
 		PromptMode:                "default",
+		InjectEvery:               1,
 		UpstreamRetryEnabled:      true,
 		UpstreamMaxRetries:        10,
 		UpstreamRetryDelaySeconds: 3,
@@ -187,6 +192,9 @@ func (s *Store) normalize(v *Settings) {
 	}
 	if v.PromptMode == "" {
 		v.PromptMode = d.PromptMode
+	}
+	if v.InjectEvery <= 0 {
+		v.InjectEvery = d.InjectEvery
 	}
 	if v.UpstreamRetryDelaySeconds <= 0 {
 		v.UpstreamRetryDelaySeconds = d.UpstreamRetryDelaySeconds

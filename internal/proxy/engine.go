@@ -48,6 +48,9 @@ type Options struct {
 type ConfigProvider interface {
 	// PromptInstruction 返回当前应注入的指令；空串表示不注入。
 	PromptInstruction() string
+	// InjectEvery 返回注入频率：每 N 次请求注入 1 次（按会话计数）。
+	// <=1 表示每次都注入。
+	InjectEvery() int
 	// Rewriter 返回改写器；nil 表示未启用（跳过语义改写）。
 	Rewriter() Rewriter
 	// Tamper 返回拒绝规则引擎。
@@ -83,6 +86,9 @@ type RequestRecord struct {
 type Engine struct {
 	opts     Options
 	upstream *Upstream
+
+	// inject 是注入频率调度（按会话计数），见 inject.go。
+	inject injectSched
 
 	srv      *http.Server
 	listener net.Listener

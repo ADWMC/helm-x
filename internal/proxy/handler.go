@@ -54,10 +54,12 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── 2. Inject ──
+	// 注入频率：每 N 次请求注 1 次（按会话计数）。
+	// shouldInject 只在"可改写且有指令"时才被调用，其余请求不占名额。
 	outBody := body
 	if canTransform {
 		instruction := e.instruction()
-		if instruction != "" {
+		if instruction != "" && e.shouldInject(rec.SessionID) {
 			injected, ok, ierr := view.InjectSystem(instruction)
 			if ierr == nil && ok {
 				outBody = injected

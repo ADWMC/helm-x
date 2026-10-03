@@ -132,6 +132,16 @@ func (c *ProxyConfig) PromptInstruction() string {
 	return assets.Prompt(s.PromptMode)
 }
 
+// InjectEvery 返回注入频率：每 N 次请求注入 1 次（按会话计数）。
+func (c *ProxyConfig) InjectEvery() int {
+	c.rt.Store.Refresh()
+	s := c.rt.Store.Get()
+	if s.InjectEvery <= 0 {
+		return 1
+	}
+	return s.InjectEvery
+}
+
 // Rewriter 返回改写器。
 func (c *ProxyConfig) Rewriter() proxy.Rewriter { return c.rt.Rewriter() }
 

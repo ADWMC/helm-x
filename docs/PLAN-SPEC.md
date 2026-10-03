@@ -164,6 +164,11 @@ type Config struct {
     StreamWindowBytes int `json:"stream_window_bytes,omitempty"` // 默认 2048
     StreamWindowMs    int `json:"stream_window_ms,omitempty"`    // 默认 400
 
+    // 新增：注入频率 —— 每 N 次请求注入 1 次（按会话 Session-Id 计数，
+    // 每会话首次请求注入；N<=1 每次都注入）。只有"可改写且有指令"的
+    // 请求才计数，未到注入点的请求原样转发（rec.Injected=false）。
+    InjectEvery int `json:"inject_every,omitempty"` // 默认 1
+
     // 已废弃：Context Gardener 相关字段。
     // 旧配置里可能存在，**读取时忽略、不报错、不再写回**，保证向后兼容。
     // 废弃原因：实测裁剪目标 type 在当前协议不存在，功能空转（FINDINGS-phase1 §5）。
