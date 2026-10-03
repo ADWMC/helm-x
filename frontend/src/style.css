@@ -123,12 +123,11 @@ body {
 
 /* ═══ 材质与深度（§12）═══ */
 
-/* 顶栏：毛玻璃浮层，内容从底下滚过；亮上边模拟受光面。
-   分隔用发丝线而非硬边界（用户此前要求保留分隔线，取最柔一档）。 */
+/* 顶栏：实体材质。注意：不用 backdrop-filter —— 毛玻璃在
+   WebView2 软件合成/GPU 异常环境会产出黑块（实测：内容区整块黑）。
+   实体分层 + 受光边 + 投影同样能读出"浮层"感。 */
 .app-topbar {
-  background: color-mix(in oklch, var(--color-base-100) 68%, transparent);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background-color: color-mix(in oklch, var(--color-base-100) 82%, var(--color-base-200));
   border-bottom: 1px solid var(--color-hairline-soft);
   box-shadow: inset 0 1px 0 var(--color-material-edge);
 }
@@ -137,11 +136,9 @@ body {
 .app-sidebar {
   background: linear-gradient(
     180deg,
-    color-mix(in oklch, var(--color-base-200) 88%, transparent) 0%,
-    color-mix(in oklch, var(--color-base-100) 92%, transparent) 100%
+    color-mix(in oklch, var(--color-base-200) 88%, var(--color-base-100)) 0%,
+    color-mix(in oklch, var(--color-base-100) 96%, var(--color-base-200)) 100%
   );
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-right: 1px solid var(--color-hairline-soft);
   box-shadow: inset -1px 0 0 var(--color-material-edge);
 }
@@ -158,37 +155,31 @@ body {
     box-shadow 200ms var(--ease-out-soft);
 }
 
-/* 浮层弹窗：比卡片更重的投影 + 材质化进场（§12：blur+scale 一起动，
-   读作"一块材料落下来"，而不是普通淡入） */
+/* 浮层弹窗：比卡片更重的投影 + 轻量进场（scale+opacity，
+   不做 blur 滤镜动画 —— 滤镜动画同样是合成器高危项） */
 .modal > .modal-box {
-  background-color: color-mix(in oklch, var(--color-base-200) 92%, transparent);
-  backdrop-filter: blur(32px) saturate(180%);
-  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  background-color: var(--color-base-200);
   border: 1px solid var(--color-hairline);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.35),
     0 32px 64px -24px rgba(0, 0, 0, 0.65);
-  animation: materialize 280ms var(--ease-spring);
+  animation: materialize 220ms var(--ease-spring);
 }
 
 @keyframes materialize {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(10px);
-    filter: blur(6px);
+    transform: scale(0.97) translateY(8px);
   }
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
-    filter: blur(0);
   }
 }
 
-/* 弹窗遮罩：调暗聚焦（§12 Dim to focus），轻模糊把背景推远 */
+/* 弹窗遮罩：调暗聚焦（§12 Dim to focus），实体色不依赖滤镜 */
 .modal-backdrop {
-  background-color: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 /* ═══ 交互反馈（§1：pointer-down 即时响应）═══ */

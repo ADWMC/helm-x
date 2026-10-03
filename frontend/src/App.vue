@@ -140,12 +140,9 @@ onUnmounted(() => {
           </p>
         </div>
 
-        <!-- 页面切换：进场弹簧、退场快淡，进出同路径（§7） -->
-        <RouterView v-slot="{ Component }">
-          <Transition name="page" mode="out-in">
-            <component :is="Component" />
-          </Transition>
-        </RouterView>
+        <!-- 页面切换暂不加 Transition 包装：enter-from 的 opacity:0
+             在 WebView2 异常合成环境下有卡死风险（内容整块不显示）。 -->
+        <RouterView />
       </main>
     </div>
   </div>
