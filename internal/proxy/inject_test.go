@@ -9,6 +9,9 @@ import (
 )
 
 // ── 注入频率调度（inject.go）单元测试 ──
+//
+// 模拟约定：每次 shouldAttempt 为 true 且"注入成功"时调 markInjected；
+// 失败则不调 —— 语义见 inject.go 头注释。
 
 // N=20：第 1、21、41 次注入，其余不注入。
 func TestInjectSchedFrequency(t *testing.T) {
@@ -16,8 +19,9 @@ func TestInjectSchedFrequency(t *testing.T) {
 	now := time.Unix(0, 0)
 	var got []int
 	for i := 1; i <= 41; i++ {
-		if s.isDue("s", 20, now) {
+		if s.shouldAttempt("s", 20, now) {
 			got = append(got, i)
+			s.markInjected("s", 20, now) // 注入成功
 		}
 	}
 	want := []int{1, 21, 41}
@@ -31,6 +35,35 @@ func TestInjectSchedFrequency(t *testing.T) {
 	}
 }
 
+// 注入失败不占名额：连续失败会一直重试，成功后才开启下一轮 N 次计数。
+func TestInjectSchedFailureDoesNotConsume(t *testing.T) {
+	var s injectSched
+	now := time.Unix(0, 0)
+
+	// 第 1~4 次都到注入点但注入失败（不调 markInjected）→ 每次都重试
+	for i := 1; i <= 4; i++ {
+		if !s.shouldAttempt("s", 20, now) {
+			t.Fatalf("第 %d 次失败后应立即重试注入", i)
+		}
+		// 注入失败：不调 markInjected
+	}
+	// 第 5 次成功 → 开启下一轮
+	if !s.shouldAttempt("s", 20, now) {
+		t.Fatal("第 5 次应仍是注入点")
+	}
+	s.markInjected("s", 20, now)
+
+	// 之后 19 个请求跳过，第 25 次（即成功后的第 20 个请求）再注入
+	for i := 6; i <= 24; i++ {
+		if s.shouldAttempt("s", 20, now) {
+			t.Fatalf("第 %d 次不应注入（跳过位未满）", i)
+		}
+	}
+	if !s.shouldAttempt("s", 20, now) {
+		t.Fatalf("第 25 次应注入（成功后每 20 次 1 次）")
+	}
+}
+
 // 按会话隔离：两会话交错，各自第 1 次都注入。
 func TestInjectSchedPerSession(t *testing.T) {
 	var s injectSched
@@ -38,8 +71,9 @@ func TestInjectSchedPerSession(t *testing.T) {
 	got := map[string][]int{}
 	for i := 1; i <= 4; i++ {
 		for _, sess := range []string{"A", "B"} {
-			if s.isDue(sess, 2, now) {
+			if s.shouldAttempt(sess, 2, now) {
 				got[sess] = append(got[sess], i)
+				s.markInjected(sess, 2, now)
 			}
 		}
 	}
@@ -58,7 +92,7 @@ func TestInjectSchedEveryOne(t *testing.T) {
 	now := time.Unix(0, 0)
 	for _, every := range []int{0, 1, -3} {
 		for i := 0; i < 5; i++ {
-			if !s.isDue("s", every, now) {
+			if !s.shouldAttempt("s", every, now) {
 				t.Fatalf("every=%d 第 %d 次应注入", every, i+1)
 			}
 		}
@@ -69,10 +103,11 @@ func TestInjectSchedEveryOne(t *testing.T) {
 func TestInjectSchedEmptySession(t *testing.T) {
 	var s injectSched
 	now := time.Unix(0, 0)
-	if !s.isDue("", 3, now) {
+	if !s.shouldAttempt("", 3, now) {
 		t.Fatal("首次应注入")
 	}
-	if s.isDue("", 3, now) {
+	s.markInjected("", 3, now)
+	if s.shouldAttempt("", 3, now) {
 		t.Fatal("第 2 次不应注入")
 	}
 }
@@ -82,7 +117,7 @@ func TestInjectSchedPrune(t *testing.T) {
 	var s injectSched
 	old := time.Unix(0, 0)
 	for i := 0; i < 5000; i++ {
-		s.isDue(string(rune('a'+i%26))+string(rune('0'+i/26%10))+string(rune('A'+i/260%26)), 2, old)
+		s.shouldAttempt(string(rune('a'+i%26))+string(rune('0'+i/26%10))+string(rune('A'+i/260%26)), 2, old)
 	}
 	s.mu.Lock()
 	n := len(s.m)
@@ -91,7 +126,7 @@ func TestInjectSchedPrune(t *testing.T) {
 		t.Fatalf("计数器无界增长: %d", n)
 	}
 	// 活跃会话仍按节奏走
-	if !s.isDue("live", 2, time.Unix(1000, 0)) {
+	if !s.shouldAttempt("live", 2, time.Unix(1000, 0)) {
 		t.Fatal("新会话首次应注入")
 	}
 }

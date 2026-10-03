@@ -55,7 +55,8 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 
 	// ── 2. Inject ──
 	// 注入频率：每 N 次请求注 1 次（按会话计数）。
-	// shouldInject 只在"可改写且有指令"时才被调用，其余请求不占名额。
+	// shouldInject 只在"可改写且有指令"时才被调用，其余请求不占名额；
+	// 注入失败也不占名额 —— markInjected 只在成功后调用，下次请求重试。
 	outBody := body
 	if canTransform {
 		instruction := e.instruction()
@@ -64,6 +65,7 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 			if ierr == nil && ok {
 				outBody = injected
 				rec.Injected = true
+				e.markInjected(rec.SessionID)
 			}
 		}
 	}
