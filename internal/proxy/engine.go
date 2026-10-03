@@ -51,6 +51,9 @@ type ConfigProvider interface {
 	// InjectEvery 返回注入频率：每 N 次请求注入 1 次（按会话计数）。
 	// <=1 表示每次都注入。
 	InjectEvery() int
+	// FallbackUserAgent 返回 UA 兜底值：入站请求没有 User-Agent 时补上。
+	// 空串 = 不补（此时不发送该头，避免泄漏 Go 默认 UA）。
+	FallbackUserAgent() string
 	// Rewriter 返回改写器；nil 表示未启用（跳过语义改写）。
 	Rewriter() Rewriter
 	// Tamper 返回拒绝规则引擎。

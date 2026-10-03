@@ -46,6 +46,14 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// UA 兜底：入站没有 User-Agent 时补配置值（空则不补 —— newRequest
+	// 会显式留空，绝不泄漏 Go 默认 UA 给中转站）。
+	if r.Header.Get("User-Agent") == "" {
+		if ua := e.fallbackUserAgent(); ua != "" {
+			r.Header.Set("User-Agent", ua)
+		}
+	}
+
 	// ── 1. Normalize ──
 	view, perr := ParseRequest(r.URL.Path, body)
 	canTransform := perr == nil && !e.opts.Passthrough
@@ -93,6 +101,14 @@ func (e *Engine) instruction() string {
 		return ""
 	}
 	return e.opts.Config.PromptInstruction()
+}
+
+// fallbackUserAgent 返回 UA 兜底值（空 = 不补）。
+func (e *Engine) fallbackUserAgent() string {
+	if e.opts.Config == nil {
+		return ""
+	}
+	return e.opts.Config.FallbackUserAgent()
 }
 
 func (e *Engine) tamper() TamperMatcher {

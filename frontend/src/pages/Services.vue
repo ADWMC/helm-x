@@ -4,12 +4,17 @@
 // 主操作唯一（DESIGN.md §1.1）：启动/停止代理。
 // 配置注入属危险操作 → 走 §3.1 流程（列出改哪个文件、怎么撤销）。
 import { computed, onMounted, ref } from 'vue'
-import { api, isDemo, type ConfigDiff, type StatusView } from '@/api/backend'
+import { api, isDemo, type AppSettings, type ConfigDiff, type StatusView } from '@/api/backend'
 
 const status = ref<StatusView | null>(null)
 const busy = ref('')
 const message = ref('')
 const errMsg = ref('')
+
+// ── 转发 UA 兜底（整体替换式保存，必须先读后写）──
+const settings = ref<AppSettings | null>(null)
+const fallbackUA = ref('')
+const uaBusy = ref(false)
 
 const showConfirm = ref(false)
 const preview = ref<ConfigDiff[]>([])
@@ -21,6 +26,31 @@ const watch = computed(() => status.value?.watch)
 
 async function refresh() {
   status.value = await api.status()
+}
+
+async function loadSettings() {
+  try {
+    settings.value = await api.settings()
+    fallbackUA.value = String(settings.value.forward_user_agent ?? '')
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function saveUA() {
+  if (!settings.value) return
+  uaBusy.value = true
+  message.value = ''
+  errMsg.value = ''
+  try {
+    await api.saveSettings({ ...settings.value, forward_user_agent: fallbackUA.value.trim() })
+    message.value = 'UA 兜底已保存，下次请求即生效'
+    await loadSettings()
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    uaBusy.value = false
+  }
 }
 
 async function toggleProxy() {
@@ -89,7 +119,10 @@ async function confirmDanger() {
   }
 }
 
-onMounted(refresh)
+onMounted(() => {
+  void refresh()
+  void loadSettings()
+})
 </script>
 
 <template>
@@ -182,6 +215,26 @@ onMounted(refresh)
       </p>
     </div>
   </section>
+
+  <SectionCard title="转发 UA 兜底" meta="中转站兼容">
+    <div class="flex flex-wrap items-center gap-3">
+      <input
+        v-model="fallbackUA"
+        type="text"
+        class="input input-sm w-full max-w-md"
+        placeholder="留空 = 不补（转发请求不带 UA）"
+      />
+      <button class="btn btn-sm btn-outline active:scale-[.97]" :disabled="uaBusy" @click="saveUA">
+        <span v-if="uaBusy" class="loading loading-spinner loading-xs" />
+        保存
+      </button>
+    </div>
+    <p class="mt-3 text-[11px] text-base-content/50">
+      转发时除逐跳头外全部原样透传（含 User-Agent、Cookie、Authorization、各种 X-* 头），
+      中转站看到的请求指纹与 codex 直连一致。仅当入站请求<b>没有</b> User-Agent 时才补这个兜底值；
+      都为空时转发请求不带 UA —— 绝不泄漏 Go 默认 UA。
+    </p>
+  </SectionCard>
 
   <div v-if="showConfirm" class="modal modal-open" role="dialog">
     <div class="modal-box max-w-2xl">

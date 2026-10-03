@@ -268,6 +268,8 @@ export interface AppSettings {
   passthrough?: boolean
   /** 注入频率：每 N 次请求注入 1 次（按会话计数）。1 = 每次都注入 */
   inject_every?: number
+  /** UA 兜底：入站无 User-Agent 时补上（空 = 不补） */
+  forward_user_agent?: string
   [key: string]: unknown
 }
 

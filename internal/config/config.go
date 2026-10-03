@@ -27,6 +27,10 @@ type Settings struct {
 	// 1 = 每次都注入（默认，兼容旧行为）。<=0 一律按 1 处理。
 	InjectEvery int `json:"inject_every,omitempty"`
 
+	// UA 兜底：入站请求没有 User-Agent 时用它补上（空 = 不补；
+	// 不补时转发请求**不带** UA，而不是泄漏 Go 默认 UA）。
+	ForwardUserAgent string `json:"forward_user_agent,omitempty"`
+
 	// 上游重试（语义与旧版一致：MaxRetries 是额外次数，0 = 无限）
 	UpstreamRetryEnabled      bool `json:"upstream_retry_enabled"`
 	UpstreamMaxRetries        int  `json:"upstream_max_retries"`

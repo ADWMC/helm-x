@@ -142,6 +142,12 @@ func (c *ProxyConfig) InjectEvery() int {
 	return s.InjectEvery
 }
 
+// FallbackUserAgent 返回 UA 兜底值（空 = 不补）。
+func (c *ProxyConfig) FallbackUserAgent() string {
+	c.rt.Store.Refresh()
+	return c.rt.Store.Get().ForwardUserAgent
+}
+
 // Rewriter 返回改写器。
 func (c *ProxyConfig) Rewriter() proxy.Rewriter { return c.rt.Rewriter() }
 

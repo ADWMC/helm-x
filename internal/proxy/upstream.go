@@ -44,10 +44,33 @@ type Attempt struct {
 
 // Upstream 是上游转发客户端。
 type Upstream struct {
-	base    *url.URL
-	client  *http.Client
-	auth    string // 由调用方按请求提供
-	fwdKeys []string
+	base   *url.URL
+	client *http.Client
+	auth   string // 由调用方按请求提供
+}
+
+// forwardDrop 是转发时**不**透传的头。
+//
+// 【转发口径】除这些之外全部原样透传（含 User-Agent、Authorization、
+// Cookie 与各种 X-* 自定义头）—— 白名单会把中转站用来识别请求的头
+// 丢掉（"不认识的 UA/请求指纹"问题）。只剔两类：
+//   - 逐跳头（RFC 7230 §6.1）：由本代理与上游之间的连接决定
+//   - 传输头：Accept-Encoding 不透传（由 Go 传输层自理；手动透传会让
+//     响应保持压缩态，判定与改写全部失效），Content-Length/Host 由
+//     Go 按新请求体重算
+var forwardDrop = map[string]bool{
+	"Host":                true,
+	"Content-Length":      true,
+	"Connection":          true,
+	"Keep-Alive":          true,
+	"Proxy-Authenticate":  true,
+	"Proxy-Authorization": true,
+	"Proxy-Connection":    true,
+	"Te":                  true,
+	"Trailer":             true,
+	"Transfer-Encoding":   true,
+	"Upgrade":             true,
+	"Accept-Encoding":     true,
 }
 
 // NewUpstream 解析上游地址并构造客户端。
@@ -75,17 +98,6 @@ func NewUpstream(rawURL string) (*Upstream, error) {
 				MaxIdleConns:          32,
 				IdleConnTimeout:       90 * time.Second,
 			},
-		},
-		fwdKeys: []string{
-			"Authorization",
-			"Accept",
-			"Session-Id", "Thread-Id",
-			"X-Client-Request-Id", "X-Codex-Installation-Id",
-			"X-Codex-Window-Id", "X-Codex-Turn-Metadata",
-			"X-Codex-Beta-Features",
-			"X-Openai-Internal-Codex-Responses-Lite",
-			"OpenAI-Beta",
-			"Originator", "User-Agent",
 		},
 	}, nil
 }
@@ -160,14 +172,22 @@ func (u *Upstream) newRequest(ctx context.Context, path string, body []byte, in 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	for _, k := range u.fwdKeys {
-		if in == nil {
-			break
+	// 全头透传（User-Agent 也在内），只剔除逐跳/传输头。
+	for k, vs := range in {
+		if forwardDrop[http.CanonicalHeaderKey(k)] {
+			continue
 		}
-		if v := in.Get(k); v != "" {
-			req.Header.Set(k, v)
+		for _, v := range vs {
+			req.Header.Add(k, v)
 		}
+	}
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if req.Header.Get("User-Agent") == "" {
+		// 显式空值 = 不发送该头。否则 Go 会补 "Go-http-client/1.1"，
+		// 中转站不认识这个 UA。
+		req.Header.Set("User-Agent", "")
 	}
 	return req, nil
 }
