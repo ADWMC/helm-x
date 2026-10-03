@@ -20,14 +20,12 @@ const route = useRoute()
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-30 flex h-dvh w-[236px] flex-col border-r border-base-300 bg-base-100 transition-transform duration-200 md:sticky md:top-0 md:translate-x-0"
+    class="app-sidebar fixed inset-y-0 left-0 z-30 flex h-dvh w-[236px] flex-col transition-transform duration-200 md:sticky md:top-0 md:translate-x-0"
     :class="open ? 'translate-x-0 shadow-xl' : '-translate-x-full'"
   >
     <nav class="flex-1 overflow-y-auto px-2.5 py-5" aria-label="主导航">
       <template v-for="group in NAV_GROUPS" :key="group.label">
-        <div
-          class="px-2.5 pt-5 pb-1.5 text-[10px] font-semibold tracking-[.1em] text-base-content/45 uppercase first:pt-0"
-        >
+        <div class="eyebrow px-2.5 pt-5 pb-1.5 first:pt-0">
           {{ group.label }}
         </div>
 
@@ -35,11 +33,11 @@ const route = useRoute()
           v-for="item in group.items"
           :key="item.path"
           :to="item.path"
-          class="group relative flex min-h-[38px] items-center gap-2.5 rounded-field px-2.5 text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-base-100 focus-visible:outline-none active:scale-[.985]"
+          class="nav-item group relative flex min-h-[38px] items-center gap-2.5 rounded-field px-2.5 text-[13px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-base-100 focus-visible:outline-none"
           :class="
             route.path === item.path
-              ? 'bg-base-200 font-medium text-base-content'
-              : 'text-base-content/65 hover:bg-base-200/55 hover:text-base-content'
+              ? 'is-active font-medium text-base-content'
+              : 'text-base-content/65 hover:text-base-content'
           "
           :aria-current="route.path === item.path ? 'page' : undefined"
           @click="emit('navigate')"

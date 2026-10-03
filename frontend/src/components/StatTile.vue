@@ -14,10 +14,10 @@ withDefaults(
 </script>
 
 <template>
-  <div class="rounded-box border border-base-300 bg-base-200/40 px-4 py-3.5">
-    <span class="block text-[11px] text-base-content/60">{{ label }}</span>
+  <div class="rounded-box border border-[var(--color-hairline)] bg-base-200/40 px-4 py-3.5">
+    <span class="block text-[11px] tracking-[.02em] text-base-content/60">{{ label }}</span>
     <strong
-      class="mt-2 block text-lg leading-none font-semibold"
+      class="mt-2 block text-[22px] leading-none font-semibold tracking-[-0.012em]"
       :class="{
         'text-success': tone === 'ok',
         'text-error': tone === 'bad',

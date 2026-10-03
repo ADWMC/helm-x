@@ -93,7 +93,7 @@ onUnmounted(() => {
     <div class="flex min-h-dvh min-w-0 flex-col">
       <!-- topbar：只放汉堡 + 面包屑 + 全局状态。不得与页面 h1 同字（修 V3） -->
       <header
-        class="sticky top-0 z-10 flex min-h-14 items-center justify-between gap-3.5 border-b border-base-300 bg-base-100/80 px-5 backdrop-blur-md md:px-8"
+        class="app-topbar sticky top-0 z-10 flex min-h-14 items-center justify-between gap-3.5 px-5 md:px-8"
       >
         <div class="flex items-center gap-2">
           <button
@@ -115,12 +115,12 @@ onUnmounted(() => {
         <!-- 实时代理状态：颜色 + 图标 + 文字三重表达（不只靠颜色） -->
         <RouterLink
           to="/services"
-          class="inline-flex items-center gap-2 rounded-full border border-base-300 px-2.5 py-1 text-[11px] transition-colors hover:bg-base-200 focus-visible:outline-none"
+          class="nav-item inline-flex items-center gap-2 rounded-full border border-[var(--color-hairline)] px-2.5 py-1 text-[11px]"
           :title="status?.proxy.listen ? `监听 ${status.proxy.listen}` : undefined"
         >
           <span
-            class="size-1.5 rounded-full"
-            :class="proxyRunning ? 'bg-success' : 'bg-base-content/30'"
+            class="status-dot size-1.5 rounded-full"
+            :class="proxyRunning ? 'is-live' : 'bg-base-content/30'"
             aria-hidden="true"
           />
           <span :class="proxyRunning ? 'text-base-content' : 'text-base-content/55'">
@@ -130,9 +130,9 @@ onUnmounted(() => {
       </header>
 
       <main id="main" class="flex-1 px-5 pt-6 pb-12 md:px-8 md:pt-8">
-        <!-- 页面标题：全页唯一一次 h1 -->
+        <!-- 页面标题：全页唯一一次 h1。display 类承担负字距+紧行高（§15） -->
         <div class="mb-7">
-          <h1 class="text-2xl leading-tight font-semibold tracking-[-0.015em] text-balance">
+          <h1 class="display text-[26px] font-semibold text-balance">
             {{ meta.title }}
           </h1>
           <p v-if="meta.desc" class="mt-1.5 max-w-[640px] text-[13px] text-pretty text-base-content/60">
@@ -140,7 +140,12 @@ onUnmounted(() => {
           </p>
         </div>
 
-        <RouterView />
+        <!-- 页面切换：进场弹簧、退场快淡，进出同路径（§7） -->
+        <RouterView v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
   </div>

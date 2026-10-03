@@ -15,9 +15,9 @@ defineProps<{
 </script>
 
 <template>
-  <section class="mb-5 overflow-hidden rounded-box border border-base-300 bg-base-200">
+  <section class="card mb-5 overflow-hidden rounded-box">
     <header
-      class="flex min-h-12 items-center justify-between gap-3.5 border-b border-base-300 bg-base-200/25 px-[18px]"
+      class="flex min-h-12 items-center justify-between gap-3.5 border-b border-[var(--color-hairline-soft)] px-[18px]"
     >
       <h2 class="text-[13px] leading-tight font-semibold tracking-[.01em]">{{ title }}</h2>
       <div class="flex items-center gap-3">
