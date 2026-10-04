@@ -33,3 +33,7 @@ asset.key
 Thumbs.db
 desktop.ini
 .task/
+
+# Python
+__pycache__/
+*.pyc
