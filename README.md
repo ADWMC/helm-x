@@ -1,6 +1,6 @@
 # helm-x — Codex 代理/注入工具（Wails v3 重写版）
 
-**仓库地址**：https://github.com/ADWMC/helm-x （分支 `wails-rewrite`）
+**仓库地址**：https://github.com/ADWMC/helm-x
 
 ---
 
@@ -24,7 +24,7 @@
 
 helm-x 是 Codex CLI 的本地映射层：`codex → 127.0.0.1:1800 → 上游中转`。请求经本地代理转发时注入自定义指令，响应层检测拒绝并按补救阶梯处理——对话不中断，**模型原话不丢失**。
 
-本分支是旧版（master，C++）的**重写**：机制沿用旧版思路，实现按实测结论重新设计（做了 Phase A 实证：旧版四个行为推断里两个被实测推翻，详见 `docs/FINDINGS*.md`）。
+本项目是旧版（C++，见 [`legacy`](https://github.com/ADWMC/helm-x/tree/legacy) 分支）的**重写**：机制沿用旧版思路，实现按实测结论重新设计（做了 Phase A 实证：旧版四个行为推断里两个被实测推翻，详见 `docs/FINDINGS*.md`）。
 
 **核心能力**：
 
@@ -41,7 +41,7 @@ helm-x 是 Codex CLI 的本地映射层：`codex → 127.0.0.1:1800 → 上游�
 
 ## 与旧版的差别
 
-| 项 | 旧版（master，C++） | 本版（Wails v3 + Go + Vue 3） |
+| 项 | 旧版（`legacy` 分支，C++） | 本版（Wails v3 + Go + Vue 3） |
 |---|---|---|
 | 界面 | 浏览器 WebUI（:8090） | 原生桌面窗口（WebView2） |
 | 拒绝处理 | **替换**模型原话，只留标记 | **附加**标记，原话完整保留 |
