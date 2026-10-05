@@ -2,6 +2,8 @@ package proxy
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 
@@ -97,6 +99,35 @@ func (v *RequestView) LastUserMessage() (string, bool) {
 		}
 	}
 	return last, found
+}
+
+// SessionFingerprint 返回会话指纹，供注入调度按会话计数。
+//
+// 真实 codex 不发 Session-Id/Thread-Id 头（2026-10-05 实测：全部请求共用
+// 空串桶，inject_every=N 沦为全局 1/N）。退而求其次：取**首条**用户消息
+// 的哈希做会话身份 —— 同一对话的续轮 input 只增不改首条消息，指纹稳定；
+// 不同对话撞同一指纹只会计数合并，无害。跳过 <environment_context> 条目。
+func (v *RequestView) SessionFingerprint() string {
+	if v == nil || v.input == nil {
+		return ""
+	}
+	for i := 0; i < v.input.Len(); i++ {
+		item := v.input.Index(i)
+		if item == nil {
+			continue
+		}
+		if role := item.Member("role"); role == nil || role.MustString() != "user" {
+			continue
+		}
+		for _, t := range textsOfMessage(item) {
+			if t == "" || strings.Contains(t, "<environment_context>") {
+				continue
+			}
+			sum := sha256.Sum256([]byte(t))
+			return "fp:" + hex.EncodeToString(sum[:8])
+		}
+	}
+	return ""
 }
 
 // ConversationText 返回精简的对话上下文，供改写器理解用户在做什么。

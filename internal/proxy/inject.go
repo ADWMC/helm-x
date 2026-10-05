@@ -1,12 +1,15 @@
-// inject.go 是注入频率调度：每 N 次请求注入 1 次，按会话计数。
+// inject.go 是注入频率调度：按会话采样，被覆盖会话全程跟随。
 //
 // 语义（默认假设，实现以此为准）：
-//   - 每个会话（Session-Id / Thread-Id，无则空串桶）各自计数；
-//   - 每个会话的首次请求注入，成功后每 N 次请求注入 1 次；
-//   - **只有注入成功才开启下一轮计数**：注入尝试失败（结构不可改写、
-//     插入出错等）不占名额，下次请求立即重试，直到成功后才重新
-//     数 N 个请求再注入；
-//   - N<=1 表示每次都注入（默认，兼容旧行为）；
+//   - 会话键取 Session-Id / Thread-Id 头；codex 不发这些头（2026-10-05 实测），
+//     退化为请求里首条用户消息的指纹（RequestView.SessionFingerprint）；
+//   - N = 会话采样率：第 1、N+1、2N+1… 个会话命中（"每 N 个会话注入 1 个"）；
+//     N<=1 = 每个会话都命中（默认，兼容旧行为）；
+//   - 命中会话注入成功后**会话内跟随**——同会话后续请求持续携带。原因：
+//     每发一个请求模型都是无状态重建上下文，只注首轮则续轮全裸（实测
+//     裸请求 3/12 拒绝，全覆盖 0/12）；
+//   - **只有注入成功才进入跟随态**：注入尝试失败（结构不可改写、插入
+//     出错等）不占名额，下次请求立即重试；
 //   - 只有"可改写且有指令"的请求才进入调度 —— 透传/解析失败/无指令
 //     的请求不占名额。
 //
@@ -22,19 +25,23 @@ import (
 type injectSched struct {
 	mu sync.Mutex
 	m  map[string]*injectCount
+	// sessions 是迄今见过的会话数（含未命中的），决定采样位。
+	sessions int
 }
 
 type injectCount struct {
-	// skip 是距下一次注入还需跳过的请求数；0 = 下次请求即注入点。
-	skip int
-	last time.Time
+	// covered 是本会话按采样命中（第 1、N+1、… 个会话）。
+	covered bool
+	// stuck 是跟随态：本会话已注入成功，后续请求持续携带。
+	stuck bool
+	last  time.Time
 }
 
 // shouldAttempt 返回本次是否应尝试注入。
 //
-// 跳过位 >0 时递减并返回 false；=0 返回 true。返回 true 时调用方必须
-// 在**注入成功后**调 markInjected 开启下一轮；失败则不调 —— 下次请求
-// 会再次尝试，槽位不作废。
+// 命中会话（或已跟随）返回 true；返回 true 时调用方必须在**注入成功后**
+// 调 markInjected 进入跟随态；失败则不调 —— 下次请求会再次尝试，命中
+// 不作废。
 func (s *injectSched) shouldAttempt(session string, every int, now time.Time) bool {
 	if every <= 1 {
 		return true
@@ -54,17 +61,15 @@ func (s *injectSched) shouldAttempt(session string, every int, now time.Time) bo
 	c := s.m[session]
 	if c == nil {
 		c = &injectCount{}
+		s.sessions++
+		c.covered = s.sessions%every == 1
 		s.m[session] = c
 	}
 	c.last = now
-	if c.skip > 0 {
-		c.skip--
-		return false
-	}
-	return true
+	return c.stuck || c.covered
 }
 
-// markInjected 注入成功：开启下一轮 N 次计数。
+// markInjected 注入成功：进入会话跟随态。
 func (s *injectSched) markInjected(session string, every int, now time.Time) {
 	if every <= 1 {
 		return
@@ -75,7 +80,7 @@ func (s *injectSched) markInjected(session string, every int, now time.Time) {
 		return
 	}
 	if c := s.m[session]; c != nil {
-		c.skip = every - 1
+		c.stuck = true
 	}
 }
 

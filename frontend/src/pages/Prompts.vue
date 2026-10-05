@@ -135,7 +135,7 @@ onMounted(() => {
     </p>
   </SectionCard>
 
-  <SectionCard title="注入频率" meta="按会话计数">
+  <SectionCard title="注入频率" meta="按会话采样">
     <div class="flex flex-wrap items-center gap-3">
       <label class="flex items-center gap-2 text-[13px]">
         每
@@ -146,7 +146,7 @@ onMounted(() => {
           step="1"
           class="input input-sm w-20 text-center"
         />
-        次请求注入 1 次
+        个会话注入 1 个
       </label>
       <button class="btn btn-sm btn-outline active:scale-[.97]" :disabled="everyBusy" @click="saveEvery">
         <span v-if="everyBusy" class="loading loading-spinner loading-xs" />
@@ -154,9 +154,10 @@ onMounted(() => {
       </button>
     </div>
     <p class="mt-3 text-[11px] text-base-content/50">
-      按会话（Session-Id）各自计数：每个会话的首次请求注入，之后每 N 次注入 1 次。
-      N=1 表示每次都注入。只有注入成功才开启下一轮计数 —— 注入失败不占名额，
-      下次请求立即重试。未注入的请求原样转发，请求列表里不显示「注入」标记。
+      会话按 Session-Id/Thread-Id 头识别；codex 不发会话头时按首条用户消息指纹识别。
+      命中的会话注入成功后全程跟随（工具调用后的续轮也携带）；N=1 表示每个会话都注入
+      （推荐——实测裸请求会产生拒绝）。注入失败不占名额，下次请求立即重试。
+      未命中的会话原样转发，请求列表里不显示「注入」标记。
     </p>
   </SectionCard>
 

@@ -61,6 +61,12 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 		e.logf("warn", "proxy: 请求体无法解析，原样透传: %v", perr)
 	}
 
+	// 会话键补全：codex 不发 Session-Id/Thread-Id 头，退化为首条用户消息
+	// 指纹（否则所有请求共用空桶，注入频率沦全局 1/N —— 2026-10-05 实测）。
+	if rec.SessionID == "" && view != nil {
+		rec.SessionID = view.SessionFingerprint()
+	}
+
 	// ── 2. Inject ──
 	// 注入频率：每 N 次请求注 1 次（按会话计数）。
 	// shouldInject 只在"可改写且有指令"时才被调用，其余请求不占名额；

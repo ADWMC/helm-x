@@ -13,29 +13,35 @@ import (
 // 模拟约定：每次 shouldAttempt 为 true 且"注入成功"时调 markInjected；
 // 失败则不调 —— 语义见 inject.go 头注释。
 
-// N=20：第 1、21、41 次注入，其余不注入。
-func TestInjectSchedFrequency(t *testing.T) {
+// N=3 会话采样：第 1、4、7 个会话命中；命中会话全程跟随，未命中全程不注。
+func TestInjectSchedSessionSampling(t *testing.T) {
 	var s injectSched
 	now := time.Unix(0, 0)
-	var got []int
-	for i := 1; i <= 41; i++ {
-		if s.shouldAttempt("s", 20, now) {
-			got = append(got, i)
-			s.markInjected("s", 20, now) // 注入成功
+	for i := 1; i <= 7; i++ {
+		sess := "s" + string(rune('0'+i))
+		want := i%3 == 1
+		first := s.shouldAttempt(sess, 3, now)
+		if first != want {
+			t.Fatalf("会话 %d 首请求命中=%v, want %v", i, first, want)
 		}
-	}
-	want := []int{1, 21, 41}
-	if len(got) != len(want) {
-		t.Fatalf("注入点 = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("注入点 = %v, want %v", got, want)
+		if first {
+			s.markInjected(sess, 3, now)
+			for j := 0; j < 3; j++ {
+				if !s.shouldAttempt(sess, 3, now) {
+					t.Fatalf("会话 %d 跟随态第 %d 个续轮应继续注入", i, j+1)
+				}
+			}
+		} else {
+			for j := 0; j < 3; j++ {
+				if s.shouldAttempt(sess, 3, now) {
+					t.Fatalf("会话 %d 未命中，续轮 %d 不应注入", i, j+1)
+				}
+			}
 		}
 	}
 }
 
-// 注入失败不占名额：连续失败会一直重试，成功后才开启下一轮 N 次计数。
+// 注入失败不占名额：命中会话连续失败会一直重试，成功后进入跟随态。
 func TestInjectSchedFailureDoesNotConsume(t *testing.T) {
 	var s injectSched
 	now := time.Unix(0, 0)
@@ -47,42 +53,15 @@ func TestInjectSchedFailureDoesNotConsume(t *testing.T) {
 		}
 		// 注入失败：不调 markInjected
 	}
-	// 第 5 次成功 → 开启下一轮
+	// 第 5 次成功 → 跟随态：后续请求持续注入（续轮不再裸奔）
 	if !s.shouldAttempt("s", 20, now) {
 		t.Fatal("第 5 次应仍是注入点")
 	}
 	s.markInjected("s", 20, now)
-
-	// 之后 19 个请求跳过，第 25 次（即成功后的第 20 个请求）再注入
-	for i := 6; i <= 24; i++ {
-		if s.shouldAttempt("s", 20, now) {
-			t.Fatalf("第 %d 次不应注入（跳过位未满）", i)
+	for i := 6; i <= 30; i++ {
+		if !s.shouldAttempt("s", 20, now) {
+			t.Fatalf("第 %d 次应注入（跟随态全程携带）", i)
 		}
-	}
-	if !s.shouldAttempt("s", 20, now) {
-		t.Fatalf("第 25 次应注入（成功后每 20 次 1 次）")
-	}
-}
-
-// 按会话隔离：两会话交错，各自第 1 次都注入。
-func TestInjectSchedPerSession(t *testing.T) {
-	var s injectSched
-	now := time.Unix(0, 0)
-	got := map[string][]int{}
-	for i := 1; i <= 4; i++ {
-		for _, sess := range []string{"A", "B"} {
-			if s.shouldAttempt(sess, 2, now) {
-				got[sess] = append(got[sess], i)
-				s.markInjected(sess, 2, now)
-			}
-		}
-	}
-	// 每会话第 1、3 轮注入（每 2 次 1 次，首次注入）
-	if len(got["A"]) != 2 || got["A"][0] != 1 || got["A"][1] != 3 {
-		t.Errorf("会话 A 注入点 = %v, want [1 3]", got["A"])
-	}
-	if len(got["B"]) != 2 || got["B"][0] != 1 || got["B"][1] != 3 {
-		t.Errorf("会话 B 注入点 = %v, want [1 3]", got["B"])
 	}
 }
 
@@ -99,16 +78,16 @@ func TestInjectSchedEveryOne(t *testing.T) {
 	}
 }
 
-// 空会话 ID 走同一个桶，也不 panic。
+// 空会话 ID 走同一个桶（一个会话），也不 panic。
 func TestInjectSchedEmptySession(t *testing.T) {
 	var s injectSched
 	now := time.Unix(0, 0)
 	if !s.shouldAttempt("", 3, now) {
-		t.Fatal("首次应注入")
+		t.Fatal("首个会话应命中")
 	}
 	s.markInjected("", 3, now)
-	if s.shouldAttempt("", 3, now) {
-		t.Fatal("第 2 次不应注入")
+	if !s.shouldAttempt("", 3, now) {
+		t.Fatal("跟随态应继续注入")
 	}
 }
 
@@ -125,9 +104,9 @@ func TestInjectSchedPrune(t *testing.T) {
 	if n > 5000 {
 		t.Fatalf("计数器无界增长: %d", n)
 	}
-	// 活跃会话仍按节奏走
+	// 活跃新会话仍按采样走（every=2：奇数序会话命中）
 	if !s.shouldAttempt("live", 2, time.Unix(1000, 0)) {
-		t.Fatal("新会话首次应注入")
+		t.Fatal("新会话命中位应注入")
 	}
 }
 
@@ -148,8 +127,8 @@ func doRequestSession(t *testing.T, e *Engine, body, session string) (RequestRec
 
 const freqReqBody = `{"model":"m","stream":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]}`
 
-// 每 3 次注入 1 次：7 个请求里恰好第 1、4、7 次注入。
-func TestPipelineInjectFrequency(t *testing.T) {
+// 命中会话全程跟随：every=3 下同一会话 7 个请求全部注入（续轮不再裸奔）。
+func TestPipelineInjectStickyWithinSession(t *testing.T) {
 	up := &scriptedUpstream{responses: []stubResponse{{status: 200, body: `{"output":[]}`}}}
 	cfg := &testConfig{
 		instruction: "INSTRUCTION-XYZ",
@@ -159,36 +138,26 @@ func TestPipelineInjectFrequency(t *testing.T) {
 	}
 	e, _ := newTestEngine(t, up, cfg)
 
-	var injectedAt []int
 	for i := 1; i <= 7; i++ {
 		rec, _ := doRequestSession(t, e, freqReqBody, "sess-1")
-		if rec.Injected {
-			injectedAt = append(injectedAt, i)
+		if !rec.Injected {
+			t.Fatalf("第 %d 次应注入（命中会话跟随态全程携带）", i)
 		}
 	}
-	want := []int{1, 4, 7}
-	if len(injectedAt) != len(want) {
-		t.Fatalf("注入点 = %v, want %v", injectedAt, want)
-	}
-	for i := range want {
-		if injectedAt[i] != want[i] {
-			t.Fatalf("注入点 = %v, want %v", injectedAt, want)
-		}
-	}
-	// 上游确实只在注入点收到指令
+	// 上游每次都收到指令
 	n := 0
 	for _, b := range up.gotBodies {
 		if strings.Contains(string(b), "INSTRUCTION-XYZ") {
 			n++
 		}
 	}
-	if n != 3 {
-		t.Errorf("上游收到指令 %d 次, want 3", n)
+	if n != 7 {
+		t.Errorf("上游收到指令 %d 次, want 7", n)
 	}
 }
 
-// 按会话计数：两会话交错请求时各自首次注入（全局计数则不会如此）。
-func TestPipelineInjectFrequencyPerSession(t *testing.T) {
+// 会话采样：every=2 时第 1 个会话命中（全程注入），第 2 个会话不命中（全程不注）。
+func TestPipelineInjectSamplingPerSession(t *testing.T) {
 	up := &scriptedUpstream{responses: []stubResponse{{status: 200, body: `{"output":[]}`}}}
 	cfg := &testConfig{
 		instruction: "INSTRUCTION-XYZ",
@@ -198,12 +167,12 @@ func TestPipelineInjectFrequencyPerSession(t *testing.T) {
 	}
 	e, _ := newTestEngine(t, up, cfg)
 
-	// A、B 交错各 2 次：A1 注入、B1 注入、A2 不注入、B2 不注入
+	// A、B 交错各 2 次：A 命中（A1/A2 都注入），B 不命中（B1/B2 都不注）
 	seq := []struct {
 		sess string
 		want bool
 	}{
-		{"A", true}, {"B", true}, {"A", false}, {"B", false},
+		{"A", true}, {"B", false}, {"A", true}, {"B", false},
 	}
 	for i, s := range seq {
 		rec, _ := doRequestSession(t, e, freqReqBody, s.sess)

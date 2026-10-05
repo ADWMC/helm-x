@@ -266,7 +266,7 @@ export interface AppSettings {
   listen_port?: number
   prompt_mode?: string
   passthrough?: boolean
-  /** 注入频率：每 N 次请求注入 1 次（按会话计数）。1 = 每次都注入 */
+  /** 注入频率：每 N 个会话注入 1 个（命中的会话全程跟随）。1 = 每个会话都注入 */
   inject_every?: number
   /** UA 兜底：入站无 User-Agent 时补上（空 = 不补） */
   forward_user_agent?: string
