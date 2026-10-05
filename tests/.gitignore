@@ -1,0 +1,4 @@
+# 消融运行时产物：配置快照含用户本机配置，不入库
+abl/helmx.config.lastgood.json
+abl/config-watchdog.log
+abl/*.tmp
