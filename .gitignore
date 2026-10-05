@@ -37,3 +37,7 @@ desktop.ini
 # Python
 __pycache__/
 *.pyc
+
+# 逆向与中转提示词审计本地产物（不入仓库、不上传远端）
+docs/reverse-audit/
+
