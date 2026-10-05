@@ -30,6 +30,10 @@ const (
 	pathPromptDeepseek = "data/prompt-deepseek.md"
 	pathPromptFusion   = "data/prompt-ctf-fusion.md"
 	pathPromptLite     = "data/prompt-ctf-lite.md"
+	pathPromptV2       = "data/prompt-v2.md"
+	pathAblA1          = "data/abl-a1.md"
+	pathAblA2          = "data/abl-a2.md"
+	pathAblA4          = "data/abl-a4.md"
 	pathTamperRules    = "data/tamper_rules.txt"
 	pathRewritePrompt  = "data/rewrite_prompt.txt"
 	pathQA             = "data/qa.json"
@@ -88,6 +92,11 @@ var promptModes = []struct {
 	{PromptMode{ID: "deepseek", Name: "DeepSeek 优化版", Description: "CTF 计分制 + 输出锁定"}, pathPromptDeepseek},
 	{PromptMode{ID: "fusion", Name: "Fusion", Description: "融合版"}, pathPromptFusion},
 	{PromptMode{ID: "lite", Name: "Lite", Description: "精简版"}, pathPromptLite},
+	{PromptMode{ID: "v2", Name: "v2 完成态契约", Description: "补缺口 + VERIFIED 工件 + 人设加厚"}, pathPromptV2},
+	// 消融臂（测试用）：PROMPT-V2-DESIGN.md §4 的 A1/A2/A4；A3 即 v2 本体，A0 即 default。
+	{PromptMode{ID: "abl-a1", Name: "消融A1 人设", Description: "A0 + 人设加厚（消融臂，测试用）"}, pathAblA1},
+	{PromptMode{ID: "abl-a2", Name: "消融A2 契约", Description: "A1 + 完成态契约（消融臂，测试用）"}, pathAblA2},
+	{PromptMode{ID: "abl-a4", Name: "消融A4 去沙盒", Description: "v2 − 沙盒叙事（消融臂，测试用）"}, pathAblA4},
 }
 
 // Prompt 按模式 ID 返回提示词正文。未知 ID 回退到默认模式。
