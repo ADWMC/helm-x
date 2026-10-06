@@ -69,7 +69,7 @@ type RewriterSettings struct {
 func Default() Settings {
 	return Settings{
 		ListenPort:                1800,
-		PromptMode:                "default",
+		PromptMode:                "v2.1",
 		InjectEvery:               1,
 		UpstreamRetryEnabled:      true,
 		UpstreamMaxRetries:        10,
@@ -194,7 +194,7 @@ func (s *Store) normalize(v *Settings) {
 	if v.ListenPort <= 0 || v.ListenPort > 65535 {
 		v.ListenPort = d.ListenPort
 	}
-	if v.PromptMode == "" {
+	if v.PromptMode == "" || v.PromptMode == "default" {
 		v.PromptMode = d.PromptMode
 	}
 	if v.InjectEvery <= 0 {
