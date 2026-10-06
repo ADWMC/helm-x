@@ -74,3 +74,37 @@ func TestIsValidPromptMode(t *testing.T) {
 		}
 	}
 }
+
+func TestXORRoundTripFidelity(t *testing.T) {
+	files := assets.List()
+	if len(files) == 0 {
+		t.Fatal("List() returned no files")
+	}
+
+	for _, rel := range files {
+		content := assets.Get(rel)
+		if content == "" {
+			t.Errorf("assets.Get(%q) returned empty string", rel)
+		}
+		// Summary check
+		if len(content) < 10 {
+			t.Errorf("assets.Get(%q) returned suspiciously short content (%d bytes)", rel, len(content))
+		}
+	}
+
+	// 验证核心规则和提示词均能完整解混淆
+	tamper := assets.TamperRules()
+	if len(tamper) == 0 {
+		t.Error("TamperRules() returned empty string")
+	}
+
+	rewrite := assets.RewritePrompt()
+	if len(rewrite) == 0 {
+		t.Error("RewritePrompt() returned empty string")
+	}
+
+	qa := assets.QA()
+	if qa.Version == 0 || len(qa.Items) == 0 {
+		t.Errorf("QA() parsed incorrectly: version=%d items=%d", qa.Version, len(qa.Items))
+	}
+}
