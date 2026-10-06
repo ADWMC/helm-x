@@ -27,6 +27,9 @@ func (a *App) setupTray() {
 	tray := a.wails.SystemTray.New()
 	tray.SetLabel("helm-x")
 	tray.SetTooltip("helm-x — codex 本地映射层")
+	if len(a.icon) > 0 {
+		tray.SetIcon(a.icon)
+	}
 
 	menu := a.wails.NewMenu()
 	menu.Add("显示控制台").OnClick(func(ctx *application.Context) {

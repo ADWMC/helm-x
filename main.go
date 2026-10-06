@@ -36,6 +36,9 @@ import (
 //go:embed all:frontend/dist
 var frontendDist embed.FS
 
+//go:embed build/appicon.png
+var appIcon []byte
+
 func main() {
 	if len(os.Args) < 2 {
 		if err := runGUI(); err != nil {
@@ -63,6 +66,7 @@ func runGUI() error {
 
 	app, err := svc.New(svc.Options{
 		Assets:      assets,
+		Icon:        appIcon,
 		WindowTitle: "helm-x 控制台",
 	})
 	if err != nil {

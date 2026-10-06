@@ -32,6 +32,7 @@ type App struct {
 	window   *application.WebviewWindow
 	rt       *runtime.Runtime
 	svc      *Services
+	icon     []byte
 	quitting bool
 }
 
@@ -50,7 +51,7 @@ func New(opts Options) (*App, error) {
 	store := config.NewStore(config.Path())
 	rt := runtime.New(store, logger)
 
-	a := &App{rt: rt}
+	a := &App{rt: rt, icon: opts.Icon}
 
 	// 前端资源：优先用传入的 dist，其次用 go:embed 的内置兜底页
 	assets := opts.Assets
