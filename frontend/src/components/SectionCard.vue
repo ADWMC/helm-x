@@ -21,7 +21,7 @@ defineProps<{
     >
       <h2 class="text-[13px] leading-tight font-semibold tracking-[.01em]">{{ title }}</h2>
       <div class="flex items-center gap-3">
-        <span v-if="meta" class="font-mono text-[10px] tracking-[.06em] text-base-content/55">
+        <span v-if="meta" class="font-mono text-[11px] tracking-[.06em] text-base-content/55">
           {{ meta }}
         </span>
         <slot name="action" />

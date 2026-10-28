@@ -14,5 +14,6 @@
     "productName": "helm-x",
     "productVersion": "0.1.0",
     "comments": "codex 本地映射层"
-  }
+  },
+  "productVersion": "0.2.1"
 }

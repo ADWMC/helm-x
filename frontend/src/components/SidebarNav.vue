@@ -16,6 +16,8 @@ import Icon from '@/components/Icon.vue'
 defineProps<{ open?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate'): void }>()
 const route = useRoute()
+// 由 vite define 注入（来源 frontend/package.json）
+const APP_VERSION = __APP_VERSION__
 </script>
 
 <template>
@@ -60,7 +62,7 @@ const route = useRoute()
     </nav>
 
     <footer class="border-t border-base-300 px-5 py-3">
-      <span class="font-mono text-[10px] tracking-[.04em] text-base-content/40">v0.1.0</span>
+      <span class="font-mono text-[11px] tracking-[.04em] text-base-content/60">v{{ APP_VERSION }}</span>
     </footer>
   </aside>
 </template>

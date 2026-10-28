@@ -121,7 +121,7 @@ onMounted(() => {
             <span v-if="m.default" class="badge badge-xs badge-ghost">默认</span>
           </div>
           <div class="mt-0.5 text-[12px] text-base-content/60">{{ m.description }}</div>
-          <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[10px] text-base-content/40">
+          <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-base-content/60">
             <span>{{ m.id }} · {{ (m.bytes / 1024).toFixed(1) }} KB</span>
             <span v-if="m.models" class="badge badge-xs badge-outline">{{ m.models }}</span>
           </div>
@@ -131,7 +131,7 @@ onMounted(() => {
 
     <SkeletonRows v-else :rows="5" :cols="2" />
 
-    <p class="mt-3 text-[11px] text-base-content/50">
+    <p class="mt-3 text-[12px] text-base-content/70">
       提示词按下方「注入频率」插入到 input 数组的第一条（已实测被上游接受且生效）。
     </p>
   </SectionCard>
@@ -154,7 +154,7 @@ onMounted(() => {
         保存
       </button>
     </div>
-    <p class="mt-3 text-[11px] text-base-content/50">
+    <p class="mt-3 text-[12px] text-base-content/70">
       会话按 Session-Id/Thread-Id 头识别；codex 不发会话头时按首条用户消息指纹识别。
       命中的会话注入成功后全程跟随（工具调用后的续轮也携带）；N=1 表示每个会话都注入
       （推荐——实测裸请求会产生拒绝）。注入失败不占名额，下次请求立即重试。
@@ -167,7 +167,7 @@ onMounted(() => {
       class="max-h-[320px] overflow-y-auto rounded-field border border-base-300 bg-base-200/40 p-3.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap"
       >{{ current.preview }}</pre
     >
-    <p class="mt-2 text-[11px] text-base-content/50">
+    <p class="mt-2 text-[12px] text-base-content/70">
       仅显示开头部分，完整内容 {{ current.bytes }} 字节。
     </p>
   </SectionCard>

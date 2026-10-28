@@ -148,7 +148,7 @@ onMounted(() => {
         <span v-if="busy === 'proxy'" class="loading loading-spinner loading-xs" />
         {{ proxy?.running ? '停止代理' : '启动代理' }}
       </button>
-      <span class="font-mono text-[11px] text-base-content/60">{{ proxy?.listen }}</span>
+      <span class="font-mono text-[12px] text-base-content/60">{{ proxy?.listen }}</span>
       <span class="text-[12px] text-base-content/60">
         {{ proxy?.running ? '运行中' : '已停止' }}
       </span>
@@ -178,22 +178,22 @@ onMounted(() => {
   <section class="rounded-box border border-error/40 bg-base-100">
     <header class="flex items-center justify-between border-b border-error/30 px-[18px] py-3">
       <h2 class="text-[15px] font-semibold">配置注入</h2>
-      <span class="font-mono text-[10px] text-base-content/60">
+      <span class="font-mono text-[11px] text-base-content/60">
         {{ codex?.injected ? '已注入' : '未注入' }}
       </span>
     </header>
     <div class="p-[18px]">
       <dl class="mb-4 grid gap-1.5 text-[12px]">
         <div class="flex gap-2">
-          <dt class="w-20 shrink-0 text-base-content/50">配置文件</dt>
+          <dt class="w-20 shrink-0 text-base-content/70">配置文件</dt>
           <dd class="font-mono break-all">{{ codex?.configPath || '未找到' }}</dd>
         </div>
         <div class="flex gap-2">
-          <dt class="w-20 shrink-0 text-base-content/50">当前上游</dt>
+          <dt class="w-20 shrink-0 text-base-content/70">当前上游</dt>
           <dd class="font-mono break-all">{{ codex?.baseUrl || '—' }}</dd>
         </div>
         <div class="flex gap-2">
-          <dt class="w-20 shrink-0 text-base-content/50">备份</dt>
+          <dt class="w-20 shrink-0 text-base-content/70">备份</dt>
           <dd class="font-mono break-all">{{ codex?.hasBackup ? '已存在' : '尚未创建' }}</dd>
         </div>
       </dl>
@@ -210,7 +210,7 @@ onMounted(() => {
           移除注入并还原
         </button>
       </div>
-      <p v-if="!codex?.hasBackup" class="mt-2 text-[11px] text-base-content/50">
+      <p v-if="!codex?.hasBackup" class="mt-2 text-[12px] text-base-content/70">
         尚无备份，因此「移除并还原」不可用 —— 没有可还原的原始状态。
       </p>
     </div>
@@ -229,7 +229,7 @@ onMounted(() => {
         保存
       </button>
     </div>
-    <p class="mt-3 text-[11px] text-base-content/50">
+    <p class="mt-3 text-[12px] text-base-content/70">
       转发时除逐跳头外全部原样透传（含 User-Agent、Cookie、Authorization、各种 X-* 头），
       中转站看到的请求指纹与 codex 直连一致。仅当入站请求<b>没有</b> User-Agent 时才补这个兜底值；
       都为空时转发请求不带 UA —— 绝不泄漏 Go 默认 UA。
@@ -249,14 +249,14 @@ onMounted(() => {
           :key="i"
           class="rounded-field border border-base-300 bg-base-200/40 p-3 text-[12px]"
         >
-          <div class="font-mono text-[11px] break-all text-base-content/60">{{ d.targetFile }}</div>
+          <div class="font-mono text-[12px] break-all text-base-content/60">{{ d.targetFile }}</div>
           <div class="mt-1 font-mono">{{ d.key }}</div>
           <div class="mt-1 text-base-content/70">
-            <span class="text-base-content/50">原值</span> {{ d.oldValue || '(空)' }}
+            <span class="text-base-content/70">原值</span> {{ d.oldValue || '(空)' }}
             <span class="mx-1.5">→</span>
-            <span class="text-base-content/50">新值</span> {{ d.newValue }}
+            <span class="text-base-content/70">新值</span> {{ d.newValue }}
           </div>
-          <div class="mt-1 text-[11px] text-base-content/50">撤销：{{ d.undoHint }}</div>
+          <div class="mt-1 text-[12px] text-base-content/70">撤销：{{ d.undoHint }}</div>
         </div>
       </div>
 

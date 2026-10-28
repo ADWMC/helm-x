@@ -15,7 +15,7 @@ withDefaults(
 
 <template>
   <div class="rounded-box border border-[var(--color-hairline)] bg-base-200/40 px-4 py-3.5">
-    <span class="block text-[11px] tracking-[.02em] text-base-content/60">{{ label }}</span>
+    <span class="block text-[12px] tracking-[.02em] text-base-content/60">{{ label }}</span>
     <strong
       class="mt-2 block text-[22px] leading-none font-semibold tracking-[-0.012em]"
       :class="{
@@ -27,7 +27,7 @@ withDefaults(
     </strong>
     <em
       v-if="hint"
-      class="mt-2 block text-[11px] not-italic text-base-content/60"
+      class="mt-2 block text-[12px] not-italic text-base-content/60"
     >
       {{ hint }}
     </em>

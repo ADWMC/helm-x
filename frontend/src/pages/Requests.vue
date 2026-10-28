@@ -142,7 +142,7 @@ const ACTION_LABEL: Record<string, string> = {
     <div v-if="filtered.length" class="overflow-x-auto">
       <table class="table table-sm table-zebra">
         <thead>
-          <tr class="text-[11px]">
+          <tr class="text-[12px]">
             <th class="w-32">时间</th>
             <th class="w-16">会话</th>
             <th>路径</th>
@@ -157,7 +157,7 @@ const ACTION_LABEL: Record<string, string> = {
         <tbody>
           <tr v-for="r in filtered" :key="r.id" class="text-[12px]">
             <td class="font-mono text-base-content/60">{{ fmtTime(r.ts) }}</td>
-            <td class="font-mono text-[10px] text-base-content/50">
+            <td class="font-mono text-[11px] text-base-content/70">
               {{ r.sessionId ? r.sessionId.slice(0, 8) : '—' }}
             </td>
             <td class="font-mono">
@@ -172,11 +172,11 @@ const ACTION_LABEL: Record<string, string> = {
               <div v-if="r?.gate" class="flex items-center gap-1.5" :title="r?.gate?.why">
                 <GateBadge :risk="r?.gate?.filterRisk" dot-only />
                 <GateBadge :risk="r?.gate?.complianceRisk" dot-only />
-                <span v-if="r.gate.source" class="text-[10px] text-base-content/40">{{ r?.gate?.source }}</span>
+                <span v-if="r.gate.source" class="text-[11px] text-base-content/60">{{ r?.gate?.source }}</span>
               </div>
-              <span v-else class="text-base-content/30">—</span>
+              <span v-else class="text-base-content/55">—</span>
             </td>
-            <td class="text-[11px] text-base-content/70">
+            <td class="text-[12px] text-base-content/70">
               {{ ACTION_LABEL[r.action] || r.action }}
             </td>
             <td class="text-right font-mono text-base-content/60">{{ r.upstreamHits }}</td>

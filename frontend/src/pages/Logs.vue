@@ -64,7 +64,7 @@ onUnmounted(() => {
 
     <LogStream :lines="lines" :max="2000" />
 
-    <p class="mt-3 text-[11px] text-base-content/50">
+    <p class="mt-3 text-[12px] text-base-content/70">
       日志实时推送，无需刷新。手动上滚会自动暂停跟随，暂停期间新记录不会丢失。
     </p>
   </SectionCard>

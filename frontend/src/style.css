@@ -37,12 +37,13 @@
 
   /* canvas：暖炭黑（hue 60）。注意 oklch 3% 以下渲染出来就是纯黑 rgb(0,0,0)，
      暖色根本显不出来 —— "暖黑"必须给到 ≈oklch 9% 才有 sRGB(3,2,2) 的可感色温。 */
-  --color-base-100: oklch(9% 0.006 60);
-  /* surface-1：卡片 / 面板。sRGB ≈(11,8,7)，与画布拉开可感台阶
-     （oklch 6% 只有 sRGB 1，卡片会和画布糊在一起 —— 实测踩过）。 */
-  --color-base-200: oklch(14.5% 0.008 60);
-  /* hairline：边框与分隔线，sRGB ≈(22,19,17) */
-  --color-base-300: oklch(20% 0.009 60);
+  /* 2026-10-28 实测（WCAG 分离度，1.0 = 肉眼分不出）：
+     旧值 画布 9% / 卡片 14.5% 的亮度比只有 1.05:1 —— 卡片和画布糊成一片，
+     用户的原话是"看不清"。抬到 12% / 22% 后分离度 1.20:1，卡片边界成立；
+     边框再上一层到 28%，让面板边缘在深色下也有实体感。 */
+  --color-base-100: oklch(12% 0.006 60);
+  --color-base-200: oklch(22% 0.008 60);
+  --color-base-300: oklch(28% 0.009 60);
 
   --color-base-content: oklch(93% 0.004 60);
 
@@ -85,7 +86,8 @@
 /* ── 排版基座（§15）──
    系统字体自带 optical sizing；正文行高 1.5，等宽数字保证数据列对齐。 */
 html {
-  font: 100%/1.5 var(--font-sans);
+  /* 16px → 17px：11/12px 的元信息在 96dpi 显示器上确实吃力（用户反馈"看不清"） */
+  font: 106.25%/1.55 var(--font-sans);
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;

@@ -45,3 +45,6 @@ docs/reverse-audit/
 # benchmark 运行产物（单轮约 463MB，可由测试脚本重新生成）
 /tests/jb/runs/
 
+
+# 跑批报告：只留在本机，不入库（用户要求）
+tests/report-*.md

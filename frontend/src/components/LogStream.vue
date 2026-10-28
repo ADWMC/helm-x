@@ -66,7 +66,7 @@ defineExpose({ resume })
   <div class="relative">
     <div
       v-if="truncated"
-      class="mb-1.5 font-mono text-[10px] text-base-content/50"
+      class="mb-1.5 font-mono text-[11px] text-base-content/70"
     >
       仅显示最近 {{ max }} 条
     </div>
@@ -79,10 +79,10 @@ defineExpose({ resume })
         :class="{
           'text-error': l.level === 'error',
           'text-warning': l.level === 'warn',
-          'text-base-content/50': l.level !== 'error' && l.level !== 'warn',
+          'text-base-content/70': l.level !== 'error' && l.level !== 'warn',
         }"
       >{{ l.ts }}</span> {{ l.text }}
-</template><span v-if="!shown.length" class="text-base-content/50">（暂无日志）</span></pre>
+</template><span v-if="!shown.length" class="text-base-content/70">（暂无日志）</span></pre>
 
     <button
       v-if="!following"

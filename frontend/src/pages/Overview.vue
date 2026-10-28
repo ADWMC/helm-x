@@ -126,11 +126,11 @@ function fmtTime(ts: string): string {
           aria-hidden="true"
         />
         <strong class="text-[15px]">{{ mainStatusText }}</strong>
-        <span v-if="proxy" class="font-mono text-[11px] text-base-content/60">
+        <span v-if="proxy" class="font-mono text-[12px] text-base-content/60">
           {{ proxy.listen }}
         </span>
       </div>
-      <div class="text-right font-mono text-[11px] text-base-content/60">
+      <div class="text-right font-mono text-[12px] text-base-content/60">
         <div>上游 {{ proxy?.upstream || '—' }}</div>
         <div v-if="proxy">已转发 {{ proxy.requests }} 次</div>
       </div>
@@ -151,7 +151,7 @@ function fmtTime(ts: string): string {
     <div v-if="requests.length" class="overflow-x-auto">
       <table class="table table-sm">
         <thead>
-          <tr class="text-[11px]">
+          <tr class="text-[12px]">
             <th class="w-20">时间</th>
             <th>路径</th>
             <th class="w-28">大小</th>

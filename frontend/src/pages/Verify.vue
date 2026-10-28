@@ -87,18 +87,18 @@ function mark(r: Row): string {
         class="flex items-start gap-3 rounded-field border border-base-300 bg-base-200/30 px-3 py-2"
       >
         <span
-          class="mt-px w-11 shrink-0 text-center font-mono text-[10px]"
-          :class="r.skip ? 'text-base-content/40' : r.ok ? 'text-success' : 'text-error'"
+          class="mt-px w-11 shrink-0 text-center font-mono text-[11px]"
+          :class="r.skip ? 'text-base-content/60' : r.ok ? 'text-success' : 'text-error'"
         >
           {{ mark(r) }}
         </span>
         <div class="min-w-0 flex-1">
           <div class="text-[13px]">{{ r.name }}</div>
-          <div v-if="r.detail" class="font-mono text-[11px] break-all text-base-content/60">
+          <div v-if="r.detail" class="font-mono text-[12px] break-all text-base-content/60">
             {{ r.detail }}
           </div>
         </div>
-        <span class="shrink-0 font-mono text-[10px] text-base-content/40">
+        <span class="shrink-0 font-mono text-[11px] text-base-content/60">
           {{ r.step }}/{{ r.total }}
         </span>
       </div>
@@ -112,7 +112,7 @@ function mark(r: Row): string {
       e2e 验证会实际调用一次 codex，较慢但能确认端到端连通。
     </p>
 
-    <p v-if="running" class="mt-4 text-[11px] text-base-content/50">
+    <p v-if="running" class="mt-4 text-[12px] text-base-content/70">
       可以切换到其他页面，自检不会中断；结果通过事件推送，切回来仍在。
     </p>
   </SectionCard>

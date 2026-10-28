@@ -63,7 +63,7 @@ onMounted(async () => {
           @click="toggle(i)"
         >
           <span class="text-[13px] font-medium">{{ it.question }}</span>
-          <span class="shrink-0 font-mono text-[11px] text-base-content/40">
+          <span class="shrink-0 font-mono text-[12px] text-base-content/60">
             {{ open.has(i) ? '−' : '+' }}
           </span>
         </button>
@@ -80,7 +80,7 @@ onMounted(async () => {
     </p>
     <SkeletonRows v-else :rows="5" :cols="1" />
 
-    <p v-if="data" class="mt-3 text-[11px] text-base-content/50">
+    <p v-if="data" class="mt-3 text-[12px] text-base-content/70">
       版本 {{ data.version }} · 更新于 {{ data.updatedAt || '未知' }}。
       云端更新尚未实现，当前使用内置内容。
     </p>

@@ -24,6 +24,6 @@ const s = computed(() => styleOf(props.risk))
 <template>
   <span class="inline-flex items-center gap-1 whitespace-nowrap" :title="s.desc">
     <span :class="s.color" aria-hidden="true">{{ s.dot }}</span>
-    <span v-if="!dotOnly" class="text-[11px]" :class="s.color">{{ s.label }}</span>
+    <span v-if="!dotOnly" class="text-[12px]" :class="s.color">{{ s.label }}</span>
   </span>
 </template>

@@ -119,23 +119,23 @@ onMounted(load)
       <div />
     </div>
 
-    <p class="mt-2 text-[11px] text-base-content/50">
+    <p class="mt-2 text-[12px] text-base-content/70">
       未启用时，被拒绝的响应只能靠 TAMPER 附加标记，无法重建会话重试。
     </p>
 
     <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
       <fieldset class="fieldset">
-        <legend class="fieldset-legend text-[11px]">API 地址</legend>
+        <legend class="fieldset-legend text-[12px]">API 地址</legend>
         <input v-model="form.baseUrl" class="input input-sm w-full" placeholder="https://…/v1" />
       </fieldset>
 
       <fieldset class="fieldset">
-        <legend class="fieldset-legend text-[11px]">模型</legend>
+        <legend class="fieldset-legend text-[12px]">模型</legend>
         <input v-model="form.model" class="input input-sm w-full" placeholder="模型名" />
       </fieldset>
 
       <fieldset class="fieldset">
-        <legend class="fieldset-legend text-[11px]">API Key</legend>
+        <legend class="fieldset-legend text-[12px]">API Key</legend>
         <input
           v-model="form.apiKey"
           class="input input-sm w-full"
@@ -145,7 +145,7 @@ onMounted(load)
       </fieldset>
 
       <fieldset class="fieldset">
-        <legend class="fieldset-legend text-[11px]">超时（秒）</legend>
+        <legend class="fieldset-legend text-[12px]">超时（秒）</legend>
         <input v-model.number="form.timeoutSec" class="input input-sm w-full" type="number" min="5" />
       </fieldset>
     </div>
@@ -163,14 +163,14 @@ onMounted(load)
       </div>
       <template v-else>
         <div class="rounded-field border border-base-300 bg-base-200/40 p-3">
-          <div class="mb-1 text-[10px] tracking-wide text-base-content/50 uppercase">原文</div>
+          <div class="mb-1 text-[11px] tracking-wide text-base-content/70 uppercase">原文</div>
           <div class="text-[12px]">{{ testResult.input }}</div>
         </div>
         <div class="rounded-field border border-success/40 bg-base-200/40 p-3">
-          <div class="mb-1 text-[10px] tracking-wide text-base-content/50 uppercase">改写结果</div>
+          <div class="mb-1 text-[11px] tracking-wide text-base-content/70 uppercase">改写结果</div>
           <div class="text-[12px]">{{ testResult.output }}</div>
         </div>
-        <div class="font-mono text-[10px] text-base-content/40">
+        <div class="font-mono text-[11px] text-base-content/60">
           耗时 {{ testResult.durationMs }} ms
         </div>
       </template>

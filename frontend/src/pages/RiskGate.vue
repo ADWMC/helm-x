@@ -181,7 +181,7 @@ onMounted(load)
         <button class="btn btn-sm btn-primary active:scale-[.97]" :disabled="saving" @click="save">
           {{ saving ? '保存中…' : '保存' }}
         </button>
-        <span class="text-[11px] opacity-60">enable 只是开关；enforce 才会真正改写请求</span>
+        <span class="text-[12px] opacity-60">enable 只是开关；enforce 才会真正改写请求</span>
       </div>
     </SectionCard>
 

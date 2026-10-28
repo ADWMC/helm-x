@@ -115,7 +115,7 @@ onUnmounted(() => {
         <!-- 实时代理状态：颜色 + 图标 + 文字三重表达（不只靠颜色） -->
         <RouterLink
           to="/services"
-          class="nav-item inline-flex items-center gap-2 rounded-full border border-[var(--color-hairline)] px-2.5 py-1 text-[11px]"
+          class="nav-item inline-flex items-center gap-2 rounded-full border border-[var(--color-hairline)] px-2.5 py-1 text-[12px]"
           :title="status?.proxy.listen ? `监听 ${status.proxy.listen}` : undefined"
         >
           <span

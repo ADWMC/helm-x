@@ -21,7 +21,7 @@ const style = computed(() => styleOf(props.verdict))
   <!-- dotOnly 时用 aria-label 承载状态，而不是塞 .sr-only 子元素：
        子元素的文本仍会被祖先的 textContent 收集，等于没隐藏。 -->
   <span
-    class="inline-flex items-center gap-1.5 font-mono text-[10px] whitespace-nowrap"
+    class="inline-flex items-center gap-1.5 font-mono text-[11px] whitespace-nowrap"
     :title="style.desc"
     :aria-label="dotOnly ? style.label : undefined"
   >
