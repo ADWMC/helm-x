@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 // scriptedUpstream 按脚本返回响应，用于驱动管线各分支。
@@ -23,6 +25,14 @@ type stubResponse struct {
 	status int
 	ct     string
 	body   string
+}
+
+// lastBody 返回最近一次收到的请求体（测试断言"发出去的是什么"用）。
+func (s *scriptedUpstream) lastBody() string {
+	if len(s.gotBodies) == 0 {
+		return ""
+	}
+	return string(s.gotBodies[len(s.gotBodies)-1])
 }
 
 func (s *scriptedUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -74,10 +84,13 @@ type testConfig struct {
 	tamper      *stubTamper
 	// retry 必须显式设置：零值表示"不重试"，是合法配置
 	retry RetryOptions
+	// gate 是风险闸门（nil 表示未启用）
+	gate *riskgate.Gate
 }
 
 func (c *testConfig) PromptInstruction() string { return c.instruction }
 func (c *testConfig) Rewriter() Rewriter        { return nil }
+func (c *testConfig) Gate() *riskgate.Gate      { return c.gate }
 func (c *testConfig) Tamper() TamperMatcher     { return c.tamper }
 func (c *testConfig) Retry() RetryOptions       { return c.retry }
 func (c *testConfig) FallbackUserAgent() string { return c.fallbackUA }

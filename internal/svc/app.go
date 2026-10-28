@@ -90,6 +90,7 @@ func New(opts Options) (*App, error) {
 	app.RegisterService(application.NewService(a.svc.Config))
 	app.RegisterService(application.NewService(a.svc.Prompt))
 	app.RegisterService(application.NewService(a.svc.Rewriter))
+	app.RegisterService(application.NewService(a.svc.RiskGate))
 	app.RegisterService(application.NewService(a.svc.Verify))
 	app.RegisterService(application.NewService(a.svc.Logs))
 	app.RegisterService(application.NewService(a.svc.QA))

@@ -18,6 +18,8 @@ import (
 	"github.com/ADWMC/helm-x/internal/proxy"
 	"github.com/ADWMC/helm-x/internal/rewriter"
 	"github.com/ADWMC/helm-x/internal/tamper"
+
+	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 // Runtime 是装配好的运行时。
@@ -32,7 +34,10 @@ type Runtime struct {
 	rewriter *rewriter.Rewriter
 	// rewriterCfg 记录构造 rewriter 时用的配置，用于判断是否需要重建
 	rewriterCfg config.RewriterSettings
-	tamper      *tamper.Engine
+	// gate 是风险闸门；gateCfg 用于判断是否需要重建
+	gate    *riskgate.Gate
+	gateCfg config.RiskGateSettings
+	tamper  *tamper.Engine
 	// sink 接收代理事件（日志 + 请求记录）
 	sink proxy.EventSink
 }
@@ -108,6 +113,39 @@ func (r *Runtime) Rewriter() proxy.Rewriter {
 	return r.rewriter
 }
 
+// Gate 返回风险闸门；未启用或配置不完整时返回 nil（代理据此完全跳过闸门）。
+func (r *Runtime) Gate() *riskgate.Gate {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	s := r.Store.Get()
+	if !s.RiskGate.Enabled || s.RiskGate.BaseURL == "" {
+		return nil
+	}
+	if r.gate == nil || r.gateCfg != s.RiskGate {
+		cfg := riskgate.Config{
+			Enabled:      s.RiskGate.Enabled,
+			Mode:         s.RiskGate.Mode,
+			Profile:      s.RiskGate.Profile,
+			HotModel:     s.RiskGate.HotModel,
+			LabelModel:   s.RiskGate.LabelModel,
+			BaseURL:      s.RiskGate.BaseURL,
+			APIKey:       s.RiskGate.APIKey,
+			TimeoutSec:   s.RiskGate.TimeoutSec,
+			CacheTTLSec:  s.RiskGate.CacheTTLSec,
+			EnforceRatio: s.RiskGate.EnforceRatio,
+			Budget: riskgate.Budget{
+				PerSessionJudge:   s.RiskGate.BudgetPerSessionJudge,
+				PerSessionRewrite: s.RiskGate.BudgetPerSessionRewrite,
+				PerRequestTokens:  s.RiskGate.BudgetPerRequestTokens,
+			},
+		}
+		r.gate = riskgate.New(cfg)
+		r.gateCfg = s.RiskGate
+	}
+	return r.gate
+}
+
 // NewRewriterForTest 暴露给测试构造指定配置的改写器。
 func NewRewriterForTest(cfg rewriter.Config, prompt string) *rewriter.Rewriter {
 	return rewriter.New(cfg, prompt)
@@ -150,6 +188,9 @@ func (c *ProxyConfig) FallbackUserAgent() string {
 
 // Rewriter 返回改写器。
 func (c *ProxyConfig) Rewriter() proxy.Rewriter { return c.rt.Rewriter() }
+
+// Gate 实现 proxy.ConfigProvider。
+func (c *ProxyConfig) Gate() *riskgate.Gate { return c.rt.Gate() }
 
 // Tamper 返回规则引擎。
 func (c *ProxyConfig) Tamper() proxy.TamperMatcher {

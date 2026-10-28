@@ -34,6 +34,7 @@ type Services struct {
 	Config   *ConfigService
 	Prompt   *PromptService
 	Rewriter *RewriterService
+	RiskGate *RiskGateService
 	Verify   *VerifyService
 	Logs     *LogService
 	QA       *QAService
@@ -58,6 +59,7 @@ func NewServices(rt *runtime.Runtime, emitter Emitter) *Services {
 	s.Config = &ConfigService{s: s}
 	s.Prompt = &PromptService{s: s}
 	s.Rewriter = &RewriterService{s: s}
+	s.RiskGate = &RiskGateService{s: s}
 	s.Verify = &VerifyService{s: s}
 	s.Logs = &LogService{s: s}
 	s.QA = &QAService{s: s}

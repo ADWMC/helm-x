@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 var (
@@ -67,6 +69,8 @@ type ConfigProvider interface {
 	FallbackUserAgent() string
 	// Rewriter 返回改写器；nil 表示未启用（跳过语义改写）。
 	Rewriter() Rewriter
+	// Gate 返回风险闸门；nil 表示未启用（完全不影响请求）。
+	Gate() *riskgate.Gate
 	// Tamper 返回拒绝规则引擎。
 	Tamper() TamperMatcher
 	// Retry 返回重试策略。
@@ -94,6 +98,8 @@ type RequestRecord struct {
 	Upstream   int       `json:"upstreamHits"`
 	DurationMs int64     `json:"durationMs"`
 	Note       string    `json:"note,omitempty"`
+	// Gate 是本次请求的风险闸门判定；nil 表示未启用或判定失败。
+	Gate *riskgate.Verdict `json:"gate,omitempty"`
 }
 
 // Engine 是代理引擎。

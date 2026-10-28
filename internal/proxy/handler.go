@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
@@ -67,11 +69,44 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 		rec.SessionID = view.SessionFingerprint()
 	}
 
+	// ── 1.5 RiskGate ──
+	// 判定单位是**载荷**：用户最新一句 + 我们即将注入的提示词。
+	// 闸门永远不阻断请求：未启用/失败/超预算一律直通（ok=false）。
+	// 只有 enforce 模式且保真检查通过时才替换最后一条 user 文本 —— 外科式，不重建会话。
+	outBody := body
+	if canTransform && view != nil {
+		if g := e.gate(); g != nil {
+			cfg := g.Config()
+			userText, _ := view.LastUserMessage()
+			if userText != "" && !IsAuxiliaryRequest(r.Header, body) {
+				vd, ok := g.Judge(ctx, rec.SessionID, riskgate.Payload{
+					UserText:      userText,
+					InjectionText: e.instruction(),
+					HistoryTail:   view.ConversationText(),
+				})
+				if ok {
+					rec.Gate = &vd
+					if cfg.Mode == "enforce" && vd.FilterRisk != riskgate.RiskNone && vd.Rewrite != "" {
+						if pass, why := riskgate.FidelityOK(userText, vd.Rewrite); pass {
+							if rewritten, rok, rerr := view.ReplaceLastUserText(vd.Rewrite); rerr == nil && rok {
+								outBody = rewritten
+								rec.Note = joinNote(rec.Note, "风险闸门已改写用户请求")
+							}
+						} else {
+							rec.Note = joinNote(rec.Note, "改写作废（保真检查："+why+"）")
+						}
+					} else if vd.FilterRisk != riskgate.RiskNone || vd.ComplianceRisk != riskgate.RiskNone {
+						rec.Note = joinNote(rec.Note, "闸门判定有风险（"+cfg.Mode+"）")
+					}
+				}
+			}
+		}
+	}
+
 	// ── 2. Inject ──
 	// 注入频率：每 N 次请求注 1 次（按会话计数）。
 	// shouldInject 只在"可改写且有指令"时才被调用，其余请求不占名额；
 	// 注入失败也不占名额 —— markInjected 只在成功后调用，下次请求重试。
-	outBody := body
 	if canTransform {
 		instruction := e.instruction()
 		if instruction != "" && e.shouldInject(rec.SessionID) {
@@ -230,6 +265,12 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 	if status == 0 {
 		status = http.StatusBadGateway
 	}
+	// 闸门判定单独落一条日志：界面之外（日志文件/抓取）也要能统计影子期一致率。
+	if rec.Gate != nil {
+		e.logf("info", "proxy: 闸门 locus=%s filter=%s compliance=%s source=%s why=%q",
+			rec.Gate.Locus, rec.Gate.FilterRisk, rec.Gate.ComplianceRisk, rec.Gate.Source, rec.Gate.Why)
+	}
+
 	w.Header().Set("Content-Type", ct)
 	w.WriteHeader(status)
 	_, _ = w.Write(finalBody)
@@ -245,3 +286,19 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 //   - 窗口结束 → Flush 缓冲，之后纯转发（O(1) 内存）
 //
 // 旧版是**全缓冲**：实测首字节延迟等于生成总时长（FINDINGS A-3，1.25s）。
+
+// gate 返回风险闸门；nil 表示未启用。
+func (e *Engine) gate() *riskgate.Gate {
+	if e.opts.Config == nil {
+		return nil
+	}
+	return e.opts.Config.Gate()
+}
+
+// joinNote 追加备注（分号分隔），避免覆盖已有内容。
+func joinNote(dst, add string) string {
+	if dst == "" {
+		return add
+	}
+	return dst + "; " + add
+}

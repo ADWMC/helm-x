@@ -48,6 +48,7 @@ type Settings struct {
 
 	// 改写器
 	Rewriter RewriterSettings `json:"rewriter"`
+	RiskGate RiskGateSettings `json:"riskgate"`
 
 	// 已废弃的 Context Gardener 字段。
 	// 旧配置里可能存在：**读取时忽略、不报错、不再写回**（FINDINGS-phase1 §5）。
@@ -69,6 +70,42 @@ type RewriterSettings struct {
 	ProxyURL     string `json:"proxy_url,omitempty"`
 	Fallback     string `json:"fallback,omitempty"`     // none(默认) | local
 	MaxAttempts  int    `json:"max_attempts,omitempty"` // 默认 3
+}
+
+// RiskGateSettings 是风险闸门配置（docs/RISKGATE-DESIGN.md §9）。
+//
+// 默认关闭：闸门会引入额外延迟与外部调用，必须先 shadow 校准再启用。
+type RiskGateSettings struct {
+	Enabled                 bool   `json:"enabled"`
+	Mode                    string `json:"mode,omitempty"`        // shadow(默认) | enforce
+	Profile                 string `json:"profile,omitempty"`     // substr-gateway | cyber-openai(默认) | generic
+	HotModel                string `json:"hot_model,omitempty"`   // 热路径判定模型（延迟优先）
+	LabelModel              string `json:"label_model,omitempty"` // 离线标注模型（质量优先）
+	BaseURL                 string `json:"base_url,omitempty"`
+	APIKey                  string `json:"api_key,omitempty"`
+	TimeoutSec              int    `json:"timeout_sec,omitempty"`
+	CacheTTLSec             int    `json:"cache_ttl_sec,omitempty"`
+	EnforceRatio            int    `json:"enforce_ratio,omitempty"`
+	BudgetPerSessionJudge   int    `json:"budget_per_session_judge,omitempty"`
+	BudgetPerSessionRewrite int    `json:"budget_per_session_rewrite,omitempty"`
+	BudgetPerRequestTokens  int    `json:"budget_per_request_tokens,omitempty"`
+}
+
+// RiskGateDefaults 返回闸门的保守默认值。
+func RiskGateDefaults() RiskGateSettings {
+	return RiskGateSettings{
+		Enabled:                 false,
+		Mode:                    "shadow",
+		Profile:                 "cyber-openai",
+		HotModel:                "nvidia/nemotron-3.5-bolt-e4b",
+		LabelModel:              "meta/muse-glimmer-30b",
+		TimeoutSec:              8,
+		CacheTTLSec:             900,
+		EnforceRatio:            5,
+		BudgetPerSessionJudge:   3,
+		BudgetPerSessionRewrite: 2,
+		BudgetPerRequestTokens:  4000,
+	}
 }
 
 // Default 返回默认设置，与旧版默认值一致。
@@ -196,6 +233,13 @@ func (s *Store) reload(force bool) {
 
 // normalize 补齐缺省值，保证数值合法。
 func (s *Store) normalize(v *Settings) {
+	// 闸门：缺值一律补保守默认；显式关掉时不动其余字段
+	if v.RiskGate.Mode == "" {
+		v.RiskGate.Mode = RiskGateDefaults().Mode
+	}
+	if v.RiskGate.Profile == "" {
+		v.RiskGate.Profile = RiskGateDefaults().Profile
+	}
 	d := Default()
 	if v.ListenPort <= 0 || v.ListenPort > 65535 {
 		v.ListenPort = d.ListenPort
