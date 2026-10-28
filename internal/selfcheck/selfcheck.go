@@ -7,10 +7,13 @@
 package selfcheck
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -64,9 +67,9 @@ type Progress func(step, total int, c Check)
 // Run 执行全部检查。e2e 为 true 时额外跑一次 codex 激活验证。
 func Run(e2e bool, progress Progress) Report {
 	var r Report
-	total := 7
+	total := 8
 	if e2e {
-		total = 8
+		total = 9
 	}
 	step := 0
 	add := func(c Check) {
@@ -171,7 +174,27 @@ func Run(e2e bool, progress Progress) Report {
 		add(Check{Name: "代理态一致", OK: true, Skip: true, Detail: "无激活 provider，已跳过"})
 	}
 
-	// 8. e2e
+	// 8. 提示词模式有效（2026-10-28 实测的静默降级）
+	//
+	// 删掉一个模式后，配置文件里仍可能留着旧 ID（实测残留 ctf-chang）。
+	// assets.Prompt 对未知 ID **静默回落默认模式**：用户以为在跑 A，实际跑 B，
+	// 而界面上看不出任何区别。这条把静默降级变成可见失败。
+	if raw, rerr := os.ReadFile(storePathOrDefault()); rerr == nil {
+		if mode := jsonPromptMode(raw); mode != "" {
+			if assets.IsValidPromptMode(mode) {
+				add(Check{Name: "提示词模式", OK: true, Detail: mode})
+			} else {
+				add(Check{Name: "提示词模式", OK: false,
+					Detail: fmt.Sprintf("配置里的 %q 已不存在，实际会回落到默认模式；在「提示词」页重新选一个", mode)})
+			}
+		} else {
+			add(Check{Name: "提示词模式", OK: true, Skip: true, Detail: "配置里未指定，使用默认"})
+		}
+	} else {
+		add(Check{Name: "提示词模式", OK: true, Skip: true, Detail: "未找到 helmx 配置"})
+	}
+
+	// 9. e2e
 	if e2e {
 		out, err := runCodex()
 		switch {
@@ -235,4 +258,23 @@ func dialLocal(host, port string) error {
 	}
 	_ = conn.Close()
 	return nil
+}
+
+// storePathOrDefault 返回 %APPDATA%\helmx.config.json（helm-x 自己的配置）。
+func storePathOrDefault() string {
+	if dir, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(dir, "helmx.config.json")
+	}
+	return "helmx.config.json"
+}
+
+// jsonPromptMode 从配置 JSON 里取 prompt_mode（只读，不改写文件）。
+func jsonPromptMode(raw []byte) string {
+	var v struct {
+		PromptMode string `json:"prompt_mode"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return ""
+	}
+	return v.PromptMode
 }
