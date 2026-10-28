@@ -17,6 +17,7 @@ type PromptModeView struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Models      string `json:"models"`
 	Bytes       int    `json:"bytes"`
 	Default     bool   `json:"default"`
 	Active      bool   `json:"active"`
@@ -34,6 +35,7 @@ func (p *PromptService) Modes() ([]PromptModeView, error) {
 			ID:          m.ID,
 			Name:        m.Name,
 			Description: m.Description,
+			Models:      m.Models,
 			Bytes:       m.Bytes,
 			Default:     m.Default,
 			Active:      m.ID == cur,
@@ -50,6 +52,8 @@ func (p *PromptService) Current() (string, error) {
 
 // Set 切换模式。下次请求即生效（代理每请求读取配置，INV-5）。
 func (p *PromptService) Set(mode string) error {
+	// 历史 ID 先归一化再落盘：配置里存的永远是现行 ID
+	mode = assets.CanonicalPromptMode(mode)
 	if !assets.IsValidPromptMode(mode) {
 		return fmt.Errorf("未知的提示词模式: %q", mode)
 	}

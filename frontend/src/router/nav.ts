@@ -35,6 +35,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/', label: '系统总览', icon: 'dashboard' },
       { path: '/requests', label: '请求', icon: 'requests' },
       { path: '/verify', label: '自检', icon: 'verify' },
+      { path: '/steam', label: 'Steam 注册', icon: 'services' },
     ],
   },
   {
@@ -61,6 +62,7 @@ export const HOTKEY_ORDER: string[] = [
   '/',
   '/requests',
   '/verify',
+  '/steam',
   '/services',
   '/prompts',
   '/context',
@@ -74,6 +76,7 @@ export const ROUTES: { path: string; component: () => Promise<Component> }[] = [
   { path: '/', component: () => import('@/pages/Overview.vue') },
   { path: '/requests', component: () => import('@/pages/Requests.vue') },
   { path: '/verify', component: () => import('@/pages/Verify.vue') },
+  { path: '/steam', component: () => import('@/pages/SteamSignup.vue') },
   { path: '/services', component: () => import('@/pages/Services.vue') },
   { path: '/prompts', component: () => import('@/pages/Prompts.vue') },
   { path: '/context', component: () => import('@/pages/Context.vue') },
@@ -87,6 +90,7 @@ export const PAGE_META: Record<string, { title: string; desc: string }> = {
   '/': { title: '系统总览', desc: '代理状态与最近请求。' },
   '/requests': { title: '请求', desc: '每个经过代理的请求及其判定结果。' },
   '/verify': { title: '自检', desc: '激活验证与完整性自检。' },
+  '/steam': { title: 'Steam 注册', desc: '本地填写与校验资料，使用官方页面完成注册。' },
   '/services': { title: '服务', desc: '代理、自愈守护与上游重试。' },
   '/prompts': { title: '提示词', desc: '选择代理注入的指令。' },
   '/context': { title: '上下文', desc: '发送给上游前的请求压缩设置。' },
@@ -94,5 +98,4 @@ export const PAGE_META: Record<string, { title: string; desc: string }> = {
   '/qa': { title: 'QA 帮助', desc: '常见错误和处理方法。' },
   '/logs': { title: '运行日志', desc: '代理与 Cyber 事件日志。' },
 }
-
 

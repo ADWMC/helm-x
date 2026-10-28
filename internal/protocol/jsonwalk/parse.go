@@ -59,11 +59,9 @@ var (
 	ErrUnexpectedEnd = errors.New("jsonwalk: unexpected end of input")
 	ErrSyntax        = errors.New("jsonwalk: syntax error")
 	ErrNotObject     = errors.New("jsonwalk: not an object")
-	ErrNotArray      = errors.New("jsonwalk: not an array")
 	ErrNotString     = errors.New("jsonwalk: not a string")
 	ErrNotNumber     = errors.New("jsonwalk: not a number")
 	ErrKeyNotFound   = errors.New("jsonwalk: key not found")
-	ErrIndexRange    = errors.New("jsonwalk: index out of range")
 )
 
 // Value 描述一个 JSON 值在原始字节中的位置。

@@ -1,7 +1,6 @@
 package codexcfg
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -158,8 +157,7 @@ func (h Home) SnapshotProxyBak() error {
 	return writeAtomic(h.ProxyBakPath(), raw)
 }
 
-// RestoreProxyBak 把 base_url 还原点读出来，用于还原上游地址。
-// 文件保留不删，供后续再次查看。
+// ReadProxyBak 读出 base_url 还原点原文。文件保留不删，供后续再次查看。
 func (h Home) ReadProxyBak() ([]byte, error) {
 	raw, err := os.ReadFile(h.ProxyBakPath())
 	if err != nil {
@@ -197,16 +195,3 @@ func (h Home) PreviewSet(table []string, key, val string) (Diff, error) {
 	old, _ := d.GetString(table, key)
 	return Diff{Table: table, Key: key, OldValue: old, NewValue: val}, nil
 }
-
-// IsAlreadyApplied 报告某个键是否已是目标值。
-func (h Home) IsAlreadyApplied(table []string, key, val string) (bool, error) {
-	d, _, err := h.ParseConfig()
-	if err != nil {
-		return false, err
-	}
-	cur, ok := d.GetString(table, key)
-	return ok && cur == val, nil
-}
-
-// SameBytes 是还原断言的辅助：比较两块字节是否完全相同。
-func SameBytes(a, b []byte) bool { return bytes.Equal(a, b) }

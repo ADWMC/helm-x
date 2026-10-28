@@ -119,11 +119,25 @@ func Run(e2e bool, progress Progress) Report {
 	}
 
 	// 5. 资源完整性
-	prompts := assets.PromptModes()
-	tamperLen := len(assets.TamperRules())
-	ok := len(prompts) > 0 && tamperLen > 0
-	add(Check{Name: "内嵌资源", OK: ok,
-		Detail: fmt.Sprintf("提示词 %d 个模式，TAMPER 规则 %d 字节", len(prompts), tamperLen)})
+	//
+	// 先跑 HealthCheck：它会逐条尝试解密全部嵌入资源，失败时带出可执行原因
+	// （典型是"构建时用了 HELMX_ASSET_KEY，当前环境没设置/值不同"）。
+	// 只在数量上判断会漏掉这种情况 —— 解密失败时 PromptModes 为空、TamperRules 为空，
+	// 用户只看到"提示词 0 个模式"，不知道该去设环境变量。
+	if err := assets.HealthCheck(); err != nil {
+		add(Check{Name: "内嵌资源", OK: false, Detail: "资源不可用: " + err.Error()})
+	} else {
+		// 健康之后再核对内容非空，保证数量口径与 HealthCheck 互不替代：
+		// HealthCheck 管"能不能解密"，这里管"解出来是不是真有东西"。
+		prompts := assets.PromptModes()
+		tamperLen := len(assets.TamperRules())
+		ok := len(prompts) > 0 && tamperLen > 0
+		// 带上密钥来源：内置开发种子构建的包和 HELMX_ASSET_KEY 构建的包行为不同，
+		// 排障时第一时间要能看出来手里的二进制是哪一种。
+		add(Check{Name: "内嵌资源", OK: ok,
+			Detail: fmt.Sprintf("提示词 %d 个模式，TAMPER 规则 %d 字节，密钥来源 %s",
+				len(prompts), tamperLen, assets.KeySource())})
+	}
 
 	// 6. 备份
 	switch {

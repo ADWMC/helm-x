@@ -3,10 +3,11 @@ package svc
 import (
 	"context"
 	"fmt"
-	"github.com/ADWMC/helm-x/internal/config"
+	"net"
 	"sync"
 
 	"github.com/ADWMC/helm-x/internal/codexcfg"
+	"github.com/ADWMC/helm-x/internal/config"
 	"github.com/ADWMC/helm-x/internal/proxy"
 	"github.com/ADWMC/helm-x/internal/watch"
 )
@@ -87,20 +88,40 @@ func (p *ProxyService) Start() error {
 			cs.BaseURL, cs.ConfigPath)
 	}
 
-	// 把 codex 指向本代理
+	// ── 1. 先绑定端口，失败就什么都不改 ──
+	//
+	// 2026-10 audit 修的顺序问题：旧实现先写 codex 配置再 listen，
+	// 端口被占（上一次没退干净、或另一份 helmx 在跑）时配置已指向一个
+	// 起不来的端口 —— codex 立刻不可用，而用户只看到一句"代理异常退出"。
+	addr := p.s.rt.Store.ListenAddress()
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("端口 %s 不可用（可能已有 helm-x 实例在运行）：%w\ncodex 配置未被改动，"+
+			"可关闭占用端口的进程后重试，或在「服务」页换一个端口", addr, err)
+	}
+
+	// ── 2. 端口就绪后再把 codex 指向本代理 ──
 	if h, ok := p.s.rt.Home(); ok {
-		if _, err := h.Apply(codexcfg.ApplyOptions{ProxyAddr: p.s.rt.Store.ProxyBaseURL()}); err != nil {
-			return fmt.Errorf("写入 codex 配置失败: %w", err)
+		if _, aerr := h.Apply(codexcfg.ApplyOptions{ProxyAddr: p.s.rt.Store.ProxyBaseURL()}); aerr != nil {
+			_ = ln.Close()
+			return fmt.Errorf("写入 codex 配置失败: %w", aerr)
 		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	engine, err := p.s.rt.StartProxy(ctx, proxy.Options{
-		Listen:   p.s.rt.Store.ListenAddress(),
-		Upstream: upstream,
-		Events:   p.s.rt.Sink(),
+		Listener:   ln,
+		Listen:     addr,
+		Upstream:   upstream,
+		InjectTail: p.s.rt.Store.Get().InjectTail,
+		Events:     p.s.rt.Sink(),
 	})
 	if err != nil {
+		// 起不来就把配置还原，别把用户留在"指向死端口"的状态
+		if h, ok := p.s.rt.Home(); ok {
+			_, _ = h.RestoreProxy()
+		}
+		_ = ln.Close()
 		cancel()
 		return err
 	}
@@ -153,11 +174,14 @@ func (p *ProxyService) Stop() error {
 }
 
 // Restart 重启代理。
+//
+// 2026-10 audit：旧实现里的 TryLock/Unlock 是空操作（看着像加锁，其实什么
+// 都没保护）。现在 Stop 与 Start 各自持锁，Restart 只负责把它们串起来。
 func (p *ProxyService) Restart() error {
-	if p.mu.TryLock() {
-		p.mu.Unlock()
+	if err := p.Stop(); err != nil {
+		// 本来就没在跑：直接启动即可，不把这种情况当失败
+		p.s.rt.Logger.Info("重启时发现代理未运行，直接启动")
 	}
-	_ = p.Stop()
 	return p.Start()
 }
 

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -33,21 +34,26 @@ type Line struct {
 	Text  string    `json:"text"`
 }
 
+// DefaultMaxBytes 是单个日志文件的上限（超过后轮转为 .1）。
+const DefaultMaxBytes int64 = 8 << 20
+
 // Logger 是并发安全的日志器。
 type Logger struct {
-	mu      sync.Mutex
-	file    *os.File
-	path    string
-	ring    []Line
-	ringMax int
-	subs    map[int]chan Line
-	nextSub int
+	mu       sync.Mutex
+	file     *os.File
+	path     string
+	written  int64
+	maxBytes int64
+	ring     []Line
+	ringMax  int
+	subs     map[int]chan Line
+	nextSub  int
 }
 
 // New 创建日志器并打开文件。dir 为日志目录（通常是 codex home）。
 // 打开失败时仍返回可用对象（只写内存 + 订阅者）。
 func New(dir string) *Logger {
-	l := &Logger{ringMax: 2000, subs: map[int]chan Line{}}
+	l := &Logger{ringMax: 2000, subs: map[int]chan Line{}, maxBytes: DefaultMaxBytes}
 	if dir == "" {
 		return l
 	}
@@ -61,6 +67,9 @@ func New(dir string) *Logger {
 	}
 	l.file = f
 	l.path = p
+	if st, err := f.Stat(); err == nil {
+		l.written = st.Size() // 追加模式：已写字节数 = 当前文件大小
+	}
 	return l
 }
 
@@ -85,8 +94,13 @@ func (l *Logger) Log(level Level, format string, args ...any) {
 
 	l.mu.Lock()
 	if l.file != nil {
-		ts := line.TS.Format("2006-01-02 15:04:05.000")
-		_, _ = fmt.Fprintf(l.file, "[%s] [%s] %s\n", ts, level, text)
+		line := fmt.Sprintf("[%s] [%s] %s\n", line.TS.Format("2006-01-02 15:04:05.000"), level, text)
+		// 轮转：单文件超过上限就转成 .1（保留一份历史，避免无限增长）
+		if l.maxBytes > 0 && l.written+int64(len(line)) > l.maxBytes {
+			l.rotateLocked()
+		}
+		n, _ := l.file.WriteString(line)
+		l.written += int64(n)
 	}
 	l.ring = append(l.ring, line)
 	if len(l.ring) > l.ringMax {
@@ -164,27 +178,63 @@ func (l *Logger) Close() error {
 	return nil
 }
 
+// rotateLocked 轮转日志文件：helmx.log → helmx.log.1，重开新文件。
+// 调用方必须持锁。轮转失败不致命（继续往原文件追加）。
+func (l *Logger) rotateLocked() {
+	if l.path == "" {
+		return
+	}
+	if l.file != nil {
+		_ = l.file.Close()
+		l.file = nil
+	}
+	old := l.path + ".1"
+	_ = os.Remove(old) // Windows 上 rename 不能覆盖已存在文件
+	if err := os.Rename(l.path, old); err != nil {
+		// 改名失败（被占用等）：清空原文件继续用
+		if f, ferr := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); ferr == nil {
+			l.file = f
+			l.written = 0
+			return
+		}
+		return
+	}
+	if f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+		l.file = f
+		l.written = 0
+	}
+}
+
 // Cyber 记录一条 cyber 事件到独立文件（与旧版 helmx-cyber.log 一致）。
+// 同样带体积轮转，避免长期运行后文件无限增大。
 func (l *Logger) Cyber(dir string, entry map[string]any) {
 	if dir == "" {
 		return
 	}
 	p := filepath.Join(dir, "helmx-cyber.log")
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "[%s] ", time.Now().Format("2006-01-02 15:04:05"))
+	first := true
+	for k, v := range entry {
+		if !first {
+			sb.WriteString(" ")
+		}
+		fmt.Fprintf(&sb, "%s=%v", k, v)
+		first = false
+	}
+	sb.WriteString("\n")
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if st, err := os.Stat(p); err == nil && l.maxBytes > 0 && st.Size()+int64(sb.Len()) > l.maxBytes {
+		_ = os.Remove(p + ".1")
+		_ = os.Rename(p, p+".1")
+	}
 	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return
 	}
-	defer f.Close()
-
-	ts := time.Now().Format("2006-01-02 15:04:05")
-	_, _ = fmt.Fprintf(f, "[%s] ", ts)
-	first := true
-	for k, v := range entry {
-		if !first {
-			_, _ = fmt.Fprint(f, " ")
-		}
-		_, _ = fmt.Fprintf(f, "%s=%v", k, v)
-		first = false
-	}
-	_, _ = fmt.Fprintln(f)
+	_, _ = f.WriteString(sb.String())
+	_ = f.Close()
 }

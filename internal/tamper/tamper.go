@@ -82,34 +82,57 @@ func (e *Engine) Rules() []string {
 	return out
 }
 
+// 判定守卫（2026-10 audit，见 tests 里的 benign 回归用例）。
+//
+// 只靠正则无法区分「模型在拒绝」和「模型在讲技术」：
+//   - "This is a dangerous operation" 是正常回答，不是拒绝
+//   - 但 "I can't help with that" 是拒绝
+//
+// 两条守卫把判定收窄到「拒绝句出现在回答开头」这一经验事实上：
+//   - leadWindow：只在前 200 个字符里找。拒答总是最先说的话；
+//     正文深处的 "not allowed" 是内容，不是态度。
+//   - maxScanLen：超过 1200 字符的回答一律不判拒答。拒答不会写这么长，
+//     而长回答里的关键词命中几乎全是误判。
+//
+// 代价是明确记录的：极长的拒答（>1200 字符）会被漏判 → 走 pass_through，
+// 用户仍能看到原文（INV-8），只是不触发补救。这比"正常回答被贴 marker"好。
+const (
+	leadWindow = 200
+	maxScanLen = 1200
+)
+
 // IsRefusal 判断文本是否命中任一拒绝规则。
-func (e *Engine) IsRefusal(text string) bool {
-	if e == nil || text == "" {
-		return false
-	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	for _, r := range e.rules {
-		if r.re.MatchString(text) {
-			return true
-		}
-	}
-	return false
-}
+func (e *Engine) IsRefusal(text string) bool { return e.Match(text) != "" }
 
 // Match 返回第一条命中的规则源文本，未命中返回空串。
 func (e *Engine) Match(text string) string {
 	if e == nil || text == "" {
 		return ""
 	}
+	head := refusalHead(text)
+	if head == "" {
+		return ""
+	}
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	for _, r := range e.rules {
-		if r.re.MatchString(text) {
+		if r.re.MatchString(head) {
 			return r.Source
 		}
 	}
 	return ""
+}
+
+// refusalHead 返回用于判定的文本前缀；返回空串表示"这段文本不可能是拒答"。
+func refusalHead(text string) string {
+	r := []rune(text)
+	if len(r) > maxScanLen {
+		return "" // 超长回答：不判拒答（详见上方守卫说明）
+	}
+	if len(r) > leadWindow {
+		r = r[:leadWindow]
+	}
+	return string(r)
 }
 
 // WithMarker 返回使用自定义标记的引擎副本。

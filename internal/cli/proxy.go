@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -62,11 +63,20 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		fmt.Fprintf(stdout, "[helm-x] 自动读取上游: %s\n", relay)
 	}
 
-	// 2. 把 codex 指向本代理
-	proxyURL := fmt.Sprintf("http://127.0.0.1:%d/v1", opts.listen)
+	// 2. 先绑定端口 —— 失败时不动用户的 codex 配置
+	addr := fmt.Sprintf("127.0.0.1:%d", opts.listen)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return &ExitError{Code: 2, Err: fmt.Errorf(
+			"端口 %s 不可用（可能已有 helm-x 在运行）：%w；codex 配置未被改动", addr, err)}
+	}
+
+	// 3. 把 codex 指向本代理
+	proxyURL := "http://" + addr + "/v1"
 	if hasHome {
 		res, aerr := home.Apply(codexcfg.ApplyOptions{ProxyAddr: proxyURL})
 		if aerr != nil {
+			_ = ln.Close()
 			return fmt.Errorf("写入 codex 配置失败: %w", aerr)
 		}
 		if res.ProxyBak != "" {
@@ -77,16 +87,22 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		fmt.Fprintln(stdout, "[helm-x] 警告: 未找到 codex 配置，仅启动代理")
 	}
 
-	// 3. 起服务
+	// 4. 起服务
 	engine, err := rt.StartProxy(ctx, proxy.Options{
-		Listen:      fmt.Sprintf("127.0.0.1:%d", opts.listen),
+		Listener:    ln,
+		Listen:      addr,
 		Upstream:    upstream,
+		InjectTail:  rt.Store.Get().InjectTail,
 		Passthrough: opts.passthrough,
 		DryRun:      opts.dryRun,
 		Retry:       opts.retry,
 		Events:      rt.Sink(),
 	})
 	if err != nil {
+		if hasHome {
+			_, _ = home.RestoreProxy()
+		}
+		_ = ln.Close()
 		return err
 	}
 

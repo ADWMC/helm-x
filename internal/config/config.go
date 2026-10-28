@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ADWMC/helm-x/internal/assets"
 )
 
 // Settings 是全部用户设置。字段名 = 旧版 JSON 字段名。
@@ -26,6 +28,10 @@ type Settings struct {
 	// 注入频率：每 N 次请求注入 1 次提示词（按会话计数，首次请求注入）。
 	// 1 = 每次都注入（默认，兼容旧行为）。<=0 一律按 1 处理。
 	InjectEvery int `json:"inject_every,omitempty"`
+
+	// InjectTail 为 true 时把提示词注入到 input 末尾（默认插入开头）。
+	// 位置是独立于内容的杠杆：尾部紧贴生成起点，抗长上下文稀释。
+	InjectTail bool `json:"inject_tail,omitempty"`
 
 	// UA 兜底：入站请求没有 User-Agent 时用它补上（空 = 不补；
 	// 不补时转发请求**不带** UA，而不是泄漏 Go 默认 UA）。
@@ -69,7 +75,7 @@ type RewriterSettings struct {
 func Default() Settings {
 	return Settings{
 		ListenPort:                1800,
-		PromptMode:                "v2.1",
+		PromptMode:                "ctf-v2.1",
 		InjectEvery:               1,
 		UpstreamRetryEnabled:      true,
 		UpstreamMaxRetries:        10,
@@ -194,8 +200,14 @@ func (s *Store) normalize(v *Settings) {
 	if v.ListenPort <= 0 || v.ListenPort > 65535 {
 		v.ListenPort = d.ListenPort
 	}
-	if v.PromptMode == "" || v.PromptMode == "default" {
+	switch v.PromptMode {
+	case "":
 		v.PromptMode = d.PromptMode
+	default:
+		// 历史 ID 归一化（"default"/"v2"/"v2.1" → ctf 前缀）。
+		// 旧实现把 "default" 直接改成默认值 v2.1，等于升级后静默换掉用户正在用的
+		// 提示词（2026-10 audit）。现在映射到语义等价的新 ID，行为不变。
+		v.PromptMode = assets.CanonicalPromptMode(v.PromptMode)
 	}
 	if v.InjectEvery <= 0 {
 		v.InjectEvery = d.InjectEvery

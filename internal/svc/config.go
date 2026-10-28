@@ -144,13 +144,34 @@ func (c *ConfigService) OpenConfigDir() (string, error) {
 	return h.Dir, nil
 }
 
-// Settings 返回可编辑的运行设置。
-func (c *ConfigService) Settings() (config.Settings, error) {
-	return c.s.rt.Store.Get(), nil
+// SettingsView 是下发给前端设置页的视图。
+//
+// 2026-10 audit：旧实现直接返回 config.Settings，把 rewrite 的 api_key
+// 明文送进 webview 的 JS 上下文（渲染层任何 XSS / DevTools 都能读到）。
+// 现在只回传"是否已配置"，密钥本身不出后端。
+type SettingsView struct {
+	config.Settings
+	// RewriterAPIKeySet 表示后端是否已存有改写器密钥。
+	RewriterAPIKeySet bool `json:"rewriter_api_key_set"`
+}
+
+// Settings 返回可编辑的运行设置（密钥字段已抹除）。
+func (c *ConfigService) Settings() (SettingsView, error) {
+	s := c.s.rt.Store.Get()
+	set := s.Rewriter.APIKey != ""
+	s.Rewriter.APIKey = ""
+	return SettingsView{Settings: s, RewriterAPIKeySet: set}, nil
 }
 
 // SaveSettings 保存运行设置（立即生效，INV-5）。
+//
+// 约定（与「提示词/服务」页一致）：Rewriter.APIKey 为空 = 不修改已存的 key。
+// 这样前端不必持有密钥也能安全地整体提交表单。
 func (c *ConfigService) SaveSettings(v config.Settings) error {
+	cur := c.s.rt.Store.Get()
+	if v.Rewriter.APIKey == "" {
+		v.Rewriter.APIKey = cur.Rewriter.APIKey
+	}
 	if err := c.s.rt.Store.Save(v); err != nil {
 		return err
 	}

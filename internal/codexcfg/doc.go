@@ -57,34 +57,48 @@ type Line struct {
 type Doc struct {
 	lines []Line
 	eol   string // "\n" 或 "\r\n"
-	// hadFinalNewline 记录原文件末尾是否有换行，写回时保持一致
-	hadFinalNewline bool
 }
 
 // ParseDoc 解析原始字节为行级文档。
 //
 // 检测到不支持的形态（多行字符串、[[array]]）时返回 ErrUnsupportedForm，
 // 调用方应拒绝写入而不是猜测（ADR-001）。
+//
+// 多行**值**是支持的（2026-10 audit）：TOML 允许
+//
+//	notify = [
+//	  "a",
+//	  "b",
+//	]
+//
+// 这种写法完全合法，codex 自己的默认配置就可能这么写。旧实现把续行判成
+// "无法解析的行"→ 整份配置拒绝解析 → apply / 自检 / 守护全线失败。
+// 现在按"值未闭合就继续吸收后续行"处理，行的 Raw 覆盖整段，未改动行
+// 仍然逐字节保留（INV-6）。
 func ParseDoc(raw []byte) (*Doc, error) {
-	d := &Doc{eol: detectEOL(raw), hadFinalNewline: len(raw) > 0 && raw[len(raw)-1] == '\n'}
+	d := &Doc{eol: detectEOL(raw)}
 
-	// 按行切分，保留每行的换行符
 	rest := raw
 	for len(rest) > 0 {
-		idx := bytes.IndexByte(rest, '\n')
-		var rawLine []byte
-		if idx < 0 {
-			rawLine = rest
-			rest = nil
-		} else {
-			rawLine = rest[:idx+1]
-			rest = rest[idx+1:]
+		var merged []byte
+		for {
+			line, next := nextLine(rest)
+			merged = append(merged, line...)
+			parsed, err := classify(merged)
+			if err != nil {
+				return nil, err
+			}
+			// 值已闭合（或不是键值行）：这一行就是完整的
+			if parsed.Kind != LineKV || valueBalanced(merged, parsed.ValueRange) {
+				d.lines = append(d.lines, parsed)
+				rest = next
+				break
+			}
+			if next == nil {
+				return nil, fmt.Errorf("%w: 值未闭合（文件结束）", ErrUnsupportedForm)
+			}
+			rest = next
 		}
-		ln, err := classify(rawLine)
-		if err != nil {
-			return nil, err
-		}
-		d.lines = append(d.lines, ln)
 	}
 
 	// 第二遍：填充每行的 Scope
@@ -101,6 +115,49 @@ func ParseDoc(raw []byte) (*Doc, error) {
 	return d, nil
 }
 
+// nextLine 取一行（含行尾换行符）并返回剩余字节。
+func nextLine(rest []byte) (line, next []byte) {
+	idx := bytes.IndexByte(rest, '\n')
+	if idx < 0 {
+		return rest, nil
+	}
+	return rest[:idx+1], rest[idx+1:]
+}
+
+// valueBalanced 判断一个值区间的括号/引号是否闭合。
+//
+// 用于识别多行值（数组、行内表）。多行字符串（""" / ”'）已在 classify
+// 里被拒绝，因此这里只需处理 [] {} 与引号。
+func valueBalanced(raw []byte, vr [2]int) bool {
+	if vr[1] > len(raw) || vr[0] > vr[1] || vr[0] < 0 {
+		return false
+	}
+	depth := 0
+	inQuote := byte(0)
+	for i := vr[0]; i < vr[1]; i++ {
+		c := raw[i]
+		if inQuote != 0 {
+			if c == '\\' && inQuote == '"' {
+				i++
+				continue
+			}
+			if c == inQuote {
+				inQuote = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			inQuote = c
+		case '[', '{':
+			depth++
+		case ']', '}':
+			depth--
+		}
+	}
+	return inQuote == 0 && depth <= 0
+}
+
 // Bytes 序列化回字节。未修改的行与输入逐字节一致。
 func (d *Doc) Bytes() []byte {
 	var buf bytes.Buffer
@@ -110,11 +167,8 @@ func (d *Doc) Bytes() []byte {
 	return buf.Bytes()
 }
 
-// EOL 返回探测到的行尾风格。
+// EOL 返回探测到的行尾风格。写回新行时按它保持一致（CRLF 文件不能混入 LF）。
 func (d *Doc) EOL() string { return d.eol }
-
-// Lines 返回只读的行视图（供测试与诊断）。
-func (d *Doc) Lines() []Line { return d.lines }
 
 // classify 判断单行的类别。
 func classify(raw []byte) (Line, error) {
@@ -312,10 +366,11 @@ func unescapeBasic(s string) (string, error) {
 // 规则：只有在引号已闭合、且 '#' 之前的最后一个非空白字符之后才可能是注释。
 // 这样 `model = "a#b"` 与 `key = value # note` 都能正确处理。
 //
-// 注意初值：lastNonWS 从 valStart 开始，表示「目前已知值的长度至少为 0」。
-// 循环中每消费一个字符就推进 —— 引号字符本身也算值的一部分。
+// 多行值（2026-10 audit）：`[` / `{` 尚未闭合时，'#' 属于数组/行内表内部的
+// 注释行，不是值的结束点 —— 否则多行数组会被切成"半截值 + 后续行无法解析"。
 func stripInlineComment(body []byte, valStart int) int {
 	inQuote := byte(0)
+	depth := 0
 	lastNonWS := valStart
 	for i := valStart; i < len(body); i++ {
 		c := body[i]
@@ -337,9 +392,21 @@ func stripInlineComment(body []byte, valStart int) int {
 		case '"', '\'':
 			inQuote = c
 			lastNonWS = i + 1
+		case '[', '{':
+			depth++
+			lastNonWS = i + 1
+		case ']', '}':
+			if depth > 0 {
+				depth--
+			}
+			lastNonWS = i + 1
 		case '#':
+			if depth > 0 {
+				lastNonWS = i + 1 // 数组内部注释：跳过，不结束值
+				continue
+			}
 			return lastNonWS
-		case ' ', '\t':
+		case ' ', '\t', '\n', '\r':
 			// 空白不计入，但也不结束；若后面还有非空白会继续推进
 		default:
 			lastNonWS = i + 1
