@@ -9,7 +9,7 @@
 // 信息顺序按重要性：代理状态 → 最近请求 → 次要指标。
 // 原版把四个等宽指标格放在最显眼位置，而运行时常有三个是空的。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { api, events, isDemo, isDesktop, type RequestRecord, type StatusView } from '@/api/backend'
+import { api, type RiskGateView, events, isDemo, isDesktop, type RequestRecord, type StatusView } from '@/api/backend'
 import { useVerdictStyle, type Verdict } from '@/composables/useVerdictStyle'
 import VerdictBadge from '@/components/VerdictBadge.vue'
 
@@ -18,6 +18,7 @@ const { styleOf } = useVerdictStyle()
 const status = ref<StatusView | null>(null)
 const requests = ref<RequestRecord[]>([])
 const loading = ref(true)
+const gateView = ref<RiskGateView | null>(null)
 const error = ref('')
 let offEvent: (() => void) | null = null
 
@@ -32,6 +33,14 @@ async function refresh() {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  try {
+    gateView.value = await api.riskGate()
+  } catch {
+    gateView.value = null
+  }
+})
 
 onMounted(async () => {
   await refresh()
@@ -196,6 +205,32 @@ function fmtTime(ts: string): string {
               .join(' · ')
           : '暂无请求'
       "
+    />
+  </div>
+
+  <!-- 风险闸门：只有启用时才占用版面，未启用给一行说明而不是空卡 -->
+  <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <StatTile
+      label="风险闸门"
+      :value="gateView?.enabled ? (gateView.mode === 'enforce' ? 'enforce' : 'shadow') : '未启用'"
+      :hint="
+        gateView?.enabled
+          ? gateView.mode === 'enforce'
+            ? '按判定改写用户请求'
+            : '只记录判定，不改写（校准期）'
+          : '在「风险闸门」页启用'
+      "
+      :tone="gateView?.enabled ? (gateView.mode === 'enforce' ? 'ok' : 'default') : 'default'"
+    />
+    <StatTile
+      label="判定方式"
+      :value="gateView?.profile === 'substr-gateway' ? '本地匹配' : gateView?.enabled ? '模型判定' : '未启用'"
+      :hint="gateView?.enabled ? `热路径模型 ${gateView.hotModel}` : '本地匹配零成本，模型判定约 1.3s'"
+    />
+    <StatTile
+      label="预算（每会话）"
+      :value="gateView?.enabled ? `${gateView.budget.perSessionJudge} 判 / ${gateView.budget.perSessionRewrite} 改` : '未启用'"
+      :hint="gateView?.enabled ? `缓存 ${gateView.cacheTtlSec}s · 灰度 ${gateView.enforceRatio}%` : '超限自动直通，绝不阻断'"
     />
   </div>
 </template>

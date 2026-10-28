@@ -188,6 +188,8 @@ export interface RequestRecord {
   upstreamHits: number
   durationMs: number
   note?: string
+  /** 本请求的风险闸门判定（未启用时缺省） */
+  gate?: GateInfo
 }
 
 export interface PromptModeView {
@@ -227,6 +229,73 @@ export interface RewriterInput {
   proxyUrl: string
   fallback: string
   maxAttempts: number
+}
+
+/** 风险闸门：三档风险、两轴判定、改写与保真度。 */
+export type GateRisk = 'none' | 'low' | 'high'
+export type GateLocus = 'none' | 'user' | 'injection' | 'both'
+export type GateMode = 'shadow' | 'enforce'
+
+export interface GateTrigger {
+  text: string
+  where: GateLocus
+  kind: string
+}
+
+export interface GateInfo {
+  locus: GateLocus
+  filterRisk: GateRisk
+  complianceRisk: GateRisk
+  triggers: GateTrigger[]
+  contractGap: string[]
+  anchor: string
+  rewrite?: string
+  entityRetention: number
+  why: string
+  /** l0 / model / cache / l0-fallback / budget */
+  source: string
+}
+
+export interface GateBudget {
+  perSessionJudge: number
+  perSessionRewrite: number
+  perRequestTokens: number
+}
+
+export interface RiskGateView {
+  enabled: boolean
+  mode: GateMode
+  profile: 'substr-gateway' | 'cyber-openai' | 'generic'
+  hotModel: string
+  labelModel: string
+  baseUrl: string
+  keyHint: string
+  hasKey: boolean
+  timeoutSec: number
+  cacheTtlSec: number
+  enforceRatio: number
+  budget: GateBudget
+}
+
+export interface RiskGateInput {
+  enabled: boolean
+  mode: GateMode
+  profile: RiskGateView['profile']
+  hotModel: string
+  labelModel: string
+  baseUrl: string
+  apiKey: string
+  timeoutSec: number
+  cacheTtlSec: number
+  enforceRatio: number
+  budget: GateBudget
+}
+
+export interface GateProbeResult {
+  ok: boolean
+  verdict: Partial<GateInfo> & { filterRisk?: GateRisk; complianceRisk?: GateRisk }
+  durationMs: number
+  error?: string
 }
 
 export interface TestResult {
@@ -356,6 +425,12 @@ export const api = {
   rewriterSet: (v: RewriterInput) => demoGuard(() => Backend.RewriterService.Set(v) as never, undefined as never),
   rewriterTest: (msg: string): Promise<TestResult> =>
     demoGuard(() => Backend.RewriterService.Test(msg) as never, { ok: false, input: msg, output: '', error: '演示模式', durationMs: 0 } as never),
+
+  // 风险闸门
+  riskGate: (): Promise<RiskGateView> => demoGuard(() => Backend.RiskGateService.Get() as never, undefined as never),
+  riskGateSet: (v: RiskGateInput) => demoGuard(() => Backend.RiskGateService.Set(v) as never, undefined as never),
+  riskGateProbe: (text: string): Promise<GateProbeResult> =>
+    demoGuard(() => Backend.RiskGateService.Probe(text) as never, { ok: false, verdict: {}, durationMs: 0, error: '演示模式' } as never),
 
   // 自检
   verifyRun: (e2e: boolean) => demoGuard(() => Backend.VerifyService.Run(e2e) as never, undefined as never),

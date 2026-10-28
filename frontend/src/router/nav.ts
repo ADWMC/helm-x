@@ -45,6 +45,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/prompts', label: '提示词', icon: 'prompts' },
       { path: '/context', label: '上下文', icon: 'context' },
       { path: '/rewriter', label: '改写器', icon: 'rewriter' },
+      { path: '/risk-gate', label: '风险闸门', icon: 'verify' },
     ],
   },
   {
@@ -67,6 +68,7 @@ export const HOTKEY_ORDER: string[] = [
   '/prompts',
   '/context',
   '/rewriter',
+  '/risk-gate',
   '/qa',
   '/logs',
 ]
@@ -81,6 +83,7 @@ export const ROUTES: { path: string; component: () => Promise<Component> }[] = [
   { path: '/prompts', component: () => import('@/pages/Prompts.vue') },
   { path: '/context', component: () => import('@/pages/Context.vue') },
   { path: '/rewriter', component: () => import('@/pages/Rewriter.vue') },
+  { path: '/risk-gate', component: () => import('@/pages/RiskGate.vue') },
   { path: '/qa', component: () => import('@/pages/QA.vue') },
   { path: '/logs', component: () => import('@/pages/Logs.vue') },
 ]

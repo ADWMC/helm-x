@@ -17,6 +17,7 @@ declare module '*/bindings/github.com/ADWMC/helm-x/internal/svc' {
     ConfigService: ServiceModule
     PromptService: ServiceModule
     RewriterService: ServiceModule
+    RiskGateService: ServiceModule
     VerifyService: ServiceModule
     LogService: ServiceModule
     QAService: ServiceModule

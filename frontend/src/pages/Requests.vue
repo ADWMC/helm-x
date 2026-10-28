@@ -7,6 +7,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api, events, isDemo, isDesktop, type RequestRecord } from '@/api/backend'
 import { useVerdictStyle, type Verdict } from '@/composables/useVerdictStyle'
 import VerdictBadge from '@/components/VerdictBadge.vue'
+import GateBadge from '@/components/GateBadge.vue'
 
 const { styleOf, all } = useVerdictStyle()
 
@@ -130,6 +131,7 @@ const ACTION_LABEL: Record<string, string> = {
             <th>路径</th>
             <th class="w-28">大小</th>
             <th class="w-28">判定</th>
+            <th class="w-24">闸门</th>
             <th class="w-28">补救</th>
             <th class="w-16 text-right">上游</th>
             <th class="w-20 text-right">耗时</th>
@@ -149,6 +151,14 @@ const ACTION_LABEL: Record<string, string> = {
               {{ fmtBytes(r.inBytes) }} → {{ fmtBytes(r.outBytes) }}
             </td>
             <td><VerdictBadge :verdict="r.class" /></td>
+            <td>
+              <div v-if="r.gate" class="flex items-center gap-1.5" :title="r.gate.why">
+                <GateBadge :risk="r.gate.filterRisk" dot-only />
+                <GateBadge :risk="r.gate.complianceRisk" dot-only />
+                <span v-if="r.gate.source" class="text-[10px] text-base-content/40">{{ r.gate.source }}</span>
+              </div>
+              <span v-else class="text-base-content/30">—</span>
+            </td>
             <td class="text-[11px] text-base-content/70">
               {{ ACTION_LABEL[r.action] || r.action }}
             </td>
