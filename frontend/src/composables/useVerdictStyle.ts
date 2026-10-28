@@ -19,14 +19,15 @@ export type Verdict =
   | 'Healthy'
   | 'Refused'
   | 'Flagged'
+  | 'CyberPolicy'
   | 'UpstreamFailed'
   | 'Malformed'
   | 'Unresolved'
 
 export interface VerdictStyle {
-  /** 形状标记。六种必须互不相同，否则退回"只靠颜色"。 */
+  /** 形状标记。七种必须互不相同，否则退回"只靠颜色"。 */
   dot: string
-  /** 文本色 class。只允许用主题语义色，禁止裸色值。六种必须互不相同。 */
+  /** 文本色 class。只允许用主题语义色，禁止裸色值。七种必须互不相同。 */
   color: string
   /** 中文界面词（术语表见 DESIGN.md §4.2） */
   label: string
@@ -57,6 +58,13 @@ const VERDICT: Record<Verdict, VerdictStyle> = {
     labelEn: 'Resent',
     desc: '触发安全标记，已换会话重发',
   },
+  CyberPolicy: {
+    dot: '⊘', // 带斜杠圆：被上游策略拦住，补救无效
+    color: 'text-secondary', // 语义：外部策略决定，不是我们补救失败
+    label: '策略拦截',
+    labelEn: 'Policy block',
+    desc: '上游网络安全策略拦截（cyber_policy）：终局判定，不重试、不改写，原样透传',
+  },
   UpstreamFailed: {
     dot: '○', // 空心：没有内容
     color: 'text-error',
@@ -84,6 +92,7 @@ const ORDER: Verdict[] = [
   'Healthy',
   'Refused',
   'Flagged',
+  'CyberPolicy',
   'UpstreamFailed',
   'Malformed',
   'Unresolved',

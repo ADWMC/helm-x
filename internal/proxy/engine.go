@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,6 +25,13 @@ var (
 type Options struct {
 	// Listen 是本地监听地址，如 "127.0.0.1:1800"。
 	Listen string
+	// Listener 是调用方**预先绑定**好的监听器。
+	//
+	// 为什么需要（2026-10 audit）：svc 层必须先确认端口可用、再改用户的
+	// codex 配置。旧顺序是"先写配置再 listen"，端口被占时配置已指向一个
+	// 起不来的端口，codex 直接不可用（RISKS R-7 的高频触发路径）。
+	// 提供 Listener 后，绑定失败发生在写配置之前。
+	Listener net.Listener
 	// Upstream 是上游 base_url。
 	Upstream string
 	// Passthrough 为 true 时关闭全部内容转换（用于对照排查）。
@@ -37,6 +46,8 @@ type Options struct {
 	StreamWindowBytes int
 	StreamWindowMs    int
 
+	// InjectTail 为 true 时把注入指令放到 input 末尾而不是开头。
+	InjectTail bool
 	// Config 提供运行时可变配置（提示词模式等），可为 nil。
 	Config ConfigProvider
 
@@ -135,9 +146,13 @@ func New(opts Options) (*Engine, error) {
 
 // Start 开始监听并阻塞直到 ctx 结束。
 func (e *Engine) Start(ctx context.Context) error {
-	ln, err := net.Listen("tcp", e.opts.Listen)
-	if err != nil {
-		return fmt.Errorf("监听 %s 失败: %w", e.opts.Listen, err)
+	ln := e.opts.Listener
+	if ln == nil {
+		var err error
+		ln, err = net.Listen("tcp", e.opts.Listen)
+		if err != nil {
+			return fmt.Errorf("监听 %s 失败: %w", e.opts.Listen, err)
+		}
 	}
 	e.listener = ln
 	e.running.Store(true)
@@ -150,7 +165,13 @@ func (e *Engine) Start(ctx context.Context) error {
 	e.srv = &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 30 * time.Second,
-		// 不设 WriteTimeout：流式响应可能很长
+		// 请求体上限 16MB，120s 足够；不设 WriteTimeout：流式响应可能很长
+		ReadTimeout:    120 * time.Second,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+		// 把 net/http 自身的错误（握手失败、超大 header 等）接到事件流：
+		// GUI 模式没有 stderr，不接就等于把 server 错误全丢掉（2026-10 audit）
+		ErrorLog: log.New(&eventLogWriter{e: e}, "", 0),
 	}
 
 	errCh := make(chan error, 1)
@@ -235,6 +256,16 @@ func (e *Engine) logf(level, format string, args ...any) {
 	if e.opts.Events != nil {
 		e.opts.Events.Log(level, fmt.Sprintf(format, args...))
 	}
+}
+
+// eventLogWriter 把 net/http 的 ErrorLog 输出接到事件流。
+type eventLogWriter struct{ e *Engine }
+
+func (w *eventLogWriter) Write(p []byte) (int, error) {
+	if w != nil && w.e != nil {
+		w.e.logf("error", "http: %s", strings.TrimSpace(string(p)))
+	}
+	return len(p), nil
 }
 
 func (e *Engine) emit(rec RequestRecord) {

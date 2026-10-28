@@ -128,6 +128,7 @@ export type Verdict =
   | 'Healthy'
   | 'Refused'
   | 'Flagged'
+  | 'CyberPolicy'
   | 'UpstreamFailed'
   | 'Malformed'
   | 'Unresolved'
@@ -193,6 +194,8 @@ export interface PromptModeView {
   id: string
   name: string
   description: string
+  /** 实测适配的模型代数，如 "gpt-6.1 系" */
+  models?: string
   bytes: number
   default: boolean
   active: boolean
@@ -270,6 +273,8 @@ export interface AppSettings {
   inject_every?: number
   /** UA 兜底：入站无 User-Agent 时补上（空 = 不补） */
   forward_user_agent?: string
+  /** 后端是否已存有改写器密钥。密钥本身不下发到渲染层，留空提交 = 不修改 */
+  rewriter_api_key_set?: boolean
   [key: string]: unknown
 }
 

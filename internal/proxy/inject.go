@@ -17,6 +17,7 @@
 package proxy
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -37,6 +38,11 @@ type injectCount struct {
 	last  time.Time
 }
 
+// maxSessions 是调度表的上限。超过后先按"空闲超过一小时"清理，
+// 仍然超限则按最近活动时间淘汰最旧的条目 —— 旧实现只做了第一步，
+// 一小时内涌入 >4096 个会话时 map 会无界增长（2026-10 audit）。
+const maxSessions = 4096
+
 // shouldAttempt 返回本次是否应尝试注入。
 //
 // 命中会话（或已跟随）返回 true；返回 true 时调用方必须在**注入成功后**
@@ -51,12 +57,8 @@ func (s *injectSched) shouldAttempt(session string, every int, now time.Time) bo
 	if s.m == nil {
 		s.m = make(map[string]*injectCount)
 	}
-	if len(s.m) > 4096 {
-		for k, v := range s.m {
-			if now.Sub(v.last) > time.Hour {
-				delete(s.m, k)
-			}
-		}
+	if len(s.m) > maxSessions {
+		s.pruneLocked(now)
 	}
 	c := s.m[session]
 	if c == nil {
@@ -67,6 +69,32 @@ func (s *injectSched) shouldAttempt(session string, every int, now time.Time) bo
 	}
 	c.last = now
 	return c.stuck || c.covered
+}
+
+// pruneLocked 把表压回上限内。调用方必须持锁。
+func (s *injectSched) pruneLocked(now time.Time) {
+	for k, v := range s.m {
+		if now.Sub(v.last) > time.Hour {
+			delete(s.m, k)
+		}
+	}
+	over := len(s.m) - maxSessions
+	if over <= 0 {
+		return
+	}
+	// 仍然超限：按最近活动时间升序淘汰最旧的 over 条
+	type entry struct {
+		key  string
+		last time.Time
+	}
+	all := make([]entry, 0, len(s.m))
+	for k, v := range s.m {
+		all = append(all, entry{k, v.last})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].last.Before(all[j].last) })
+	for i := 0; i < over && i < len(all); i++ {
+		delete(s.m, all[i].key)
+	}
 }
 
 // markInjected 注入成功：进入会话跟随态。

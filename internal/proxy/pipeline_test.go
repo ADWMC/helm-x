@@ -235,6 +235,37 @@ func TestUpstreamFailedSkipsRemedy(t *testing.T) {
 	}
 }
 
+// ★ 网络安全策略拦截是终局：不重发、不改写、原样透传 400（2026-10-28）
+//
+// 为什么单独立这条断言：codex 把 cyber_policy 归为不可重试错误；yetone/magpie 的实测
+// （efb7cb11d）证明内容拒绝跟着请求走、换会话无用，原样交回 400 之后下一个请求立即可用。
+// 旧实现把它当 Flagged 走 clean-session 重发 —— 内容没变，必然再拒，白烧额度。
+func TestCyberPolicyIsTerminal(t *testing.T) {
+	const cyberBody = `{"error":{"message":"safety filter: cyber_policy","type":"invalid_request_error","code":"cyber_policy"}}`
+	up := &scriptedUpstream{responses: []stubResponse{
+		{status: 400, body: cyberBody},
+		// 若实现真的重发了，第二次会拿到这个正常响应，下面的断言就会失败
+		{status: 200, body: `{"output":[{"content":[{"text":"不该走到这里"}]}]}`},
+	}}
+	cfg := &testConfig{tamper: &stubTamper{}, retry: RetryOptions{Enabled: false}}
+	e, _ := newTestEngine(t, up, cfg)
+
+	rec, respBody := doRequest(t, e, `{"model":"m","stream":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"t"}]}]}`)
+
+	if rec.Class != ClassCyberPolicy {
+		t.Errorf("class = %s, want CyberPolicy (note=%s)", rec.Class, rec.Note)
+	}
+	if rec.Action != ActionPassThrough {
+		t.Errorf("action = %s, want pass_through —— 终局判定不应补救", rec.Action)
+	}
+	if got := up.mu.Load(); got != 1 {
+		t.Errorf("上游收到 %d 次请求，应为 1 次（不重试）", got)
+	}
+	if string(respBody) != cyberBody {
+		t.Errorf("响应体被改动，应原样透传\n got: %s\nwant: %s", respBody, cyberBody)
+	}
+}
+
 // 请求体无法解析 → 原样透传（INV-9），不猜。
 func TestMalformedRequestPassesThrough(t *testing.T) {
 	up := &scriptedUpstream{responses: []stubResponse{{status: 200, body: `{"output":[]}`}}}

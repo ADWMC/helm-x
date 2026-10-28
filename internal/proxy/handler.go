@@ -75,7 +75,7 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 	if canTransform {
 		instruction := e.instruction()
 		if instruction != "" && e.shouldInject(rec.SessionID) {
-			injected, ok, ierr := view.InjectSystem(instruction)
+			injected, ok, ierr := view.InjectSystemAt(instruction, e.opts.InjectTail)
 			if ierr == nil && ok {
 				outBody = injected
 				rec.Injected = true
@@ -165,12 +165,13 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 			isRefusal = tm.IsRefusal
 		}
 		st = Classify(ClassifyInput{
-			Status:    attempt.Status,
-			Header:    attempt.Header,
-			Body:      attempt.Body,
-			Complete:  attempt.Complete,
-			IsRefusal: isRefusal,
-			IsFlagged: classifyIsFlagged,
+			Status:        attempt.Status,
+			Header:        attempt.Header,
+			Body:          attempt.Body,
+			Complete:      attempt.Complete,
+			IsRefusal:     isRefusal,
+			IsFlagged:     classifyIsFlagged,
+			IsPolicyBlock: classifyIsPolicyBlock,
 		})
 	} else {
 		st = ResponseState{
@@ -186,7 +187,7 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 	}
 
 	// ── Remedy ──
-	if canTransform && view != nil && (st.Class == ClassRefused || st.Class == ClassFlagged) {
+	if canTransform && view != nil && (st.Class == ClassRefused || st.Class == ClassFlagged || st.Class == ClassCyberPolicy) {
 		userMsg, _ := view.LastUserMessage()
 		out := e.remedy(ctx, st, view, in, remedyDeps{
 			upstream: e.upstream,
@@ -209,12 +210,14 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 
 	// ── Transmit ──
 	finalBody := st.rawBody
-	if st.Class == ClassUpstreamFailed && (finalBody == nil || len(strings.TrimSpace(string(finalBody))) == 0) {
+	if st.Class == ClassUpstreamFailed && len(strings.TrimSpace(string(finalBody))) == 0 {
 		// 上游彻底失败且无内容：给出结构化错误，而不是空响应
+		// （2026-10 audit：旧实现在这里退化成 origBody[:0] —— 一个零长度切片，
+		//  客户端只会看到 502 + 空 body，连"发生了什么"都读不到）
 		finalBody = []byte(`{"error":{"message":"上游请求失败，请重试。","type":"upstream_error","code":"upstream_response_error"}}`)
 	}
-	if finalBody == nil {
-		finalBody = origBody[:0]
+	if st.Class == ClassUpstreamFailed && st.Status == 0 {
+		st.Status = http.StatusBadGateway
 	}
 
 	ct := "application/json"

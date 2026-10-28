@@ -4,12 +4,20 @@ import { useVerdictStyle, type Verdict } from './useVerdictStyle'
 describe('useVerdictStyle', () => {
   const { styleOf, all } = useVerdictStyle()
 
-  it('覆盖全部六种判定状态', () => {
-    expect(all()).toHaveLength(6)
+  it('覆盖全部七种判定状态', () => {
+    // 七 = 原有六种 + CyberPolicy（上游网络安全策略拦截，2026-10-28 新增）
+    expect(all()).toHaveLength(7)
+    expect(all()).toContain('CyberPolicy')
+  })
+
+  // 策略拦截是**外部决定**，不属于我们补救成功，也不属于上游故障。
+  it('CyberPolicy 不占用处理成功的色，也不占用故障色', () => {
+    const c = styleOf('CyberPolicy').color
+    expect(c).not.toMatch(/success|error/)
   })
 
   // web-ui 规则 6：状态不能只靠颜色。
-  // 六种状态的形状必须互不相同，否则色盲用户读不出差异。
+  // 七种状态的形状必须互不相同，否则色盲用户读不出差异。
   it('每种的形状标记互不相同', () => {
     const dots = all().map((v) => styleOf(v).dot)
     expect(new Set(dots).size).toBe(dots.length)

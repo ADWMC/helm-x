@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -109,15 +110,30 @@ func (u *Upstream) BaseURL() string { return u.base.String() }
 //
 // codex 发的路径已含 /v1（如 /v1/responses），上游 base 也常含 /v1。
 // 直接拼接会得到 /v1/v1/responses —— 实测会 404。
+//
+// query 处理（2026-10 audit）：base_url 自带的 query（如 Azure/部分中转站的
+// `?api-version=...`）必须保留 —— 旧实现只拼 Scheme+Host+Path，把它整段丢了，
+// 这类上游会 400/404。入站路径自带的 query 优先，其次是 base 的。
 func (u *Upstream) resolve(path string) string {
+	rawPath, rawQuery, _ := strings.Cut(path, "?")
 	basePath := strings.TrimRight(u.base.Path, "/")
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	if !strings.HasPrefix(rawPath, "/") {
+		rawPath = "/" + rawPath
 	}
-	if basePath != "" && (strings.HasPrefix(path, basePath+"/") || path == basePath) {
-		return u.base.Scheme + "://" + u.base.Host + path
+	full := u.base.Scheme + "://" + u.base.Host
+	if basePath != "" && (strings.HasPrefix(rawPath, basePath+"/") || rawPath == basePath) {
+		full += rawPath
+	} else {
+		full += basePath + rawPath
 	}
-	return u.base.Scheme + "://" + u.base.Host + basePath + path
+	q := rawQuery
+	if q == "" {
+		q = u.base.RawQuery
+	}
+	if q != "" {
+		full += "?" + q
+	}
+	return full
 }
 
 // Post 发送一次请求（不重试），把响应完整读入内存。
@@ -165,6 +181,95 @@ func (u *Upstream) PostStream(ctx context.Context, path string, body []byte, in 
 		req.Header.Set("Accept", "text/event-stream")
 	}
 	return u.client.Do(req)
+}
+
+// PostStreamRetry 是流式请求的重试版本。
+//
+// 【为什么需要】旧实现流式路径一次失败就把 502 甩给客户端，而非流式路径
+// 会重试 10 次。codex 默认 stream:true，于是"最常用的路径反而最脆"。
+//
+// 重试条件是**连接层失败**或**可重试状态码**（408/429/5xx），且**只在
+// 还没把任何字节交给客户端之前**决定 —— 一旦开始 pump 就不再重试，
+// 否则用户会看到重复内容。
+func (u *Upstream) PostStreamRetry(ctx context.Context, path string, body []byte,
+	in http.Header, opts RetryOptions, onRetry func(attempt int, reason string)) (*http.Response, int, error) {
+
+	attemptNum := 1
+	for {
+		resp, err := u.PostStream(ctx, path, body, in)
+		if err != nil {
+			if !streamRetryableErr(err) || !retryAllowed(opts, attemptNum) {
+				return nil, attemptNum, err
+			}
+			if onRetry != nil {
+				onRetry(attemptNum, err.Error())
+			}
+			if !sleepCtx(ctx, time.Duration(opts.DelaySeconds)*time.Second) {
+				return nil, attemptNum, err
+			}
+			attemptNum++
+			continue
+		}
+		if !streamRetryableStatus(resp.StatusCode) || !retryAllowed(opts, attemptNum) {
+			return resp, attemptNum, nil
+		}
+		// 状态可重试：把错误体读掉再重发（错误体很小）
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		resp.Body.Close()
+		if onRetry != nil {
+			onRetry(attemptNum, "HTTP "+itoa(resp.StatusCode)+" "+truncateBytes(errBody, 120))
+		}
+		if !sleepCtx(ctx, time.Duration(opts.DelaySeconds)*time.Second) {
+			return nil, attemptNum, errors.New("proxy: 重试被取消")
+		}
+		attemptNum++
+	}
+}
+
+// PostStreamSync 流式发送并把响应完整读入，供"流式补救"使用。
+//
+// 用途：被拒的流式请求重发 clean session 后，需要先完整拿到内容判定
+// 是否仍被拒；判定通过再把这段 SSE 字节原样写给客户端。
+func (u *Upstream) PostStreamSync(ctx context.Context, path string, body []byte,
+	in http.Header, opts RetryOptions) Attempt {
+
+	resp, hits, err := u.PostStreamRetry(ctx, path, body, in, opts, nil)
+	if err != nil {
+		return Attempt{Stage: "stream_send", Err: err, Status: 502}
+	}
+	_ = hits
+	defer resp.Body.Close()
+
+	data, rerr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
+	if rerr != nil {
+		return Attempt{Stage: "stream_read", Err: rerr, Status: resp.StatusCode, Header: resp.Header}
+	}
+	if len(data) > maxBodyBytes {
+		return Attempt{Stage: "response_too_large", Status: resp.StatusCode, Header: resp.Header,
+			Err: fmt.Errorf("响应超过 %d 字节", maxBodyBytes)}
+	}
+	return Attempt{Status: resp.StatusCode, Header: resp.Header, Body: data, Complete: true}
+}
+
+func retryAllowed(opts RetryOptions, attempt int) bool {
+	return opts.Enabled && (opts.MaxRetries == 0 || attempt <= opts.MaxRetries)
+}
+
+func streamRetryableStatus(code int) bool {
+	return code == http.StatusRequestTimeout || code == http.StatusTooManyRequests || code >= 500
+}
+
+func streamRetryableErr(err error) bool {
+	// 连接建立/传输层错误都可重试；ctx 取消不重试
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+func truncateBytes(b []byte, n int) string {
+	s := strings.TrimSpace(string(b))
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func (u *Upstream) newRequest(ctx context.Context, path string, body []byte, in http.Header) (*http.Request, error) {

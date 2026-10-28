@@ -1,6 +1,9 @@
 package proxy
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // SessionFingerprint 是会话身份的退化方案（codex 不发会话头）：
 // 同一对话续轮 input 只增不改首条用户消息 → 指纹必须稳定；
@@ -47,5 +50,35 @@ func TestSessionFingerprintSkipsEnvironmentContext(t *testing.T) {
 	}
 	if got := v.SessionFingerprint(); got != "" {
 		t.Fatalf("只有环境上下文时指纹应为空, got %q", got)
+	}
+}
+
+// 注入位置是独立杠杆：head 插到 input[0]，tail 插到 input 末尾。
+// 断言只看相对顺序，不锁 key 顺序（jsonwalk 保序，但插入后的字段序由上游形态决定）。
+func TestInjectSystemAtTail(t *testing.T) {
+	body := []byte(`{"model":"m","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]}`)
+
+	v, err := ParseRequest("/v1/responses", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, ok, err := v.InjectSystemAt("INSTR", false)
+	if err != nil || !ok {
+		t.Fatalf("head 注入失败: %v", err)
+	}
+	if strings.Index(string(head), "INSTR") > strings.Index(string(head), `"hi"`) {
+		t.Errorf("head 注入应在用户消息之前: %s", head)
+	}
+
+	v2, _ := ParseRequest("/v1/responses", body)
+	tail, ok, err := v2.InjectSystemAt("INSTR", true)
+	if err != nil || !ok {
+		t.Fatalf("tail 注入失败: %v", err)
+	}
+	if strings.Index(string(tail), "INSTR") < strings.Index(string(tail), `"hi"`) {
+		t.Errorf("tail 注入应在用户消息之后: %s", tail)
+	}
+	if !strings.Contains(string(tail), `"role":"system"`) {
+		t.Errorf("tail 注入仍是 system 消息: %s", tail)
 	}
 }

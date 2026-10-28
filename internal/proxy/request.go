@@ -196,8 +196,35 @@ func textsOfMessage(item *jsonwalk.Value) []string {
 //
 // 已存在同前缀的注入时幂等，避免每次重发都叠加。
 func (v *RequestView) InjectSystem(instruction string) ([]byte, bool, error) {
+	return v.InjectSystemAt(instruction, false)
+}
+
+// InjectSystemAt 与 InjectSystem 相同，但 tail=true 时把指令插到 input **末尾**。
+//
+// 为什么位置是独立杠杆（2026-10-27 实测）：KDRV-1 在头部注入下仍被改述后拒绝，
+// 而改述发生在模型读完请求、开始规划的那一刻。尾部注入让指令紧贴生成起点，
+// 结构上比头部更难被前面的历史稀释（与 dsh-purge 的 boost 段同一动机）。
+func (v *RequestView) InjectSystemAt(instruction string, tail bool) ([]byte, bool, error) {
 	if v == nil || instruction == "" {
 		return nil, false, nil
+	}
+	if tail {
+		msg := map[string]any{
+			"type": "message",
+			"role": "system",
+			"content": []any{
+				map[string]any{"type": "input_text", "text": instruction},
+			},
+		}
+		enc, err := json.Marshal(msg)
+		if err != nil {
+			return nil, false, err
+		}
+		out, err := jsonwalk.AppendLast(v.Body, v.input, enc)
+		if err != nil {
+			return nil, false, err
+		}
+		return out, true, nil
 	}
 	if v.input == nil {
 		// 没有 input 数组：结构不认识，不猜（INV-9）
@@ -242,14 +269,25 @@ func injectPrefix(instruction string) string {
 	return instruction[:n]
 }
 
-// BuildCleanSession 重建一个精简请求：只留必要的顶层字段 + 一条用户消息。
+// BuildCleanSession 重建一个精简请求，非流式。
+func (v *RequestView) BuildCleanSession(userMsg string) ([]byte, error) {
+	return v.BuildCleanSessionMode(userMsg, false)
+}
+
+// BuildCleanSessionMode 重建一个精简请求：只留必要的顶层字段 + 一条用户消息。
 //
 // 对应旧版 build_clean_session（proxy.cpp:441-509），但按**实测的请求形态**调整：
 // 旧版会去找 max_output_tokens（实测不存在），新版只在字段确实存在时保留。
 //
 // 保留：model / reasoning / tools（若存在）
 // 丢弃：全部历史、store、include、prompt_cache_key 等会话相关字段
-func (v *RequestView) BuildCleanSession(userMsg string) ([]byte, error) {
+//
+// stream 参数决定重发形态：
+//   - false：非流式，便于完整判定（旧版行为）
+//   - true ：流式，**仅用于补救流式请求** —— codex 发出 stream:true 时
+//     期待收到 SSE；把 JSON 塞回去会让客户端解析失败。所以流式补救必须
+//     用流式重发，拿回真正的 SSE 字节再原样转发。
+func (v *RequestView) BuildCleanSessionMode(userMsg string, stream bool) ([]byte, error) {
 	if v == nil {
 		return nil, errNilView
 	}
@@ -283,8 +321,12 @@ func (v *RequestView) BuildCleanSession(userMsg string) ([]byte, error) {
 		buf.Write(v.Tools.Raw)
 	}
 
-	// 与旧版一致：clean session 一律非流式，便于完整判定
-	buf.WriteString(`,"stream":false`)
+	if stream {
+		buf.WriteString(`,"stream":true`)
+	} else {
+		// 与旧版一致：clean session 一律非流式，便于完整判定
+		buf.WriteString(`,"stream":false`)
+	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
 }
