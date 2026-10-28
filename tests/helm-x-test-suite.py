@@ -316,7 +316,7 @@ TEST_CASES: List[TestCase] = [
 # ============================================================
 from judge import (
     strip_echo, list_rollouts, extract_judge_texts, extract_timeline,
-    detect_cyber_flag, detect_model_refusal, judge_delivery,
+    detect_cyber_flag, detect_model_refusal, judge_delivery, strip_echo,
 )
 
 def assess_quality(output: str) -> Tuple[QualityLevel, bool, bool, bool]:
@@ -525,7 +525,10 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
         tl = extract_timeline(_case_files())
 
         # cyber：错误面判定（工具输出不进这个面）
-        if detect_cyber_flag(tl["error_text"]) or detect_cyber_flag(result.stderr):
+        # 只判错误事件面。codex 的 stderr 混着工具回显与助手流文本，拿它当错误面会把
+        # 「模型 grep 到仓库里的测试标准文档」和「模型自己写了这些词」都算成上游拦截
+        # （judge.py selftest「cyber假阳-测试标准文档回显」就是这条规则的由来）。
+        if detect_cyber_flag(tl["error_text"]):
             return TestResult.CYBER_FLAG, elapsed, tl["final_text"] or result.stderr, tl["t_first_final"]
 
         verdict, out = _delivery_verdict(tl["final_text"], category,
@@ -537,7 +540,7 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
         if isinstance(err, bytes):
             err = err.decode("utf-8", errors="replace")
         tl = extract_timeline(_case_files())
-        if detect_cyber_flag(tl["error_text"]) or detect_cyber_flag(err):
+        if detect_cyber_flag(tl["error_text"]):
             return TestResult.CYBER_FLAG, timeout, tl["final_text"] or err, tl["t_first_final"]
         verdict, out = _delivery_verdict(tl["final_text"], category, err, tl["work"])
         if verdict == TestResult.NO_OUTPUT:
@@ -859,6 +862,12 @@ def main():
         wanted = [s.strip().upper() for s in args.ids.split(',') if s.strip()]
         cases = [c for c in cases if c.id.upper() in wanted]
         missing = [w for w in wanted if w not in {c.id.upper() for c in cases}]
+        if missing:
+            # 说明清楚"在哪套题里没找到"，并直接退出，避免后续除零
+            print(f"错误: 这些 ID 不在当前题库里: {', '.join(missing)}")
+            print(f"      题库来源: {args.prompts_file or '内置 TEST_CASES'}")
+            print("      提示: 用 --prompts-file 指定外部题库（如 tests/jb/bank-v4-10.json）")
+            return 2
         if missing:
             print(f"警告: 未找到用例 ID: {', '.join(missing)}")
     if args.cases > 0:
