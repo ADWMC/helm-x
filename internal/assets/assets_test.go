@@ -8,17 +8,19 @@ import (
 
 func TestPromptModes(t *testing.T) {
 	modes := assets.PromptModes()
-	if len(modes) != 3 {
-		t.Fatalf("expected exactly 3 prompt modes, got %d", len(modes))
+	if len(modes) != 5 {
+		t.Fatalf("expected exactly 5 prompt modes, got %d", len(modes))
 	}
 
 	expected := []struct {
 		id    string
 		isDef bool
 	}{
-		{"v2.1", true},
-		{"v2", false},
 		{"ctf", false},
+		{"ctf-v2", false},
+		{"ctf-v2.1", true},
+		{"ctf-v4", false},
+		{"ctf-v5", false},
 	}
 
 	for i, exp := range expected {
@@ -35,12 +37,12 @@ func TestPromptModes(t *testing.T) {
 }
 
 func TestPromptFallback(t *testing.T) {
-	v21 := assets.Prompt("v2.1")
+	v21 := assets.Prompt("ctf-v2.1")
 	if v21 == "" {
 		t.Fatal("Prompt(v2.1) is empty")
 	}
 
-	v2 := assets.Prompt("v2")
+	v2 := assets.Prompt("ctf-v2")
 	if v2 == "" {
 		t.Fatal("Prompt(v2) is empty")
 	}
@@ -50,24 +52,31 @@ func TestPromptFallback(t *testing.T) {
 		t.Fatal("Prompt(ctf) is empty")
 	}
 
-	// Unknown or default should fallback to v2.1
+	// Unknown should fallback to v2.1
 	if got := assets.Prompt("unknown"); got != v21 {
 		t.Errorf("Prompt(unknown) did not fallback to v2.1")
 	}
-	if got := assets.Prompt("default"); got != v21 {
-		t.Errorf("Prompt(default) did not fallback to v2.1")
+	// 历史 ID 必须继续可用（配置里存的就是它们）
+	for old, want := range map[string]string{
+		"default": ctf,
+		"v2":      v2,
+		"v2.1":    v21,
+	} {
+		if got := assets.Prompt(old); got != want {
+			t.Errorf("Prompt(%q) = %d bytes, want %d bytes（历史 ID 别名失效）", old, len(got), len(want))
+		}
 	}
 }
 
 func TestIsValidPromptMode(t *testing.T) {
-	valid := []string{"v2.1", "v2", "ctf"}
+	valid := []string{"ctf", "ctf-v2", "ctf-v2.1", "ctf-v4", "ctf-v5", "v2", "v2.1", "v4", "v5", "default"}
 	for _, id := range valid {
 		if !assets.IsValidPromptMode(id) {
 			t.Errorf("IsValidPromptMode(%q) = false, want true", id)
 		}
 	}
 
-	invalid := []string{"", "default", "v45", "deepseek", "fusion", "lite", "unknown"}
+	invalid := []string{"", "v45", "deepseek", "fusion", "lite", "unknown", "ctf-v9", "ctf-v3"}
 	for _, id := range invalid {
 		if assets.IsValidPromptMode(id) {
 			t.Errorf("IsValidPromptMode(%q) = true, want false", id)
@@ -75,7 +84,7 @@ func TestIsValidPromptMode(t *testing.T) {
 	}
 }
 
-func TestXORRoundTripFidelity(t *testing.T) {
+func TestAssetDecodeFidelity(t *testing.T) {
 	files := assets.List()
 	if len(files) == 0 {
 		t.Fatal("List() returned no files")

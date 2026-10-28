@@ -121,8 +121,9 @@ onMounted(() => {
             <span v-if="m.default" class="badge badge-xs badge-ghost">默认</span>
           </div>
           <div class="mt-0.5 text-[12px] text-base-content/60">{{ m.description }}</div>
-          <div class="mt-1 font-mono text-[10px] text-base-content/40">
-            {{ m.id }} · {{ (m.bytes / 1024).toFixed(1) }} KB
+          <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[10px] text-base-content/40">
+            <span>{{ m.id }} · {{ (m.bytes / 1024).toFixed(1) }} KB</span>
+            <span v-if="m.models" class="badge badge-xs badge-outline">{{ m.models }}</span>
           </div>
         </div>
       </label>
