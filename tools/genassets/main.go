@@ -35,6 +35,7 @@ var targetFiles = []string{
 	"data/prompt-v2.1.md",
 	"data/prompt-v4.md",
 	"data/prompt-v5.md",
+	"data/prompt-v6.md",
 	"data/prompt-v2.md",
 	"data/prompt-ctf-scoring.md",
 	"data/tamper_rules.txt",

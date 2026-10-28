@@ -39,6 +39,7 @@ const (
 	pathPromptV21     = "data/prompt-v2.1.md"
 	pathPromptV4      = "data/prompt-v4.md"
 	pathPromptV5      = "data/prompt-v5.md"
+	pathPromptV6      = "data/prompt-v6.md"
 	pathTamperRules   = "data/tamper_rules.txt"
 	pathRewritePrompt = "data/rewrite_prompt.txt"
 	pathQA            = "data/qa.json"
@@ -187,6 +188,7 @@ var promptModes = []struct {
 	{PromptMode{ID: "ctf-v2.1", Name: "CTF v2.1 证据闭环", Description: "三级证据评级 + 规范占位符 + 回滚闭环", Models: "gpt-6.1 系", Default: true}, pathPromptV21},
 	{PromptMode{ID: "ctf-v4", Name: "CTF v4 厚人设 + 拒绝面单点", Description: "厚人设 + 类目映射 + 三段式交付契约 + 87 条禁词", Models: "gpt-6.x（待测）"}, pathPromptV4},
 	{PromptMode{ID: "ctf-v5", Name: "CTF v5 事务版", Description: "英文正文 + 28 行类目路由 + 犹豫句翻译 + 四件套事务验收", Models: "gpt-6.x / 6.1（待测）"}, pathPromptV5},
+	{PromptMode{ID: "ctf-v6", Name: "CTF v6 融合版", Description: "v2.1 沙盒+双账本计分 × v5 的 PROCESS/四件套/占位符，7.6KB 零暴露面", Models: "gpt-6.1 系（待测）"}, pathPromptV6},
 }
 
 // promptAliases 是历史 ID → 现行 ID 的映射。
@@ -200,6 +202,7 @@ var promptAliases = map[string]string{
 	"v2.1":    "ctf-v2.1",
 	"v4":      "ctf-v4",
 	"v5":      "ctf-v5",
+	"v6":      "ctf-v6",
 }
 
 // CanonicalPromptMode 把历史 ID 归一化为现行 ID；未知 ID 原样返回。
