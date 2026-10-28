@@ -86,7 +86,10 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 				})
 				if ok {
 					rec.Gate = &vd
-					if cfg.Mode == "enforce" && vd.FilterRisk != riskgate.RiskNone && vd.Rewrite != "" {
+					// 改写只针对 **cyber 层**（上游网络安全过滤），这是分工边界：
+					// 模型拒答（B 层）由提示词解决 —— 用改写器去绕模型判断既无效也污染归因。
+					// 因此门槛是 FilterRisk == high，而不是 compliance 轴。
+					if cfg.Mode == "enforce" && vd.FilterRisk == riskgate.RiskHigh && vd.Rewrite != "" {
 						if pass, why := riskgate.FidelityOK(userText, vd.Rewrite); pass {
 							if rewritten, rok, rerr := view.ReplaceLastUserText(vd.Rewrite); rerr == nil && rok {
 								outBody = rewritten
