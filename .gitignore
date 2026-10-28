@@ -48,3 +48,8 @@ docs/reverse-audit/
 
 # 跑批报告：只留在本机，不入库（用户要求）
 tests/report-*.md
+
+# 跑批报告 / 基线 / 内部台账：只留本机（2026-10-28 整理）
+tests/baseline-*.json
+tests/ABLATION-STATUS.md
+tests/RETEST4-FINDINGS.md
