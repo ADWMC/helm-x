@@ -16,7 +16,7 @@
 
 > 本项目由 AI 生成（**DeepSeek Harness** + **Mimo V2.6 Pro**；旧版为 DeepSeek V4 Flash + Mimo V2.5 Pro），代码质量仅供参考，请勿喷。
 >
-> **⚠️ 仅供学习交流，禁止商用。** 使用者须遵守所在地法律法规，对使用本项目产生的后果自负。
+> **License：GNU AGPL v3.0 —— 可商用。** 分发或对外提供服务须按 AGPL 开放相应源码。使用者须遵守所在地法律法规，对使用本项目产生的后果自负。
 
 ---
 
@@ -32,7 +32,7 @@ helm-x 是 Codex 的**破甲工具**：模型拒绝时对话不中断、内容�
 2. **判定与补救**：拒绝被检测到时走补救阶梯（重试 → 附加标记 → 原样透传），模型原话完整保留，对话不中断
 3. **上下文感知改写器**：自动改写请求 + 重试，可配自己的 API
 4. **中转站兼容**：请求头全透传（UA、Cookie、X-\*），校验请求指纹的中转站不拒
-5. **流式支持**：SSE 流式响应照常处理，拒绝也能提前识别
+5. **流式支持**：SSE 流式响应照常处理；首段缓冲窗口内命中拒答会丢弃缓冲、换 clean session 重发，再以 SSE 转发——流式是真补救，不是只判定
 6. **配置一键注入**：codex 配置自动指向本代理，退出自动还原
 7. **桌面控制台**：9 页 GUI（请求/日志/提示词/QA 等），数字键快捷切页
 8. **零依赖**：单 exe 静态链接，仅 Windows 系统库
@@ -41,7 +41,7 @@ helm-x 是 Codex 的**破甲工具**：模型拒绝时对话不中断、内容�
 
 ## 测试结果
 
-### 全量基准测试（50 题 · gpt-6.1-sol · v2.1 证据闭环版）
+### 全量基准测试（50 题 · gpt-6.1-sol · `ctf-v2.1` 证据闭环版）
 
 | 指标 | 数值 | 占比 | 相对基线提升 |
 |------|------|------|-------------|
@@ -71,7 +71,7 @@ helm-x 是 Codex 的**破甲工具**：模型拒绝时对话不中断、内容�
 
 | 版本 | Prompt 大小 | 核心机制 | 50 题通过率 | 模型拒绝数 | 有效应答通过率 |
 |------|-----------|---------|------------|-----------|---------------|
-| **v2.1 (当前默认)** | **3.5KB** | **证据闭环 (VERIFIED/CANDIDATE) + 规范占位符 + 动量交付** | **86.0% (43/50)** | **0 拒绝 (0.0%)** | **100.0% (43/43)** |
+| **ctf-v2.1 (当前默认)** | **3.7KB** | **证据闭环 (VERIFIED/CANDIDATE) + 规范占位符 + 动量交付** | **86.0% (43/50)** | **0 拒绝 (0.0%)** | **100.0% (43/43)** |
 | v0.0.5 | 2.5KB | CTF 评分制 + luna 人设 + 输出锁 | 76.0% (38/50) | 4 拒绝 (8.0%) | 90.5% (38/42) |
 | v0.0.4 | 2.5KB | 基础 CTF 框架 | 95% (20题) | - | - |
 | v0.0.3 | 15KB | 复合沙盒提示词 | 85% | - | - |
@@ -81,7 +81,15 @@ helm-x 是 Codex 的**破甲工具**：模型拒绝时对话不中断、内容�
 
 ## Prompt 设计
 
-提示词在 `internal/assets/data/` 下维护，目前主推 **v2.1 证据闭环版**（另有 v2 完成态契约、default 计分版、v45 沙盒执行器等可切换）。核心机制：
+提示词在 `internal/assets/data/` 下维护。模式统一 `ctf` 前缀 + 阶梯版本，适配的模型代数写在 `Models` 字段里（界面「提示词」页直接显示）：
+
+| 模式 ID | 文件 | 大小 | 适配模型 | 说明 |
+|---|---|---|---|---|
+| `ctf` | prompt-ctf-scoring.md | 2.7KB | gpt-5.6 系 | 经典计分淘汰 + 输出锁 + 首轮归一化 |
+| `ctf-v2` | prompt-v2.md | 3.5KB | gpt-6.0 系 | 完成态契约：补缺口 + VERIFIED 工件 |
+| `ctf-v2.1` | prompt-v2.1.md | 3.7KB | gpt-6.1 系 | **默认**：三级证据评级 + 规范占位符 + 回滚闭环 |
+
+历史 ID（`default` / `v2` / `v2.1`）继续可用，读入时归一化到上表 ID。核心机制：
 
 | 机制 | 作用 |
 |------|------|
@@ -138,7 +146,7 @@ codex
 
 ### 四、切换提示词 / 注入频率
 
-控制台 → 提示词页：选择提示词模式；设置「注入频率」（每 N 次请求注入 1 次，1 = 每次都注入）。保存后下次请求生效，无需重启。
+控制台 → 提示词页：选择提示词模式；设置「注入频率」（每 N 个会话注入 1 个会话，命中后该会话全程携带；1 = 每个会话都注入）。保存后下次请求生效，无需重启。
 
 ### 五、查看日志
 
@@ -202,6 +210,20 @@ wails3 task build      :: bin/helmx.exe（单文件）
 wails3 task package    :: bin/helm-x-amd64-installer.exe（NSIS 安装包）
 ```
 
+内嵌资产（`internal/assets/data/` 下的提示词与拒答规则）已加密：AES-256-GCM，密钥 `K = SHA-256(HELMX_ASSET_KEY)`，未设置时用内置开发种子。改完 `internal/assets/data/` 下的文件必须重新生成后再构建：
+
+```bat
+go generate ./internal/assets
+```
+
+设置 `HELMX_ASSET_KEY` 可把密钥外部化（不再依赖仓库内种子），但**构建与运行必须用同一个值**，否则资源解密失败，`helmx verify` 自检会直接报出来：
+
+```bat
+set HELMX_ASSET_KEY=YOUR_ASSET_KEY
+go generate ./internal/assets && wails3 task build
+set HELMX_ASSET_KEY=YOUR_ASSET_KEY && bin\helmx.exe
+```
+
 测试：
 
 ```bat
@@ -227,6 +249,21 @@ docs/                 设计文档（重写说明见 docs/REWRITE.md）
 
 ---
 
+## 已修复的已知问题
+
+以下缺陷均已修复并有对应测试，README 旧版描述随之作废：
+
+| 问题 | 现状 |
+|---|---|
+| 拒答判定误伤正常回答 | 判定收紧：只扫回复**前 200 字符**，超过 **1200 字符**的回答一律不判拒答；规则文件删除单词级 `dangerous` / `illegal` / `harmful` 匹配（`internal/tamper/tamper.go`、`internal/assets/data/tamper_rules.txt`） |
+| 流式路径"只判定、不补救" | 流式真补救：SSE 首段缓冲窗口（默认 **2048B / 400ms**）内命中拒答 → 丢弃缓冲、换 clean session 重发；重发用 `stream:true` 取回真正的 SSE 再转发（`internal/proxy/stream.go`） |
+| 流式路径不重试 | 流式与非流式对齐：HTTP 408/429/5xx 与连接错误均进入重试（`PostStreamRetry`） |
+| 注入频率按"每 N 次请求"计数 | 改为按会话采样：每 N 个会话注入 1 个会话，命中后该会话全程携带；1 = 每个会话都注入（`internal/proxy/inject.go`） |
+| `prompt_mode: "default"` 静默变成 v2.1 | 历史 ID 统一归一化：`default`→`ctf`、`v2`→`ctf-v2`、`v2.1`→`ctf-v2.1`，升级不再静默换版（`internal/assets/assets.go` 的 `promptAliases`、`internal/config/config.go`） |
+| 内嵌资产仅 11 字节重复 XOR | 改为 AES-256-GCM，密钥 `K = SHA-256(HELMX_ASSET_KEY)`，未设置时用内置开发种子；改 `internal/assets/data/` 后须 `go generate ./internal/assets`；构建与运行必须给同一个 `HELMX_ASSET_KEY`，否则解密失败（自检会报）（`internal/assets/`） |
+
+---
+
 ## 关于本重写
 
 本仓库为 **Wails v3 + Go + Vue 3 重写版**（旧版 C++ 见 [`legacy`](https://github.com/ADWMC/helm-x/tree/legacy) 分支）。为什么重写、与旧版差别、设计文档索引 → **[docs/REWRITE.md](docs/REWRITE.md)**。
@@ -243,4 +280,4 @@ docs/                 设计文档（重写说明见 docs/REWRITE.md）
 
 ## License
 
-[GNU AGPL v3.0](LICENSE) · **⚠️ 仅供学习交流，禁止商用**
+[GNU AGPL v3.0](LICENSE) · 允许商业使用；分发或对外提供服务（含 SaaS）须按 AGPL 开放相应源码

@@ -5,6 +5,7 @@
 /helmx.exe
 /bin/
 *.exe
+*.exe~
 
 # 测试装置（阶段 A/1 的假上游与采集器，按需本地构建）
 /fakeupstream
@@ -40,4 +41,7 @@ __pycache__/
 
 # 逆向与中转提示词审计本地产物（不入仓库、不上传远端）
 docs/reverse-audit/
+
+# benchmark 运行产物（单轮约 463MB，可由测试脚本重新生成）
+/tests/jb/runs/
 
