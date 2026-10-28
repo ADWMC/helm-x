@@ -54,3 +54,4 @@ tests/baseline-*.json
 tests/ABLATION-STATUS.md
 tests/RETEST4-FINDINGS.md
 tests/TEST_STANDARD.md
+tests/run-ablation.ps1
