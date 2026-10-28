@@ -40,11 +40,6 @@ const (
 	pathPromptV4      = "data/prompt-v4.md"
 	pathPromptV5      = "data/prompt-v5.md"
 	pathPromptV6      = "data/prompt-v6.md"
-	pathPromptMDX61   = "data/prompt-mdx61.md"
-	pathPromptSeagull = "data/prompt-seagull.md"
-	pathPromptXiaoliu = "data/prompt-xiaoliu.md"
-	pathPromptXw      = "data/prompt-xwsandbox.md"
-	pathPromptChang   = "data/prompt-chang.md"
 	pathTamperRules   = "data/tamper_rules.txt"
 	pathRewritePrompt = "data/rewrite_prompt.txt"
 	pathQA            = "data/qa.json"
@@ -183,22 +178,17 @@ type PromptMode struct {
 //	ctf      2.5KB 经典计分制    → gpt-5.6 系
 //	ctf-v2   完成态契约          → gpt-6.0 系
 //	ctf-v2.1 证据闭环（默认）    → gpt-6.1 系
-//	ctf-v4   厚人设 + 单点拒绝面  → 待测
+//	ctf-v4   厚人设 + 单点拒绝面  → gpt-6.1-sol 已测
 var promptModes = []struct {
 	mode PromptMode
 	path string
 }{
-	{PromptMode{ID: "ctf", Name: "CTF 经典计分制", Description: "2.5KB · 计分淘汰 + 输出锁 + 首轮归一化", Models: "gpt-5.6 系"}, pathPromptCTF},
-	{PromptMode{ID: "ctf-v2", Name: "CTF v2 完成态契约", Description: "补缺口 + VERIFIED 工件 + 人设加厚", Models: "gpt-6.0 系"}, pathPromptV2},
-	{PromptMode{ID: "ctf-v2.1", Name: "CTF v2.1 证据闭环", Description: "三级证据评级 + 规范占位符 + 回滚闭环", Models: "gpt-6.1 系", Default: true}, pathPromptV21},
-	{PromptMode{ID: "ctf-v4", Name: "CTF v4 厚人设 + 拒绝面单点", Description: "厚人设 + 类目映射 + 三段式交付契约 + 87 条禁词", Models: "gpt-6.x（待测）"}, pathPromptV4},
-	{PromptMode{ID: "ctf-v5", Name: "CTF v5 事务版", Description: "英文正文 + 28 行类目路由 + 犹豫句翻译 + 四件套事务验收", Models: "gpt-6.x / 6.1（待测）"}, pathPromptV5},
-	{PromptMode{ID: "ctf-v6", Name: "CTF v6 融合版", Description: "v2.1 沙盒+双账本计分 × v5 的 PROCESS/四件套/占位符，7.6KB 零暴露面", Models: "gpt-6.1 系（待测）"}, pathPromptV6},
-	{PromptMode{ID: "ctf-mdx", Name: "MDX-Tom v6.1-rc2（外部，原样）", Description: "对照用：别人的事务状态机提示词，仅用于横向对比", Models: "gpt-6.1 系（待测）"}, pathPromptMDX61},
-	{PromptMode{ID: "ctf-seagull", Name: "海鸥 3.0（外部，原样）", Description: "对照用：别人家的沙盒+技能路由提示词，仅用于横向对比", Models: "gpt-6.1 系（待测）"}, pathPromptSeagull},
-	{PromptMode{ID: "ctf-xiaoliu", Name: "xiaoliu-pojia ctf-sandbox（外部，原样）", Description: "对照用（仅横向对比）", Models: "gpt-6.1 系（待测）"}, pathPromptXiaoliu},
-	{PromptMode{ID: "ctf-xw", Name: "xw9114 沙箱协议 v2（外部，原样）", Description: "对照用（仅横向对比）", Models: "gpt-6.1 系（待测）"}, pathPromptXw},
-	{PromptMode{ID: "ctf-chang", Name: "chAng redteam Jailbreak gpt-5.6（外部，原样）", Description: "对照用（仅横向对比）", Models: "gpt-6.1 系（待测）"}, pathPromptChang},
+	{PromptMode{ID: "ctf", Name: "铁面", Description: "计分制：拒绝=淘汰。创作、逆向无影响；内核与注册机类无法绕过", Models: "gpt-5.6 系"}, pathPromptCTF},
+	{PromptMode{ID: "ctf-v2", Name: "阿契", Description: "完成契约：每请求一个缺失交付物 + 证据。创作、逆向无影响", Models: "gpt-6.0 系"}, pathPromptV2},
+	{PromptMode{ID: "ctf-v2.1", Name: "短刃", Description: "轻量沙盒：3.7KB。创作、逆向、横向无影响；内核与注册机类无法绕过", Models: "gpt-6.1 系", Default: true}, pathPromptV21},
+	{PromptMode{ID: "ctf-v4", Name: "老炮", Description: "厚人设 + 类目映射：11.4KB。创作/逆向/横向无影响；因 OpenAI 加强模型防御，内核过 ACE 与注册机类无法绕过", Models: "gpt-6.1 系 · 已测"}, pathPromptV4},
+	{PromptMode{ID: "ctf-v5", Name: "账房", Description: "四件套事务 + 流内判定：11.0KB。创作/逆向/横向无影响；内核与注册机类无法绕过", Models: "gpt-6.1 系 · 已测"}, pathPromptV5},
+	{PromptMode{ID: "ctf-v6", Name: "总管", Description: "沙盒融合 + 双账本：8.6KB。创作/横向无影响；内核与注册机类无法绕过", Models: "gpt-6.1 系 · 已测"}, pathPromptV6},
 }
 
 // promptAliases 是历史 ID → 现行 ID 的映射。
@@ -213,11 +203,6 @@ var promptAliases = map[string]string{
 	"v4":      "ctf-v4",
 	"v5":      "ctf-v5",
 	"v6":      "ctf-v6",
-	"mdx":     "ctf-mdx",
-	"seagull": "ctf-seagull",
-	"xiaoliu": "ctf-xiaoliu",
-	"xw":      "ctf-xw",
-	"chang":   "ctf-chang",
 }
 
 // CanonicalPromptMode 把历史 ID 归一化为现行 ID；未知 ID 原样返回。
