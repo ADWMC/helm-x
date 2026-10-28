@@ -24,6 +24,8 @@ var entityPatterns = []struct {
 	{"文件", regexp.MustCompile(`(?i)\b[\w-]+(?:\.[\w-]+)*\.(sys|exe|dll|apk|elf|onnx|pt|engine|safetensors|json|toml|yaml|md|go|py|ts|vue)\b`)},
 	{"网络", regexp.MustCompile(`\b\d{1,3}(\.\d{1,3}){3}(:\d{2,5})?\b`)},
 	{"协议/字段", regexp.MustCompile(`(?i)\b(SSE|HTTP/[12]|protobuf|pcap|tcp|udp|smb|kerberos|ntlm|jwt|oauth)\b`)},
+	// 产物名词：丢一个就等于把题换了（实测：改写把"注册机"抹成"验证识别"）。
+	{"产物", regexp.MustCompile(`(?i)注册机|生成器|驱动|补丁|脚本|爬虫|外挂|修改器|脱壳|命令链|keygen|driver|patcher|scraper|trainer`)},
 }
 
 // Entities 抽取文本中的技术实体（去重、保序）。
@@ -43,19 +45,65 @@ func Entities(text string) []string {
 	return out
 }
 
+// slotFor 给出某类实体在"类 B 去标识"时被替换成的 slot。
+//
+// 为什么需要它：改写规则要求把真实产品名/网络地址换成 SERVICE/HOST（去标识），
+// 而保真检查原本把它算成"丢实体"—— 规则与判据自相矛盾（实测 4 个 IP 全被判丢失）。
+// 这里让 slot 计入保留，但**只按数量抵扣**，避免"写个 HOST 就蒙过去"。
+var slotFor = map[string]string{
+	"网络":     "host",
+	"产品":     "service",
+	"产物":     "", // 产物名词不允许 slot 化：丢了就是换题
+	"文件":     "",
+	"寄存器/结构": "",
+	"数值":     "",
+	"协议/字段":  "",
+}
+
 // Retention 计算改写后实体保留率（1.0 表示一个没丢）。
+// slot 替代按数量抵扣：4 个 IP → 至少出现 4 次 HOST 才算保留。
 func Retention(original, rewritten string) (kept int, total int, rate float64) {
 	ents := Entities(original)
 	if len(ents) == 0 {
 		return 0, 0, 1
 	}
 	lower := strings.ToLower(rewritten)
+	// 先算 slot 配额
+	slotBudget := map[string]int{}
+	for _, e := range ents {
+		if slot, ok := slotFor[classOfEntity(e)]; ok && slot != "" && !strings.Contains(lower, strings.ToLower(e)) {
+			slotBudget[slot]++
+		}
+	}
+	// slot 出现次数是硬上限：4 个 IP 只能换 4 次 HOST，写 1 个 HOST 只抵扣 1 个。
+	slotAvail := map[string]int{}
+	for slot := range slotBudget {
+		slotAvail[slot] = strings.Count(lower, slot)
+	}
+	used := map[string]int{}
 	for _, e := range ents {
 		if strings.Contains(lower, strings.ToLower(e)) {
 			kept++
+			continue
+		}
+		if slot, ok := slotFor[classOfEntity(e)]; ok && slot != "" {
+			if used[slot] < slotAvail[slot] {
+				used[slot]++
+				kept++
+			}
 		}
 	}
 	return kept, len(ents), float64(kept) / float64(len(ents))
+}
+
+// classOfEntity 反查实体属于哪一类（用与 Entities 相同的正则）。
+func classOfEntity(e string) string {
+	for _, ep := range entityPatterns {
+		if ep.re.MatchString(e) {
+			return ep.name
+		}
+	}
+	return ""
 }
 
 // FidelityOK 断言改写可用：实体全保留，且产物词没有被替换成别的东西。

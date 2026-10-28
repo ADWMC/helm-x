@@ -492,7 +492,9 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
     home = None
     env = None
     if RUN_DIR is not None:
-        home = _case_home(RUN_DIR, case_id)
+        # 必须绝对化：cwd 改成用例工作目录后，相对路径的 CODEX_HOME 会解析不到
+        # （实测 codex 立刻退出：CODEX_HOME points to ... but that path does not exist）
+        home = _case_home(RUN_DIR, case_id).resolve()
         env = os.environ.copy()
         env["CODEX_HOME"] = str(home)
 
@@ -510,10 +512,22 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
             return set(dest.rglob("rollout-*.jsonl")) if dest.exists() else set()
         return list_rollouts() - before
 
+    # 隔离工作目录（2026-10-28）：此前 cwd 继承仓库，模型能看到本仓的提示词、题库、
+    # SteamSignup.vue 等文件 —— 实测导致"去标识"题干仍被模型从工作区推出目标平台，
+    # 也让 cyber 标记从仓库自己的测试标准文档里流进 stderr。每个用例一个空目录。
+    workdir = None
+    if RUN_DIR is not None:
+        # 路径要中性：case id 里的 '#' 与把 work 放进 CODEX_HOME 都会让 codex 直接退出
+        # （实测 0.1s + 无 rollout），所以放在 RUN_DIR/work 下并清洗字符。
+        safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in case_id)
+        workdir = (RUN_DIR / "work" / safe).resolve()
+        workdir.mkdir(parents=True, exist_ok=True)
+
     try:
         start = time.time()
         result = subprocess.run(
             cmd,
+            cwd=str(workdir) if workdir is not None else None,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -535,6 +549,12 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
                                          result.stdout + result.stderr, tl["work"])
         return verdict, elapsed, out, tl["t_first_final"]
 
+        if result.returncode != 0 and RUN_DIR is not None:
+            dbg = RUN_DIR / "raw" / case_id
+            dbg.mkdir(parents=True, exist_ok=True)
+            (dbg / "stderr.txt").write_text(
+                f"rc={result.returncode}\n--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}",
+                encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired as e:
         err = e.stderr or ""
         if isinstance(err, bytes):

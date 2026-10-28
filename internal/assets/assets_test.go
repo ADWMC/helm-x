@@ -8,8 +8,8 @@ import (
 
 func TestPromptModes(t *testing.T) {
 	modes := assets.PromptModes()
-	if len(modes) != 6 {
-		t.Fatalf("expected exactly 6 prompt modes, got %d", len(modes))
+	if len(modes) != 11 {
+		t.Fatalf("expected exactly 11 prompt modes, got %d", len(modes))
 	}
 
 	expected := []struct {
@@ -22,6 +22,11 @@ func TestPromptModes(t *testing.T) {
 		{"ctf-v4", false},
 		{"ctf-v5", false},
 		{"ctf-v6", false},
+		{"ctf-mdx", false},
+		{"ctf-seagull", false},
+		{"ctf-xiaoliu", false},
+		{"ctf-xw", false},
+		{"ctf-chang", false},
 	}
 
 	for i, exp := range expected {
@@ -70,7 +75,7 @@ func TestPromptFallback(t *testing.T) {
 }
 
 func TestIsValidPromptMode(t *testing.T) {
-	valid := []string{"ctf", "ctf-v2", "ctf-v2.1", "ctf-v4", "ctf-v5", "ctf-v6", "v2", "v2.1", "v4", "v5", "v6", "default"}
+	valid := []string{"ctf", "ctf-v2", "ctf-v2.1", "ctf-v4", "ctf-v5", "ctf-v6", "ctf-mdx", "ctf-seagull", "ctf-xiaoliu", "ctf-xw", "ctf-chang", "v2", "v2.1", "v4", "v5", "v6", "mdx", "seagull", "xiaoliu", "xw", "chang", "default"}
 	for _, id := range valid {
 		if !assets.IsValidPromptMode(id) {
 			t.Errorf("IsValidPromptMode(%q) = false, want true", id)

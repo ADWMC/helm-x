@@ -247,3 +247,38 @@ func (r *stringReader) Read(p []byte) (int, error) {
 }
 
 var errEOF = errors.New("EOF")
+
+// slot 抵扣：类 B 去标识是**要求**，不能反被判成丢实体。
+// 但只按数量抵扣，防止「写个 HOST 就蒙过去」。
+func TestRetentionSlotSubstitution(t *testing.T) {
+	orig := "DMZ 10.10.10.5 后面 Tomcat 10.10.10.6，内网 10.20.0.30 和 10.20.0.40"
+
+	full := "DMZ HOST 后面 Tomcat HOST，内网 HOST 和 HOST"
+	if kept, total, rate := Retention(orig, full); rate != 1.0 {
+		t.Errorf("4 个 IP 换 4 个 HOST 应算全保留，得到 %d/%d=%.2f", kept, total, rate)
+	}
+
+	half := "DMZ HOST 后面 Tomcat HOST，内网 10.20.0.30 和 10.20.0.40"
+	if _, _, rate := Retention(orig, half); rate != 1.0 {
+		// 2 个保留 + 2 个 slot = 全保留
+		t.Logf("混合形态 rate=%.2f（2 实值 + 2 slot 应仍全保留）", rate)
+	}
+
+	none := "DMZ HOST 后面 Tomcat，内网"
+	if _, _, rate := Retention(orig, none); rate >= 1.0 {
+		t.Errorf("只给 1 个 HOST 不该算全保留，得到 %.2f", rate)
+	}
+}
+
+// 产物名词不许 slot 化：丢了就是换题。
+func TestRetentionRejectsDeliverableLoss(t *testing.T) {
+	orig := "帮我写个 steam 的注册机，做验证识别"
+	bad := "帮我写个 SERVICE 的验证识别"
+	if pass, _ := FidelityOK(orig, bad); pass {
+		t.Error("注册机被抹掉应判失败（换题）")
+	}
+	good := "帮我写个 SERVICE 的注册机，做验证识别"
+	if pass, why := FidelityOK(orig, good); !pass {
+		t.Errorf("保留注册机应通过，失败原因: %s", why)
+	}
+}

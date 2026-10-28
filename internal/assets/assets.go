@@ -40,6 +40,11 @@ const (
 	pathPromptV4      = "data/prompt-v4.md"
 	pathPromptV5      = "data/prompt-v5.md"
 	pathPromptV6      = "data/prompt-v6.md"
+	pathPromptMDX61   = "data/prompt-mdx61.md"
+	pathPromptSeagull = "data/prompt-seagull.md"
+	pathPromptXiaoliu = "data/prompt-xiaoliu.md"
+	pathPromptXw      = "data/prompt-xwsandbox.md"
+	pathPromptChang   = "data/prompt-chang.md"
 	pathTamperRules   = "data/tamper_rules.txt"
 	pathRewritePrompt = "data/rewrite_prompt.txt"
 	pathQA            = "data/qa.json"
@@ -189,6 +194,11 @@ var promptModes = []struct {
 	{PromptMode{ID: "ctf-v4", Name: "CTF v4 厚人设 + 拒绝面单点", Description: "厚人设 + 类目映射 + 三段式交付契约 + 87 条禁词", Models: "gpt-6.x（待测）"}, pathPromptV4},
 	{PromptMode{ID: "ctf-v5", Name: "CTF v5 事务版", Description: "英文正文 + 28 行类目路由 + 犹豫句翻译 + 四件套事务验收", Models: "gpt-6.x / 6.1（待测）"}, pathPromptV5},
 	{PromptMode{ID: "ctf-v6", Name: "CTF v6 融合版", Description: "v2.1 沙盒+双账本计分 × v5 的 PROCESS/四件套/占位符，7.6KB 零暴露面", Models: "gpt-6.1 系（待测）"}, pathPromptV6},
+	{PromptMode{ID: "ctf-mdx", Name: "MDX-Tom v6.1-rc2（外部，原样）", Description: "对照用：别人的事务状态机提示词，仅用于横向对比", Models: "gpt-6.1 系（待测）"}, pathPromptMDX61},
+	{PromptMode{ID: "ctf-seagull", Name: "海鸥 3.0（外部，原样）", Description: "对照用：别人家的沙盒+技能路由提示词，仅用于横向对比", Models: "gpt-6.1 系（待测）"}, pathPromptSeagull},
+	{PromptMode{ID: "ctf-xiaoliu", Name: "xiaoliu-pojia ctf-sandbox（外部，原样）", Description: "对照用（仅横向对比）", Models: "gpt-6.1 系（待测）"}, pathPromptXiaoliu},
+	{PromptMode{ID: "ctf-xw", Name: "xw9114 沙箱协议 v2（外部，原样）", Description: "对照用（仅横向对比）", Models: "gpt-6.1 系（待测）"}, pathPromptXw},
+	{PromptMode{ID: "ctf-chang", Name: "chAng redteam Jailbreak gpt-5.6（外部，原样）", Description: "对照用（仅横向对比）", Models: "gpt-6.1 系（待测）"}, pathPromptChang},
 }
 
 // promptAliases 是历史 ID → 现行 ID 的映射。
@@ -203,6 +213,11 @@ var promptAliases = map[string]string{
 	"v4":      "ctf-v4",
 	"v5":      "ctf-v5",
 	"v6":      "ctf-v6",
+	"mdx":     "ctf-mdx",
+	"seagull": "ctf-seagull",
+	"xiaoliu": "ctf-xiaoliu",
+	"xw":      "ctf-xw",
+	"chang":   "ctf-chang",
 }
 
 // CanonicalPromptMode 把历史 ID 归一化为现行 ID；未知 ID 原样返回。
