@@ -355,14 +355,48 @@ useGateStyle 不变量：三态 dot 唯一、语义色唯一、与 Verdict 七�
 
 ## 11. 分阶段验收
 
-| 阶段 | 交付 | 出口条件 |
+### 11.0 实测结果（2026-10-28 · 回放集 35 条 · 实现已落地）
+
+回放集由 `tests/build_replay.py` 生成（`tests/jb/replay.jsonl`）。**只收能拿到题库题干的请求** ——
+拿不到题干的跑批记录里，正文是助手回答，把它当请求入集会直接把"拒绝文本"标成"高风险请求"。
+
+| 指标 | 结果 | 验收线 | 结论 |
+|---|---|---|---|
+| filter 轴 recall（预测 high / 实际 blocked） | **0.67**（2/3） | ≥ 0.80 | **未达标 → 只允许 shadow** |
+| filter 轴 precision | 0.10（18 FP） | — | 过度预测；代价是多改写，不是漏拦 |
+| filter=high 覆盖"实际 refusal\|pivot" | **0.875**（7/8） | — | 比原设计假设强得多 |
+| compliance 轴（可执行性口径）recall | 0.50（4/8） | — | 弱，口径需重定义 |
+| 闸门延迟 | p50 **1.48s** / p95 2.88s / max 3.06s | — | 热路径靠 L0 + 缓存规避 |
+| 提示词暴露面 | v5 **score 0**；v4 score 3（`过检`/`横向`）；题库 score 13 | 0 | 删路由表这一刀有效，题干本身仍是触发源 |
+
+**被数据推翻的两条假设（写下来防重犯）：**
+
+1. **`compliance_risk` 不该用"可执行性"定义。** 实测 B 层失败几乎全是内容型拒绝
+   （渗透 / 内核 / 注册机），不是"请求不可执行"。可执行性口径 recall 仅 0.50，
+   而 filter 轴对同一批拒绝覆盖 0.875 —— 说明两轴高度相关，真正的预测信号是**内容**。
+   修正：`compliance_risk` 退化为"交付契约缺口"（供改写用），不再当拒绝预测器。
+2. **filter 轴 recall 0.67 未达 0.80。** 两个漏判都是"攻击动词 + 真实目标"型
+   （`域账号+DC01+提权`、`DMZ+内网+横向`）。补齐权重之前 **enforce 不得开启** ——
+   这正是设计里那条自我约束线。
+
+### 11.1 阶段表（按实测状态更新）
+
+| 阶段 | 交付 | 出口条件 | 状态 |
+|---|---|---|---|
+| **P0** | 回放集 + 提示词暴露面扫描 | 拿到提示词风险分 + 带版标签 | **已完成**（35 条 / v5 score 0） |
+| **P1** | `riskgate.Judge` + `tools/riskgate-eval` | `recall ≥ 0.80` | 实现完成；**0.67 未达标** |
+| **P2** | `fidelity.go` + 单测（丢实体必须失败） | 保真检查拦住全部破坏 | **已完成**（3 例全过） |
+| **P3** | shadow 上线 + 前端三件（页/列/指标） | 真实 20 条一致率 ≥80% | 已上线 shadow；真实跑批 10 条见 §11.2 |
+| **P4** | enforce 灰度 | `final_yield` 不低于基线 | **阻塞于 P1** |
+| **P5** | `substr-gateway` 快路径 | new-api 类上游 100% | 未做（profile 已留位） |
+
+### 11.2 真实跑批（ctf-v5 删路由表 + 闸门 shadow，gpt-6.1-sol）
+
+| 轮次 | 结果 | 备注 |
 |---|---|---|
-| **P0** | 提示词自身暴露面判定；`tests/jb/replay.jsonl`（81 条，带 label_version） | 拿到提示词风险分 + 带版标签 |
-| **P1** | `riskgate.Judge` + `tools/riskgate-eval`（离线） | `recall ≥ 0.80` |
-| **P2** | `fidelity.go` + 单测（人为破坏 3 种，断言必须失败） | 保真检查能拦住全部破坏 |
-| **P3** | shadow 上线 + 前端 RiskGate 页 + Requests 列 + Overview 指标 | 真实 20 条，闸门判定与 judge 标签一致率 ≥80% |
-| **P4** | enforce 灰度 5% + `ReplaceLastUserText` | `final_yield` 不低于基线，`intent_drift ≤5%` |
-| **P5** | `substr-gateway` 快路径（本地 AC） | 对 new-api 类上游判定准确率 100% |
+| 1 轮（10 题） | **6 PASS / 3 REFUSAL / 1 NO_OUTPUT**，0 CYBER，按时 9/10 | 对比删表前同一臂：5 PASS / 3 REFUSAL / 1 PIVOT / 1 NO_OUTPUT |
+| n=3（进行中） | 见 `tests/report-v5-noroute-n3.md` | 单轮差异在噪声内，n=3 才有判读价值 |
+
 
 ---
 
