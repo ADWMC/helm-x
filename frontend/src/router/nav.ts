@@ -98,6 +98,7 @@ export const PAGE_META: Record<string, { title: string; desc: string }> = {
   '/prompts': { title: '提示词', desc: '选择代理注入的指令。' },
   '/context': { title: '上下文', desc: '发送给上游前的请求压缩设置。' },
   '/rewriter': { title: '改写器', desc: '拒绝后的语义改写 API。' },
+  '/risk-gate': { title: '风险闸门', desc: '请求侧风险判定与定向改写（只处理 cyber 层）。' },
   '/qa': { title: 'QA 帮助', desc: '常见错误和处理方法。' },
   '/logs': { title: '运行日志', desc: '代理与 Cyber 事件日志。' },
 }

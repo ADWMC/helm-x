@@ -45,10 +45,26 @@ async function load() {
   }
 }
 
+// 自动刷新（2026-10-28 体验审查：停留 30s 页面仍是 0，必须切走再回来）
+let pollTimer: number | undefined
+function startPoll() {
+  stopPoll()
+  pollTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void load()
+  }, 5000)
+}
+function stopPoll() {
+  if (pollTimer !== undefined) {
+    window.clearInterval(pollTimer)
+    pollTimer = undefined
+  }
+}
+
 onMounted(async () => {
   await load()
   if (isDesktop) {
     const { Events } = await import('@wailsio/runtime')
+    startPoll()
     offEvent = Events.On(events.request, (ev: { data: RequestRecord }) => {
       if (ev?.data) rows.value = [...rows.value, ev.data]
     }) as unknown as () => void
@@ -56,6 +72,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  stopPoll()
   if (offEvent) offEvent()
 })
 
@@ -152,10 +169,10 @@ const ACTION_LABEL: Record<string, string> = {
             </td>
             <td><VerdictBadge :verdict="r.class" /></td>
             <td>
-              <div v-if="r.gate" class="flex items-center gap-1.5" :title="r.gate.why">
-                <GateBadge :risk="r.gate.filterRisk" dot-only />
-                <GateBadge :risk="r.gate.complianceRisk" dot-only />
-                <span v-if="r.gate.source" class="text-[10px] text-base-content/40">{{ r.gate.source }}</span>
+              <div v-if="r?.gate" class="flex items-center gap-1.5" :title="r?.gate?.why">
+                <GateBadge :risk="r?.gate?.filterRisk" dot-only />
+                <GateBadge :risk="r?.gate?.complianceRisk" dot-only />
+                <span v-if="r.gate.source" class="text-[10px] text-base-content/40">{{ r?.gate?.source }}</span>
               </div>
               <span v-else class="text-base-content/30">—</span>
             </td>
@@ -174,7 +191,3 @@ const ACTION_LABEL: Record<string, string> = {
     </p>
   </SectionCard>
 </template>
-
-
-
-
