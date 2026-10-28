@@ -50,11 +50,9 @@ type Settings struct {
 	Rewriter RewriterSettings `json:"rewriter"`
 	RiskGate RiskGateSettings `json:"riskgate"`
 
-	// 已废弃的 Context Gardener 字段。
-	// 旧配置里可能存在：**读取时忽略、不报错、不再写回**（FINDINGS-phase1 §5）。
-	// 用 RawMessage 接收以免旧字段导致解析失败。
-	LegacyContextGardenerEnabled   json.RawMessage `json:"context_gardener_enabled,omitempty"`
-	LegacyContextGardenerThreshold json.RawMessage `json:"context_gardener_threshold_bytes,omitempty"`
+	// 说明：旧版 Context Gardener 的两个字段（context_gardener_enabled /
+	// context_gardener_threshold_bytes）已彻底移除。encoding/json 默认忽略未知字段，
+	// 旧配置文件仍可正常读取，不需要占位结构体。
 }
 
 // RewriterSettings 是改写器配置。
