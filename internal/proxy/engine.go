@@ -50,6 +50,12 @@ type Options struct {
 
 	// InjectTail 为 true 时把注入指令放到 input 末尾而不是开头。
 	InjectTail bool
+	// RetryOverride 非 nil 表示 CLI 显式指定了重试策略，优先级高于运行时配置。
+	//
+	// 为什么需要（2026-10-28 体验审查）：retryOpts 原本只在 Config==nil 时用启动参数，
+	// 而 CLI 永远带着 Config（为了热生效），于是 `--no-retry` 被配置里的
+	// upstream_retry_enabled=true 静默覆盖 —— 实测横幅写"已禁用"，上游仍被打 11 次。
+	RetryOverride *RetryOptions
 	// Config 提供运行时可变配置（提示词模式等），可为 nil。
 	Config ConfigProvider
 

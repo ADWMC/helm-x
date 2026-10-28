@@ -1,7 +1,11 @@
 package codexcfg
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -119,9 +123,15 @@ func (h Home) Apply(opts ApplyOptions) (ApplyResult, error) {
 }
 
 // RemoveOptions 控制 Remove 的行为。
+// ErrStaleBackup 表示完整备份比当前配置旧，整文件还原会丢键。
+var ErrStaleBackup = errors.New("备份比当前配置旧")
+
 type RemoveOptions struct {
 	// KeepProxyBackup 为 true 时不删还原点（默认删除）。
 	KeepProxyBackup bool
+	// Force 为 true 时允许用（可能很旧的）备份整文件覆盖当前配置。
+	// 默认 false：宁可报错也不静默丢掉用户后加的键。
+	Force bool
 }
 
 // RemoveResult 描述一次卸载的结果。
@@ -130,6 +140,8 @@ type RemoveResult struct {
 	ConfigPath   string `json:"configPath"`
 	ProxyBakKept bool   `json:"proxyBakKept"`
 	NothingToDo  bool   `json:"nothingToDo"`
+	// ExtraKeys 是"当前配置里有、备份里没有"的键（被保护、未覆盖）
+	ExtraKeys []string `json:"extraKeys,omitempty"`
 }
 
 // Remove 还原配置：用完整备份覆盖 config.toml。
@@ -144,9 +156,26 @@ func (h Home) Remove(opts RemoveOptions) (RemoveResult, error) {
 		res.NothingToDo = true
 		return res, nil
 	}
+
+	// 备份可能很旧（实测存在 2026-10-04 的备份）：整文件覆盖会把用户在之后加进
+	// config.toml 的东西全部丢掉 —— 实测会丢 model、requires_openai_auth、notify、
+	// [projects.*].trust_level、[plugins.*]。
+	//
+	// 因此默认**不静默覆盖**：先算出"当前文件里备份没有的键"，有则拒绝并报出来，
+	// 由用户决定是否 --force。宁可让还原失败一次，也不静默吃掉别人的配置。
+	extra, err := h.extraVsBackup()
+	if err != nil {
+		return res, err
+	}
+	if len(extra) > 0 && !opts.Force {
+		res.ExtraKeys = extra
+		return res, fmt.Errorf("%w: 备份比当前配置旧，整文件还原会丢掉 %d 个键（%s）；加 --force 接受丢失，或先手工合并",
+			ErrStaleBackup, len(extra), strings.Join(truncateList(extra, 5), ", "))
+	}
 	if err := h.RestoreFromBackup(); err != nil {
 		return res, err
 	}
+	res.ExtraKeys = extra
 	res.Restored = true
 
 	if !opts.KeepProxyBackup && h.HasProxyBackup() {
@@ -195,4 +224,69 @@ func (h Home) RestoreProxy() (bool, error) {
 	}
 	_ = h.ClearProxyBak()
 	return true, nil
+}
+
+// extraVsBackup 返回"当前配置里有、备份里没有"的键（section.key），最多 20 条。
+//
+// Doc 没有键枚举器（只有 Tables()），这里按原始文本逐行扫：section 头 + key = value。
+// TOML 的形态在这个项目里足够规整（config.toml 是 codex 自己写的），够用且不引入依赖。
+func (h Home) extraVsBackup() ([]string, error) {
+	bakRaw, err := os.ReadFile(h.BakPath())
+	if err != nil {
+		return nil, err
+	}
+	curRaw, err := h.ReadConfig()
+	if err != nil {
+		return nil, err
+	}
+	bak := keySet(bakRaw)
+	var extra []string
+	for k := range keySet(curRaw) {
+		if _, ok := bak[k]; !ok {
+			extra = append(extra, k)
+		}
+	}
+	sort.Strings(extra)
+	if len(extra) > 20 {
+		extra = extra[:20]
+	}
+	return extra, nil
+}
+
+// keySet 把 TOML 文本摊平成 "section.key" 集合（数组表按出现顺序编号）。
+func keySet(raw []byte) map[string]struct{} {
+	out := map[string]struct{}{}
+	section := ""
+	arrIdx := map[string]int{}
+	reSection := regexp.MustCompile(`^\s*\[([^\[\]]+)\]\s*$`)
+	reArray := regexp.MustCompile(`^\s*\[\[([^\[\]]+)\]\]\s*$`)
+	reKey := regexp.MustCompile(`^\s*([A-Za-z0-9_."-]+)\s*=`)
+	for _, line := range strings.Split(string(raw), "\n") {
+		if m := reArray.FindStringSubmatch(line); m != nil {
+			name := strings.TrimSpace(m[1])
+			arrIdx[name]++
+			section = fmt.Sprintf("%s[%d]", name, arrIdx[name])
+			continue
+		}
+		if m := reSection.FindStringSubmatch(line); m != nil {
+			section = strings.TrimSpace(m[1])
+			continue
+		}
+		if m := reKey.FindStringSubmatch(line); m != nil {
+			k := strings.TrimSpace(m[1])
+			if section != "" {
+				out[section+"."+k] = struct{}{}
+			} else {
+				out[k] = struct{}{}
+			}
+		}
+	}
+	return out
+}
+
+func truncateList(list []string, n int) []string {
+	if len(list) <= n {
+		return list
+	}
+	return append(append([]string{}, list[:n]...), fmt.Sprintf("…等 %d 项", len(list)-n))
 }

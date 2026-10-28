@@ -8,6 +8,8 @@ package selfcheck
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -62,9 +64,9 @@ type Progress func(step, total int, c Check)
 // Run 执行全部检查。e2e 为 true 时额外跑一次 codex 激活验证。
 func Run(e2e bool, progress Progress) Report {
 	var r Report
-	total := 6
+	total := 7
 	if e2e {
-		total = 7
+		total = 8
 	}
 	step := 0
 	add := func(c Check) {
@@ -149,7 +151,27 @@ func Run(e2e bool, progress Progress) Report {
 		add(Check{Name: "配置备份", OK: true, Skip: true, Detail: "尚未注入，无需备份"})
 	}
 
-	// 7. e2e
+	// 7. 代理态一致性（2026-10-28 用户体验审查的阻断项）
+	//
+	// 为什么必须有：`apply` 单独执行、或代理被强杀，都会把 base_url 留在
+	// 127.0.0.1:<port> 上。此时 codex 只会报 ECONNREFUSED，文本里不出现 helm-x，
+	// 而自检仍报"全部通过" —— 工具把自己搞坏了却说自己没事。
+	if up, uerr := home.Probe(); uerr == nil {
+		if host, port, ok := localListenAddr(up.BaseURL); ok {
+			if connErr := dialLocal(host, port); connErr != nil {
+				add(Check{Name: "代理态一致", OK: false,
+					Detail: fmt.Sprintf("base_url 指向 %s，但本机连不上（%v）；执行 helmx remove 还原，或重新启动代理", up.BaseURL, connErr)})
+			} else {
+				add(Check{Name: "代理态一致", OK: true, Detail: "代理在监听 " + up.BaseURL})
+			}
+		} else {
+			add(Check{Name: "代理态一致", OK: true, Skip: true, Detail: "base_url 不是本机地址，无需检查"})
+		}
+	} else {
+		add(Check{Name: "代理态一致", OK: true, Skip: true, Detail: "无激活 provider，已跳过"})
+	}
+
+	// 8. e2e
 	if e2e {
 		out, err := runCodex()
 		switch {
@@ -185,4 +207,32 @@ func runCodex() (string, error) {
 		}
 		return "", fmt.Errorf("codex 执行超时（240s）")
 	}
+}
+
+// localListenAddr 判断 base_url 是否指向本机端口，返回 host/port。
+// 只认 localhost / 127.0.0.x / ::1 —— 外部地址不属于"代理态"。
+func localListenAddr(baseURL string) (host, port string, ok bool) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "", "", false
+	}
+	h := u.Hostname()
+	if h != "localhost" && h != "127.0.0.1" && h != "::1" && !strings.HasPrefix(h, "127.") {
+		return "", "", false
+	}
+	p := u.Port()
+	if p == "" {
+		return "", "", false
+	}
+	return h, p, true
+}
+
+// dialLocal 尝试 TCP 连接，超时 800ms。
+func dialLocal(host, port string) error {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 800*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return nil
 }

@@ -23,8 +23,8 @@ func TestRunEmbeddedAssets(t *testing.T) {
 	}
 
 	// 检查项总数口径不能变：CLI/GUI 的进度分母依赖它。
-	if len(r.Checks) != 6 {
-		t.Fatalf("检查项数量 = %d, want 6（e2e=false 时不应增删检查项）", len(r.Checks))
+	if len(r.Checks) != 7 {
+		t.Fatalf("检查项数量 = %d, want 7（e2e=false 时不应增删检查项）", len(r.Checks))
 	}
 	// 第 5 项的位置也不能变。
 	if idx := indexOfName(r.Checks, "内嵌资源"); idx != 4 {

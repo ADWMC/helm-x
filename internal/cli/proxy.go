@@ -72,8 +72,13 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	}
 
 	// 3. 把 codex 指向本代理
+	//
+	// --dry-run 承诺"只计算不发上游"，但它同样会改写用户的 codex 配置 ——
+	// 实测强杀后 base_url 停在死端口（2026-10-28 体验审查）。干跑不该产生副作用。
 	proxyURL := "http://" + addr + "/v1"
-	if hasHome {
+	if hasHome && opts.dryRun {
+		fmt.Fprintln(stdout, "[helm-x] 干跑模式：不改写 codex 配置（base_url 保持原样）")
+	} else if hasHome {
 		res, aerr := home.Apply(codexcfg.ApplyOptions{ProxyAddr: proxyURL})
 		if aerr != nil {
 			_ = ln.Close()
@@ -87,16 +92,24 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		fmt.Fprintln(stdout, "[helm-x] 警告: 未找到 codex 配置，仅启动代理")
 	}
 
+	// 重试策略：只要用户显式敲了相关 flag，就以 flag 为准（不被配置文件覆盖）。
+	var retryOverride *proxy.RetryOptions
+	if opts.maxSet || opts.delaySet || opts.noRetrySet {
+		r := opts.retry
+		retryOverride = &r
+	}
+
 	// 4. 起服务
 	engine, err := rt.StartProxy(ctx, proxy.Options{
-		Listener:    ln,
-		Listen:      addr,
-		Upstream:    upstream,
-		InjectTail:  rt.Store.Get().InjectTail,
-		Passthrough: opts.passthrough,
-		DryRun:      opts.dryRun,
-		Retry:       opts.retry,
-		Events:      rt.Sink(),
+		Listener:      ln,
+		Listen:        addr,
+		Upstream:      upstream,
+		InjectTail:    rt.Store.Get().InjectTail,
+		Passthrough:   opts.passthrough,
+		DryRun:        opts.dryRun,
+		Retry:         opts.retry,
+		RetryOverride: retryOverride,
+		Events:        rt.Sink(),
 	})
 	if err != nil {
 		if hasHome {
@@ -182,8 +195,10 @@ type proxyArgs struct {
 	upstream    string
 	passthrough bool
 	dryRun      bool
-	restore     bool
-	retry       proxy.RetryOptions
+	// noRetrySet 记录用户是否敲了 --no-retry（与 maxSet/delaySet 一起决定覆盖）
+	noRetrySet bool
+	restore    bool
+	retry      proxy.RetryOptions
 	// 以下标记 CLI 是否显式覆盖了配置
 	maxSet   bool
 	delaySet bool
@@ -237,6 +252,7 @@ func parseProxyArgs(args []string) (proxyArgs, error) {
 			o.retry.DelaySeconds = n
 		case "--no-retry":
 			sawNoRetry = true
+			o.noRetrySet = true
 			o.retry.Enabled = false
 		case "--passthrough":
 			o.passthrough = true

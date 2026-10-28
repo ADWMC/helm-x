@@ -74,12 +74,15 @@ func runApply(args []string, stdout io.Writer) error {
 // runRemove 实现 `helmx remove`：逐字节还原并清理。
 func runRemove(args []string, stdout io.Writer) error {
 	keep := false
+	force := false
 	for _, a := range args {
 		switch a {
 		case "--keep-proxy-backup":
 			keep = true
+		case "--force":
+			force = true
 		default:
-			return &ExitError{Code: 2, Err: fmt.Errorf("未知选项 %q", a)}
+			return &ExitError{Code: 2, Err: fmt.Errorf("未知选项 %q（可用: --keep-proxy-backup, --force, --help）", a)}
 		}
 	}
 
@@ -88,7 +91,7 @@ func runRemove(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	res, err := home.Remove(codexcfg.RemoveOptions{KeepProxyBackup: keep})
+	res, err := home.Remove(codexcfg.RemoveOptions{KeepProxyBackup: keep, Force: force})
 	if err != nil {
 		return err
 	}
@@ -97,6 +100,10 @@ func runRemove(args []string, stdout io.Writer) error {
 		return nil
 	}
 	fmt.Fprintf(stdout, "已从备份还原: %s\n", res.ConfigPath)
+	if len(res.ExtraKeys) > 0 {
+		fmt.Fprintf(stdout, "注意: 备份比当前配置旧，以下 %d 个键已被强制覆盖（--force）: %v\n",
+			len(res.ExtraKeys), res.ExtraKeys)
+	}
 	if res.ProxyBakKept {
 		fmt.Fprintln(stdout, "base_url 还原点已保留")
 	}

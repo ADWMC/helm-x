@@ -170,6 +170,10 @@ func (e *Engine) tamper() TamperMatcher {
 // {Enabled:false, MaxRetries:0, DelaySeconds:0} 是一个**合法**配置
 // （即"不重试"），与"没配置"无法区分。因此这里只依据 Config 是否为 nil。
 func (e *Engine) retryOpts() RetryOptions {
+	// CLI 显式指定的策略优先：用户敲了 --no-retry，配置里的开关不能把它吃掉。
+	if e.opts.RetryOverride != nil {
+		return *e.opts.RetryOverride
+	}
 	if e.opts.Config == nil {
 		return e.opts.Retry
 	}
@@ -254,8 +258,13 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 		//  客户端只会看到 502 + 空 body，连"发生了什么"都读不到）
 		finalBody = []byte(`{"error":{"message":"上游请求失败，请重试。","type":"upstream_error","code":"upstream_response_error"}}`)
 	}
-	if st.Class == ClassUpstreamFailed && st.Status == 0 {
-		st.Status = http.StatusBadGateway
+	// 合成错误体时必须同时改状态码（2026-10-28 体验审查）：
+	// 旧实现只换 body 不改 status，上游 200+空体会变成「HTTP 200 + 错误 JSON」，
+	// 客户端无法区分成功与失败 —— 状态码撒谎比没有错误体更糟。
+	if st.Class == ClassUpstreamFailed || st.Class == ClassMalformed {
+		if st.Status == 0 || (st.Status >= 200 && st.Status < 300) {
+			st.Status = http.StatusBadGateway
+		}
 	}
 
 	ct := "application/json"
