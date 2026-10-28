@@ -24,8 +24,10 @@ import (
 func runUI(ctx context.Context, args []string, stdout io.Writer) error {
 	port := 8090
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--port" {
-			v, err := nextArg(args, &i, "--port")
+		// --listen 与 --port 同义（2026-10-28：其它子命令都用 --listen，
+		// 只有 ui 用 --port，用户按习惯敲 --listen 会报"未知选项"）。
+		if args[i] == "--port" || args[i] == "--listen" {
+			v, err := nextArg(args, &i, args[i])
 			if err != nil {
 				return &ExitError{Code: 2, Err: err}
 			}
@@ -132,10 +134,11 @@ var uiTemplate = template.Must(template.New("ui").Parse(`<!doctype html>
      font:11.5px/1.6 ui-monospace,Consolas,monospace;max-height:420px;overflow:auto;white-space:pre-wrap}
  .meta{color:#6e6e6e;font:11px/1.8 ui-monospace,Consolas,monospace;margin-top:20px}
 </style></head><body><div class="wrap">
-<h1>helm-x 控制台</h1>
-<div class="sub">降级界面 —— 完整界面请运行 helmx（桌面窗口）</div>
+<h1>helm-x 控制台 <span style="font-size:12px;color:#f5a623">只读</span></h1>
+<div class="sub">只读控制台（本进程不启动代理）—— 完整界面运行 helmx，或先执行 <code>helmx proxy</code> 让代理真正跑起来</div>
 <div class="stats">
-  <div class="stat"><span>代理</span><strong class="{{if .Running}}ok{{else}}bad{{end}}">{{if .Running}}运行中{{else}}已停止{{end}}</strong></div>
+  <div class="stat"><span>代理</span><strong class="{{if .Running}}ok{{else}}bad{{end}}">{{if .Running}}运行中{{else}}未启动{{end}}</strong>
+    {{if not .Running}}<em style="display:block;margin-top:6px;font-size:11px;color:#9b9b9b;font-style:normal">在另一个终端运行 <code>helmx proxy</code></em>{{end}}</div>
   <div class="stat"><span>监听</span><strong>{{if .Listen}}{{.Listen}}{{else}}—{{end}}</strong></div>
   <div class="stat"><span>请求数</span><strong>{{.Requests}}</strong></div>
   <div class="stat"><span>上游</span><strong style="font-size:12px">{{.Upstream}}</strong></div>
