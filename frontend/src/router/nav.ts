@@ -34,6 +34,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/', label: '系统总览', icon: 'dashboard' },
       { path: '/requests', label: '请求', icon: 'requests' },
+      { path: '/capture', label: '报文', icon: 'capture' },
       { path: '/verify', label: '自检', icon: 'verify' },
     ],
   },
@@ -42,8 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/services', label: '服务', icon: 'services' },
       { path: '/prompts', label: '提示词', icon: 'prompts' },
-      { path: '/rewriter', label: '改写器', icon: 'rewriter' },
-      { path: '/risk-gate', label: '风险闸门', icon: 'verify' },
+      { path: '/armor', label: '破甲', icon: 'armor' },
     ],
   },
   {
@@ -56,42 +56,46 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
-/** 数字键快速切换：1–9 对应前三组，0 对应日志 */
+/** 数字键快速切换：1–9 依次对应下列页面，0 固定回「运行日志」 */
 export const HOTKEY_ORDER: string[] = [
   '/',
   '/requests',
+  '/capture',
   '/verify',
   '/services',
   '/prompts',
-  '/rewriter',
-  '/risk-gate',
+  '/armor',
   '/qa',
-  '/logs',
 ]
 
 /** 路由路径 → 页面组件（懒加载） */
 export const ROUTES: { path: string; component: () => Promise<Component> }[] = [
   { path: '/', component: () => import('@/pages/Overview.vue') },
   { path: '/requests', component: () => import('@/pages/Requests.vue') },
+  { path: '/capture', component: () => import('@/pages/Capture.vue') },
   { path: '/verify', component: () => import('@/pages/Verify.vue') },
   { path: '/services', component: () => import('@/pages/Services.vue') },
   { path: '/prompts', component: () => import('@/pages/Prompts.vue') },
-  { path: '/rewriter', component: () => import('@/pages/Rewriter.vue') },
-  { path: '/risk-gate', component: () => import('@/pages/RiskGate.vue') },
+  { path: '/armor', component: () => import('@/pages/Armor.vue') },
   { path: '/qa', component: () => import('@/pages/QA.vue') },
   { path: '/logs', component: () => import('@/pages/Logs.vue') },
 ]
 
-/** 每页的标题与一句话说明 —— 标题只在内容区出现一次（修 V3） */
-export const PAGE_META: Record<string, { title: string; desc: string }> = {
-  '/': { title: '系统总览', desc: '代理状态与最近请求。' },
-  '/requests': { title: '请求', desc: '每个经过代理的请求及其判定结果。' },
-  '/verify': { title: '自检', desc: '激活验证与完整性自检。' },
-  '/services': { title: '服务', desc: '代理、自愈守护与上游重试。' },
-  '/prompts': { title: '提示词', desc: '选择代理注入的指令。' },
-  '/rewriter': { title: '改写器', desc: '拒绝后的语义改写 API。' },
-  '/risk-gate': { title: '风险闸门', desc: '请求侧风险判定与定向改写（只处理 cyber 层）。' },
-  '/qa': { title: 'QA 帮助', desc: '常见错误和处理方法。' },
-  '/logs': { title: '运行日志', desc: '代理与 Cyber 事件日志。' },
+/**
+ * 每页的标题。标题在内容区只出现一次（修 V3）。
+ *
+ * 【2026-11-22 删掉 desc】原来每页标题下面还有一句"这页干什么"的说明，
+ * 属于写给自己/评审的解释，使用者点进来就知道这页是干什么的 ——
+ * 说明文字只在会话里讲，UI 里不留。
+ */
+export const PAGE_META: Record<string, { title: string }> = {
+  '/': { title: '系统总览' },
+  '/requests': { title: '请求' },
+  '/capture': { title: '报文' },
+  '/verify': { title: '自检' },
+  '/services': { title: '服务' },
+  '/prompts': { title: '提示词' },
+  '/armor': { title: '破甲' },
+  '/qa': { title: 'QA 帮助' },
+  '/logs': { title: '运行日志' },
 }
-

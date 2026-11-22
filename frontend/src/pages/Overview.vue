@@ -9,18 +9,17 @@
 // 信息顺序按重要性：代理状态 → 最近请求 → 次要指标。
 // 原版把四个等宽指标格放在最显眼位置，而运行时常有三个是空的。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { api, type RiskGateView, events, isDemo, isDesktop, type RequestRecord, type StatusView } from '@/api/backend'
+import { api, isDemo, isDesktop, type RequestRecord, type StatusView } from '@/api/backend'
 import { useVerdictStyle, type Verdict } from '@/composables/useVerdictStyle'
 import VerdictBadge from '@/components/VerdictBadge.vue'
+import { useRequestStream } from '@/composables/useRequestStream'
 
 const { styleOf } = useVerdictStyle()
 
 const status = ref<StatusView | null>(null)
 const requests = ref<RequestRecord[]>([])
 const loading = ref(true)
-const gateView = ref<RiskGateView | null>(null)
 const error = ref('')
-let offEvent: (() => void) | null = null
 
 async function refresh() {
   try {
@@ -34,28 +33,30 @@ async function refresh() {
   }
 }
 
-onMounted(async () => {
-  try {
-    gateView.value = await api.riskGate()
-  } catch {
-    gateView.value = null
-  }
+// 实时流（SSE）+ 兜底轮询。
+//
+// 主通道是代理自己的 `/__helmx/events` —— Wails 的 `proxy:request` 在本机
+// WebView2 下收不到（自检页同因暴露）。连不上时退回 5 秒轮询，页面不可见时不拉。
+let pollTimer: number | undefined
+const stream = useRequestStream((rec) => {
+  if (requests.value.some((r) => r.id === rec.id)) return
+  requests.value = [rec, ...requests.value].slice(0, 20)
 })
 
 onMounted(async () => {
   await refresh()
+  pollTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void refresh()
+  }, 5000)
 
-  // 事件驱动，不轮询（原版靠 3 秒轮询，QA 里专门记过这个毛病）
   if (isDesktop) {
-    const { Events } = await import('@wailsio/runtime')
-    offEvent = Events.On(events.request, () => {
-      void refresh()
-    }) as unknown as () => void
+    stream.start(status.value?.proxy.listen ?? '')
   }
 })
 
 onUnmounted(() => {
-  if (offEvent) offEvent()
+  if (pollTimer !== undefined) window.clearInterval(pollTimer)
+  stream.stop()
 })
 
 const proxy = computed(() => status.value?.proxy)
@@ -122,7 +123,7 @@ function fmtTime(ts: string): string {
       <div class="flex items-center gap-3">
         <span
           class="inline-block size-2 shrink-0 rounded-full"
-          :class="running ? 'bg-success' : 'bg-base-content/30'"
+          :class="running ? 'bg-success' : 'bg-base-content/45'"
           aria-hidden="true"
         />
         <strong class="text-[15px]">{{ mainStatusText }}</strong>
@@ -205,32 +206,6 @@ function fmtTime(ts: string): string {
               .join(' · ')
           : '暂无请求'
       "
-    />
-  </div>
-
-  <!-- 风险闸门：只有启用时才占用版面，未启用给一行说明而不是空卡 -->
-  <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-    <StatTile
-      label="风险闸门"
-      :value="gateView?.enabled ? (gateView.mode === 'enforce' ? 'enforce' : 'shadow') : '未启用'"
-      :hint="
-        gateView?.enabled
-          ? gateView.mode === 'enforce'
-            ? '按判定改写用户请求'
-            : '只记录判定，不改写（校准期）'
-          : '在「风险闸门」页启用'
-      "
-      :tone="gateView?.enabled ? (gateView.mode === 'enforce' ? 'ok' : 'default') : 'default'"
-    />
-    <StatTile
-      label="判定方式"
-      :value="gateView?.profile === 'substr-gateway' ? '本地匹配' : gateView?.enabled ? '模型判定' : '未启用'"
-      :hint="gateView?.enabled ? `热路径模型 ${gateView.hotModel}` : '本地匹配零成本，模型判定约 1.3s'"
-    />
-    <StatTile
-      label="预算（每会话）"
-      :value="gateView?.enabled ? `${gateView.budget.perSessionJudge} 判 / ${gateView.budget.perSessionRewrite} 改` : '未启用'"
-      :hint="gateView?.enabled ? `缓存 ${gateView.cacheTtlSec}s · 灰度 ${gateView.enforceRatio}%` : '超限自动直通，绝不阻断'"
     />
   </div>
 </template>

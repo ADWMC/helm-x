@@ -4,10 +4,10 @@
 // 这是 P2/P3/P8 这类问题的**唯一可视证据来源**（PLAN.md N4）：
 // 每个请求一行，显示判定结果与补救动作。旧版只能 findstr 日志。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { api, events, isDemo, isDesktop, type RequestRecord } from '@/api/backend'
+import { api, isDemo, isDesktop, type RequestRecord } from '@/api/backend'
 import { useVerdictStyle, type Verdict } from '@/composables/useVerdictStyle'
 import VerdictBadge from '@/components/VerdictBadge.vue'
-import GateBadge from '@/components/GateBadge.vue'
+import { useRequestStream } from '@/composables/useRequestStream'
 
 const { styleOf, all } = useVerdictStyle()
 
@@ -15,7 +15,6 @@ const rows = ref<RequestRecord[]>([])
 const filter = ref<Verdict | 'all'>('all')
 const search = ref('')
 const errMsg = ref('')
-let offEvent: (() => void) | null = null
 
 const filtered = computed(() => {
   let out = rows.value
@@ -60,20 +59,31 @@ function stopPoll() {
   }
 }
 
+// 实时流（SSE）+ 轮询兜底。
+//
+// 实测 Wails 的 `proxy:request` 事件在本机 WebView2 下收不到，所以主通道改成
+// 代理自己的 `/__helmx/events`（loopback 只读 SSE）；连不上时退回 5 秒轮询。
+const stream = useRequestStream((rec) => {
+  if (rows.value.some((r) => r.id === rec.id)) return // 回放与增量去重
+  rows.value = [...rows.value, rec]
+})
+
 onMounted(async () => {
   await load()
+  startPoll()
   if (isDesktop) {
-    const { Events } = await import('@wailsio/runtime')
-    startPoll()
-    offEvent = Events.On(events.request, (ev: { data: RequestRecord }) => {
-      if (ev?.data) rows.value = [...rows.value, ev.data]
-    }) as unknown as () => void
+    try {
+      const st = await api.status()
+      stream.start(st.proxy.listen)
+    } catch {
+      // 拿不到监听地址就只用轮询
+    }
   }
 })
 
 onUnmounted(() => {
   stopPoll()
-  if (offEvent) offEvent()
+  stream.stop()
 })
 
 function fmtBytes(n: number): string {
@@ -148,7 +158,6 @@ const ACTION_LABEL: Record<string, string> = {
             <th>路径</th>
             <th class="w-28">大小</th>
             <th class="w-28">判定</th>
-            <th class="w-24">闸门</th>
             <th class="w-28">补救</th>
             <th class="w-16 text-right">上游</th>
             <th class="w-20 text-right">耗时</th>
@@ -168,14 +177,6 @@ const ACTION_LABEL: Record<string, string> = {
               {{ fmtBytes(r.inBytes) }} → {{ fmtBytes(r.outBytes) }}
             </td>
             <td><VerdictBadge :verdict="r.class" /></td>
-            <td>
-              <div v-if="r?.gate" class="flex items-center gap-1.5" :title="r?.gate?.why">
-                <GateBadge :risk="r?.gate?.filterRisk" dot-only />
-                <GateBadge :risk="r?.gate?.complianceRisk" dot-only />
-                <span v-if="r.gate.source" class="text-[11px] text-base-content/60">{{ r?.gate?.source }}</span>
-              </div>
-              <span v-else class="text-base-content/55">—</span>
-            </td>
             <td class="text-[12px] text-base-content/70">
               {{ ACTION_LABEL[r.action] || r.action }}
             </td>

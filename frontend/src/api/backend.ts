@@ -188,8 +188,6 @@ export interface RequestRecord {
   upstreamHits: number
   durationMs: number
   note?: string
-  /** 本请求的风险闸门判定（未启用时缺省） */
-  gate?: GateInfo
 }
 
 export interface PromptModeView {
@@ -202,100 +200,42 @@ export interface PromptModeView {
   default: boolean
   active: boolean
   preview: string
+  /** 该模式实测过的部署语义；"replace-base" = 必须整段替换 instructions 才有效 */
+  deploy?: string
 }
 
-export interface RewriterView {
+/** 代号表配置（请求层改写，与全文编码互斥）。 */
+export interface CodebookView {
   enabled: boolean
-  provider: string
-  baseUrl: string
-  model: string
-  keyHint: string
-  hasKey: boolean
-  timeoutSec: number
-  useProxy: boolean
-  proxyUrl: string
-  fallback: string
-  maxAttempts: number
+  slots: number
 }
 
-export interface RewriterInput {
+/** 调试捕获状态。 */
+export interface CaptureState {
   enabled: boolean
-  provider: string
-  baseUrl: string
-  model: string
-  apiKey: string
-  timeoutSec: number
-  useProxy: boolean
-  proxyUrl: string
-  fallback: string
-  maxAttempts: number
+  redacted: boolean
+  root: string
+  recordDir: string
+  bytes: number
+  sessions: number
+  quotaMb: number
 }
 
-/** 风险闸门：三档风险、两轴判定、改写与保真度。 */
-export type GateRisk = 'none' | 'low' | 'high'
-export type GateLocus = 'none' | 'user' | 'injection' | 'both'
-export type GateMode = 'shadow' | 'enforce'
-
-export interface GateTrigger {
-  text: string
-  where: GateLocus
-  kind: string
+/** 捕获索引行（index.jsonl 一条）。 */
+export interface CaptureItem {
+  ts: string
+  reqId: string
+  path: string
+  class: string
+  inBytes: number
+  outBytes: number
+  note?: string
 }
 
-export interface GateInfo {
-  locus: GateLocus
-  filterRisk: GateRisk
-  complianceRisk: GateRisk
-  triggers: GateTrigger[]
-  contractGap: string[]
-  anchor: string
-  rewrite?: string
-  entityRetention: number
-  why: string
-  /** l0 / model / cache / l0-fallback / budget */
-  source: string
-}
-
-export interface GateBudget {
-  perSessionJudge: number
-  perSessionRewrite: number
-  perRequestTokens: number
-}
-
-export interface RiskGateView {
-  enabled: boolean
-  mode: GateMode
-  profile: 'substr-gateway' | 'cyber-openai' | 'generic'
-  hotModel: string
-  labelModel: string
-  baseUrl: string
-  keyHint: string
-  hasKey: boolean
-  timeoutSec: number
-  cacheTtlSec: number
-  enforceRatio: number
-  budget: GateBudget
-}
-
-export interface RiskGateInput {
-  enabled: boolean
-  mode: GateMode
-  profile: RiskGateView['profile']
-  hotModel: string
-  labelModel: string
-  baseUrl: string
-  apiKey: string
-  timeoutSec: number
-  cacheTtlSec: number
-  enforceRatio: number
-  budget: GateBudget
-}
-
-export interface GateProbeResult {
-  ok: boolean
-  verdict: Partial<GateInfo> & { filterRisk?: GateRisk; complianceRisk?: GateRisk }
-  durationMs: number
-  error?: string
+/** 捕获目录里的一个文件。 */
+export interface CaptureFile {
+  name: string
+  size: number
 }
 
 export interface TestResult {
@@ -304,6 +244,13 @@ export interface TestResult {
   output: string
   error?: string
   durationMs: number
+}
+
+export interface VerifyRun {
+  running: boolean
+  total: number
+  failed: number
+  items: VerifyProgress[]
 }
 
 export interface VerifyProgress {
@@ -342,8 +289,6 @@ export interface AppSettings {
   inject_every?: number
   /** UA 兜底：入站无 User-Agent 时补上（空 = 不补） */
   forward_user_agent?: string
-  /** 后端是否已存有改写器密钥。密钥本身不下发到渲染层，留空提交 = 不修改 */
-  rewriter_api_key_set?: boolean
   [key: string]: unknown
 }
 
@@ -412,6 +357,32 @@ export const api = {
   promptModes: (): Promise<PromptModeView[]> =>
     demoGuard(() => Backend.PromptService.Modes() as never, [] as never),
   promptSet: (mode: string) => demoGuard(() => Backend.PromptService.Set(mode) as never, undefined as never),
+  promptGetDeploy: (): Promise<string> => demoGuard(() => Backend.PromptService.GetDeploy() as never, 'insert' as never),
+  promptSetDeploy: (mode: string) =>
+    demoGuard(() => Backend.PromptService.SetDeploy(mode) as never, undefined as never),
+
+  // 请求层改写（代号表 / 全文编码，互斥；encode 优先）
+  codebookGet: (): Promise<CodebookView> =>
+    demoGuard(() => Backend.PromptService.GetCodebook() as never, { enabled: false, slots: 2 } as never),
+  codebookSet: (enabled: boolean, slots: number) =>
+    demoGuard(() => Backend.PromptService.SetCodebook(enabled, slots) as never, undefined as never),
+  encodeGet: (): Promise<boolean> => demoGuard(() => Backend.PromptService.GetEncode() as never, false as never),
+  encodeSet: (on: boolean) => demoGuard(() => Backend.PromptService.SetEncode(on) as never, undefined as never),
+
+  // 调试报文捕获
+  captureState: (): Promise<CaptureState> =>
+    demoGuard(() => Backend.CaptureService.State() as never, {
+      enabled: false, redacted: true, root: '', recordDir: '', bytes: 0, sessions: 0, quotaMb: 512,
+    } as never),
+  captureSetEnabled: (on: boolean) => demoGuard(() => Backend.CaptureService.SetEnabled(on) as never, undefined as never),
+  captureSetRedact: (on: boolean) => demoGuard(() => Backend.CaptureService.SetRedact(on) as never, undefined as never),
+  captureList: (limit: number): Promise<CaptureItem[]> =>
+    demoGuard(() => Backend.CaptureService.List(limit) as never, [] as never),
+  captureFiles: (reqId: string): Promise<CaptureFile[]> =>
+    demoGuard(() => Backend.CaptureService.Files(reqId) as never, [] as never),
+  captureRead: (reqId: string, name: string): Promise<string> =>
+    demoGuard(() => Backend.CaptureService.Read(reqId, name) as never, '' as never),
+  captureOpenDir: () => demoGuard(() => Backend.CaptureService.OpenDir() as never, undefined as never),
 
   // 运行设置（注入频率等；整体替换式保存，先读后写）
   settings: (): Promise<AppSettings> =>
@@ -419,21 +390,10 @@ export const api = {
   saveSettings: (v: AppSettings) =>
     demoGuard(() => Backend.ConfigService.SaveSettings(v) as never, undefined as never),
 
-  // 改写器
-  rewriterGet: (): Promise<RewriterView> =>
-    demoGuard(() => Backend.RewriterService.Get() as never, null as never),
-  rewriterSet: (v: RewriterInput) => demoGuard(() => Backend.RewriterService.Set(v) as never, undefined as never),
-  rewriterTest: (msg: string): Promise<TestResult> =>
-    demoGuard(() => Backend.RewriterService.Test(msg) as never, { ok: false, input: msg, output: '', error: '演示模式', durationMs: 0 } as never),
-
-  // 风险闸门
-  riskGate: (): Promise<RiskGateView> => demoGuard(() => Backend.RiskGateService.Get() as never, undefined as never),
-  riskGateSet: (v: RiskGateInput) => demoGuard(() => Backend.RiskGateService.Set(v) as never, undefined as never),
-  riskGateProbe: (text: string): Promise<GateProbeResult> =>
-    demoGuard(() => Backend.RiskGateService.Probe(text) as never, { ok: false, verdict: {}, durationMs: 0, error: '演示模式' } as never),
-
   // 自检
   verifyRun: (e2e: boolean) => demoGuard(() => Backend.VerifyService.Run(e2e) as never, undefined as never),
+  verifyChecks: (): Promise<VerifyRun> =>
+    demoGuard(() => Backend.VerifyService.Checks() as never, { running: false, total: 0, failed: 0, items: [] } as never),
   verifyReport: (): Promise<string> => demoGuard(() => Backend.VerifyService.Report() as never, '' as never),
 
   // 日志与请求
@@ -457,5 +417,3 @@ export const events = {
   restore: 'proxy:restore',
   configChanged: 'config:changed',
 } as const
-
-

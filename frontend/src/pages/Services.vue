@@ -5,6 +5,7 @@
 // 配置注入属危险操作 → 走 §3.1 流程（列出改哪个文件、怎么撤销）。
 import { computed, onMounted, ref } from 'vue'
 import { api, isDemo, type AppSettings, type ConfigDiff, type StatusView } from '@/api/backend'
+import { useTheme, type ThemePref } from '@/composables/useTheme'
 
 const status = ref<StatusView | null>(null)
 const busy = ref('')
@@ -19,6 +20,14 @@ const uaBusy = ref(false)
 const showConfirm = ref(false)
 const preview = ref<ConfigDiff[]>([])
 const pendingAction = ref<'apply' | 'remove'>('apply')
+
+// 主题：纯渲染层偏好，存 localStorage，不经 Go（见 composables/useTheme.ts）
+const { pref: themePref, effective: themeEffective, setTheme } = useTheme()
+const THEMES: { value: ThemePref; label: string; hint: string }[] = [
+  { value: 'light', label: '浅色', hint: '默认。正文 15.8:1，控件边框 3.73:1' },
+  { value: 'dark', label: '深色', hint: '正文 12.9:1，控件边框 3.33:1' },
+  { value: 'system', label: '跟随系统', hint: '按 Windows 主题自动切换' },
+]
 
 const proxy = computed(() => status.value?.proxy)
 const codex = computed(() => status.value?.codex)
@@ -153,9 +162,7 @@ onMounted(() => {
         {{ proxy?.running ? '运行中' : '已停止' }}
       </span>
     </div>
-    <p class="mt-3 text-[12px] text-base-content/60">
-      启动时会把 codex 的 base_url 指向本代理；停止时自动还原，codex 回到原始上游。
-    </p>
+    <p class="mt-2 text-[12px] text-base-content/60">启动时改写 codex 的 base_url，停止时还原。</p>
   </SectionCard>
 
   <SectionCard title="自愈守护" :meta="watch?.running ? '运行中' : '已停止'">
@@ -170,9 +177,7 @@ onMounted(() => {
     <p v-if="watch?.lastError" class="mt-2 text-[12px] text-error">
       最近异常：{{ watch.lastError }}
     </p>
-    <p class="mt-3 text-[12px] text-base-content/60">
-      每 60 秒检查一次注入状态，被其他工具改坏时自动恢复。
-    </p>
+    <p class="mt-2 text-[12px] text-base-content/60">每 60 秒检查一次注入状态。</p>
   </SectionCard>
 
   <section class="rounded-box border border-error/40 bg-base-100">
@@ -229,13 +234,25 @@ onMounted(() => {
         保存
       </button>
     </div>
-    <p class="mt-3 text-[12px] text-base-content/70">
-      转发时除逐跳头外全部原样透传（含 User-Agent、Cookie、Authorization、各种 X-* 头），
-      中转站看到的请求指纹与 codex 直连一致。仅当入站请求<b>没有</b> User-Agent 时才补这个兜底值；
-      都为空时转发请求不带 UA —— 绝不泄漏 Go 默认 UA。
+    <p class="mt-2 text-[12px] text-base-content/70">
+      仅当入站没有 User-Agent 时才用它；留空则不发送该头。
     </p>
   </SectionCard>
 
+  <SectionCard title="外观" :meta="themePref === 'system' ? `跟随系统 · 当前 ${themeEffective}` : `当前 ${themeEffective}`">
+    <div class="flex flex-wrap gap-2">
+      <button
+        v-for="t in THEMES"
+        :key="t.value"
+        class="btn btn-sm active:scale-[.97]"
+        :class="themePref === t.value ? 'btn-primary' : 'btn-outline'"
+        :title="t.hint"
+        @click="setTheme(t.value)"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+  </SectionCard>
   <div v-if="showConfirm" class="modal modal-open" role="dialog">
     <div class="modal-box max-w-2xl">
       <h3 class="text-[15px] font-semibold">

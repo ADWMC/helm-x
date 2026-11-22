@@ -4,7 +4,11 @@ import App from './App.vue'
 import { router } from './router'
 import { registerGlobalComponents } from './components'
 import { detectBackend } from './api/backend'
+import { initTheme } from './composables/useTheme'
 import './style.css'
+
+// 主题必须在首次渲染前落定：否则会先闪一下默认浅色再切深色。
+initTheme()
 
 // 先探测后端是否可用，再挂载。
 //

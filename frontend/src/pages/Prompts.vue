@@ -12,6 +12,19 @@ const busy = ref(false)
 const errMsg = ref('')
 const message = ref('')
 
+// ── 部署语义：同一段文本放哪、覆盖什么（2026-11-22 随主臂迁入）──
+const deploy = ref('insert')
+const DEPLOYS = [
+  { value: 'insert', label: '插入 system 消息', hint: '往 input 数组插一条 system（历史行为，实测生效）' },
+  { value: 'append', label: '追加到 instructions', hint: '保留官方 base，指令贴在其后（零额外暴露位）' },
+  {
+    value: 'replace-base',
+    label: '整段替换 instructions',
+    hint: '覆盖官方 base_instructions（21.3KB）。主臂模式必须用这一档，否则实测结论不成立',
+  },
+] as const
+const deployBusy = ref(false)
+
 // ── 注入频率（整体替换式保存，必须先读后写）──
 const settings = ref<AppSettings | null>(null)
 const every = ref(1)
@@ -23,10 +36,28 @@ const current = computed(() => modes.value.find((m) => m.id === selected.value))
 async function load() {
   try {
     modes.value = await api.promptModes()
+    deploy.value = await api.promptGetDeploy()
     selected.value = active.value?.id ?? modes.value[0]?.id ?? ''
     errMsg.value = ''
   } catch (e) {
     errMsg.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+/** 切换部署语义（立即生效，下次请求即用） */
+async function saveDeploy(next: string) {
+  if (next === deploy.value) return
+  deployBusy.value = true
+  message.value = ''
+  errMsg.value = ''
+  try {
+    await api.promptSetDeploy(next)
+    deploy.value = next
+    message.value = '部署语义已切换，下次请求即生效'
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    deployBusy.value = false
   }
 }
 
@@ -63,6 +94,12 @@ async function apply() {
   message.value = ''
   errMsg.value = ''
   try {
+    // 主臂类模式以"整段替换"为实测前提：先把部署语义对齐，再落模式，
+    // 避免"选了个跑不对的模式却看不出来"。
+    if (current.value?.deploy === 'replace-base' && deploy.value !== 'replace-base') {
+      await api.promptSetDeploy('replace-base')
+      deploy.value = 'replace-base'
+    }
     await api.promptSet(selected.value)
     message.value = '已切换，下次请求即生效'
     await load()
@@ -119,6 +156,7 @@ onMounted(() => {
             <span class="text-[13px] font-medium">{{ m.name }}</span>
             <span v-if="m.active" class="badge badge-xs badge-primary">使用中</span>
             <span v-if="m.default" class="badge badge-xs badge-ghost">默认</span>
+            <span v-if="m.deploy === 'replace-base'" class="badge badge-xs badge-warning">整段替换</span>
           </div>
           <div class="mt-0.5 text-[12px] text-base-content/60">{{ m.description }}</div>
           <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-base-content/60">
@@ -130,9 +168,39 @@ onMounted(() => {
     </div>
 
     <SkeletonRows v-else :rows="5" :cols="2" />
+  </SectionCard>
 
-    <p class="mt-3 text-[12px] text-base-content/70">
-      提示词按下方「注入频率」插入到 input 数组的第一条（已实测被上游接受且生效）。
+  <SectionCard title="部署语义" :meta="DEPLOYS.find((d) => d.value === deploy)?.label">
+    <div class="space-y-2">
+      <label
+        v-for="d in DEPLOYS"
+        :key="d.value"
+        class="flex cursor-pointer items-start gap-3 rounded-field border p-3 transition-colors"
+        :class="
+          deploy === d.value
+            ? 'border-primary bg-base-200'
+            : 'border-base-300 bg-base-100 hover:bg-base-200/60'
+        "
+      >
+        <input
+          type="radio"
+          class="radio radio-sm mt-0.5"
+          :value="d.value"
+          :checked="deploy === d.value"
+          :disabled="deployBusy"
+          @change="saveDeploy(d.value)"
+        />
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="text-[13px] font-medium">{{ d.label }}</span>
+            <span class="badge badge-xs badge-outline font-mono">{{ d.value }}</span>
+            <span v-if="d.value === deploy" class="badge badge-xs badge-primary">使用中</span>
+          </div>
+        </div>
+      </label>
+    </div>
+    <p v-if="deploy === 'replace-base'" class="mt-3 text-[12px] text-warning">
+      覆盖官方 base_instructions（21.3KB）。主臂依赖这一档。
     </p>
   </SectionCard>
 
@@ -154,22 +222,14 @@ onMounted(() => {
         保存
       </button>
     </div>
-    <p class="mt-3 text-[12px] text-base-content/70">
-      会话按 Session-Id/Thread-Id 头识别；codex 不发会话头时按首条用户消息指纹识别。
-      命中的会话注入成功后全程跟随（工具调用后的续轮也携带）；N=1 表示每个会话都注入
-      （推荐——实测裸请求会产生拒绝）。注入失败不占名额，下次请求立即重试。
-      未命中的会话原样转发，请求列表里不显示「注入」标记。
-    </p>
+    <p class="mt-2 text-[12px] text-base-content/70">1 = 每个会话都注入；命中后全程跟随。</p>
   </SectionCard>
 
-  <SectionCard v-if="current" title="预览" :meta="current.name">
+  <SectionCard v-if="current" title="预览" :meta="`${current.name} · ${current.bytes} 字节`">
     <pre
       class="max-h-[320px] overflow-y-auto rounded-field border border-base-300 bg-base-200/40 p-3.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap"
       >{{ current.preview }}</pre
     >
-    <p class="mt-2 text-[12px] text-base-content/70">
-      仅显示开头部分，完整内容 {{ current.bytes }} 字节。
-    </p>
   </SectionCard>
 </template>
 

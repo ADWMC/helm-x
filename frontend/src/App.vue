@@ -18,7 +18,10 @@ const route = useRoute()
 const router = useRouter()
 const drawerOpen = ref(false)
 
-const meta = computed(() => PAGE_META[route.path] ?? { title: '', desc: '' })
+const meta = computed(() => PAGE_META[route.path] ?? { title: '' })
+// 版本号单一来源：vite define 注入（frontend/package.json）
+declare const __APP_VERSION__: string
+const version = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'
 
 // ── 顶栏实时状态 ──
 const status = ref<StatusView | null>(null)
@@ -39,7 +42,7 @@ async function refreshStatus() {
   }
 }
 
-// 键盘：1–9,0 切页；Esc 关抽屉（DESIGN.md §3.5）
+// 键盘：1–8 切页，0 回运行日志；Esc 关抽屉（DESIGN.md §3.5）
 function onKey(e: KeyboardEvent) {
   const el = e.target as HTMLElement | null
   const typing = el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)
@@ -50,8 +53,7 @@ function onKey(e: KeyboardEvent) {
     return
   }
   if (/^[0-9]$/.test(e.key)) {
-    const idx = e.key === '0' ? 9 : Number(e.key) - 1
-    const path = HOTKEY_ORDER[idx]
+    const path = e.key === '0' ? '/logs' : HOTKEY_ORDER[Number(e.key) - 1]
     if (path) void router.push(path)
   }
 }
@@ -93,7 +95,7 @@ onUnmounted(() => {
     <div class="flex min-h-dvh min-w-0 flex-col">
       <!-- topbar：只放汉堡 + 面包屑 + 全局状态。不得与页面 h1 同字（修 V3） -->
       <header
-        class="app-topbar sticky top-0 z-10 flex min-h-14 items-center justify-between gap-3.5 px-5 md:px-8"
+        class="app-topbar sticky top-0 z-10 flex h-10 items-center justify-between gap-3 px-4 md:px-6"
       >
         <div class="flex items-center gap-2">
           <button
@@ -120,30 +122,44 @@ onUnmounted(() => {
         >
           <span
             class="status-dot size-1.5 rounded-full"
-            :class="proxyRunning ? 'is-live' : 'bg-base-content/30'"
+            :class="proxyRunning ? 'is-live' : 'bg-base-content/45'"
             aria-hidden="true"
           />
-          <span :class="proxyRunning ? 'text-base-content' : 'text-base-content/55'">
+          <span :class="proxyRunning ? 'text-base-content' : 'text-base-content/70'">
             {{ proxyLabel }}
           </span>
         </RouterLink>
       </header>
 
-      <main id="main" class="flex-1 px-5 pt-6 pb-12 md:px-8 md:pt-8">
+      <main id="main" class="flex-1 px-4 pt-5 pb-8 md:px-6">
         <!-- 页面标题：全页唯一一次 h1。display 类承担负字距+紧行高（§15） -->
-        <div class="mb-7">
-          <h1 class="display text-[26px] font-semibold text-balance">
+        <div class="mb-4">
+          <h1 class="display text-[20px] font-semibold text-balance">
             {{ meta.title }}
           </h1>
-          <p v-if="meta.desc" class="mt-1.5 max-w-[640px] text-[13px] text-pretty text-base-content/60">
-            {{ meta.desc }}
-          </p>
         </div>
 
         <!-- 页面切换暂不加 Transition 包装：enter-from 的 opacity:0
              在 WebView2 异常合成环境下有卡死风险（内容整块不显示）。 -->
         <RouterView />
       </main>
+
+      <!-- 状态栏：只放事实（监听 / 上游 / 请求数 / 版本）。JetBrains 式 24px 一行。 -->
+      <footer
+        class="app-statusbar mt-auto flex items-center gap-4 px-4 font-mono text-base-content/70 md:px-6"
+      >
+        <span class="inline-flex items-center gap-1.5">
+          <span
+            class="size-1.5 rounded-full"
+            :class="proxyRunning ? 'bg-success' : 'bg-base-content/45'"
+            aria-hidden="true"
+          />
+          {{ proxyRunning ? status?.proxy.listen : '未监听' }}
+        </span>
+        <span class="truncate">上游 {{ status?.proxy.upstream || '—' }}</span>
+        <span>请求 {{ status?.proxy.requests ?? 0 }}</span>
+        <span class="ml-auto">v{{ version }}</span>
+      </footer>
     </div>
   </div>
 </template>

@@ -54,7 +54,7 @@ const APP_VERSION = __APP_VERSION__
             :name="item.icon"
             :size="15"
             class="transition-colors"
-            :class="route.path === item.path ? 'text-primary' : 'text-base-content/45 group-hover:text-base-content/70'"
+            :class="route.path === item.path ? 'text-primary' : 'text-base-content/70 group-hover:text-base-content/70'"
           />
           <span>{{ item.label }}</span>
         </RouterLink>

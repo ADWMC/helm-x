@@ -34,14 +34,16 @@ const props = withDefaults(
  * 这件事无法从文件本身看出。需要时再加。
  */
 const PATHS: Record<string, string> = {
-  // 导航（名称与 router/nav.ts 的 NavItem.icon 一一对应）
+  // 导航（名称与 router/nav.ts 的 NavItem.icon 一一对应，一个页面对一个图标，不复用）
   dashboard: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',
   requests: 'M7 3v14m0 0l-3-3m3 3l3-3M17 21V7m0 0l3 3m-3-3l-3 3',
+  // 报文：三层叠片（捕获树 = 请求 / 上游 / 响应三层原始包）
+  capture: 'M12 3l8 4-8 4-8-4 8-4zM4 12l8 4 8-4M4 17l8 4 8-4',
   verify: 'M9 12.5l2 2 4.5-4.5M12 3a9 9 0 100 18 9 9 0 000-18z',
   services: 'M12 15a3 3 0 100-6 3 3 0 000 6zM12 2v2m0 16v2M4.2 4.2l1.4 1.4m12.8 12.8l1.4 1.4M2 12h2m16 0h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
   prompts: 'M4 6h16M4 12h11M4 18h11',
-  context: 'M4 7h16M4 12h16M4 17h10',
-  rewriter: 'M4 9a6 6 0 016-6h4m0 0l-2.5-2.5M14 3l2.5 2.5M20 15a6 6 0 01-6 6h-4m0 0l2.5 2.5M10 21l-2.5-2.5',
+  // 破甲：盾牌 + 勾（对请求做加壳，不是"校验"）
+  armor: 'M12 3l7 3v5.5c0 4-2.9 7.2-7 9.5-4.1-2.3-7-5.5-7-9.5V6l7-3zM9 12l2 2 4-4',
   qa: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 13.5v.01M9.5 9.5a2.5 2.5 0 114 2c-.8.6-1.5 1-1.5 2',
   logs: 'M5 4h14v16H5zm3 4h8M8 12h8M8 16h5',
 }

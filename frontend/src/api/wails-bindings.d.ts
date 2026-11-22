@@ -16,8 +16,7 @@ declare module '*/bindings/github.com/ADWMC/helm-x/internal/svc' {
     ProxyService: ServiceModule
     ConfigService: ServiceModule
     PromptService: ServiceModule
-    RewriterService: ServiceModule
-    RiskGateService: ServiceModule
+    CaptureService: ServiceModule
     VerifyService: ServiceModule
     LogService: ServiceModule
     QAService: ServiceModule
@@ -29,4 +28,3 @@ declare module '*/bindings/github.com/ADWMC/helm-x/internal/svc' {
 interface ServiceModule {
   [method: string]: (...args: never[]) => Promise<unknown>
 }
-
