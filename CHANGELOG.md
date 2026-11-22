@@ -6,6 +6,10 @@
 - 切片原来是纯随机 2–4 字符，实测会把 `IOCTL` 切成 `OCTL`、`base_url` 切成 `ase_url` —— 模型拿到不存在的名字，答案直接跑偏。
 - `internal/inject`：新增 `asciiRuns()`，把 ASCII 标识符/路径/命令（长度 ≥2 的 `[A-Za-z0-9_\-.]` 连续段）标为受保护位置，切片起点或终点落在其中就重抽。回归测试 `TestCodebookKeepsIdentifiers`（slots 1–4 全档断言 `IOCTL` / `base_url` / `/v1/responses` 原样保留）。
 - 界面：「槽位」→「每条请求替换 [N] 个片段」，并加 tooltip「每条命中的请求抽几个片段换成伪词（1–8）」。
+### 修复：测试框架硬编码 codex 路径，导致每个用例 0.1s NO_OUTPUT
+- `tests/helm-x-test-suite.py` 原本写死 `%APPDATA%\npm\node_modules\@openai\codex\bin\codex.js`；本机 codex 装在 `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe`，于是每个用例都以 `Cannot find module` 立刻失败。
+- 改为探测式：`HELMX_CODEX_BIN` → npm 全局 `codex.js`（走 node）→ 原生 `codex.exe`，都找不到才回落原路径（保留可读报错）。
+- 附带记录：本轮 ACL/ACE 实验中 relay 的 `gpt-5.6-luna` / `gpt-5.6-sol` 通道持续 429（重试 11 次仍是 429），`gpt-6.1-sol` 正常 —— 跑批前先探通道，否则会被误判成"模型没产出"。
 ### 新增：主臂资产指纹检查 + 主臂技术分析
 - `verify` 第 10 项「主臂资产」：钉死 `ctf-ac` 的 28,451 字节与 `sha256 45b93af8…`。主臂靠整段替换 `instructions` 生效，资产被误改（忘跑 `go generate`、重新生成、密钥不匹配）时界面完全看不出来 —— 现在自检直接 FAIL 并给出比对。
 - 自检项数 9 → 10（e2e 时 11），`selfcheck_test` 同步。

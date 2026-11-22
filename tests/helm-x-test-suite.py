@@ -486,7 +486,24 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
     # gpt-6.1 / 6.1 均 503 无通道）。
     node = r"C:\Program Files\nodejs\node.exe"
     codex_js = r"C:\Users\Administrator\AppData\Roaming\npm\node_modules\@openai\codex\bin\codex.js"
-    cmd = ([node, codex_js, "exec", "-m", MODEL, "--skip-git-repo-check"]
+    # 2026-11-22 修正：不再硬编码 npm 全局路径。本机 codex 装在
+    # %LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe，硬编码路径让每个用例
+    # 0.1s 就 NO_OUTPUT（node 报 Cannot find module）。按序探测：
+    #   HELMX_CODEX_BIN 环境变量 → npm 全局 codex.js（走 node）→ 原生 codex.exe
+    codex_exe = os.path.join(
+        os.environ.get("LOCALAPPDATA", r"C:\Users\Administrator\AppData\Local"),
+        r"Programs\OpenAI\Codex\bin\codex.exe",
+    )
+    override = os.environ.get("HELMX_CODEX_BIN", "").strip()
+    if override:
+        head = [override]
+    elif os.path.exists(codex_js) and os.path.exists(node):
+        head = [node, codex_js]
+    elif os.path.exists(codex_exe):
+        head = [codex_exe]
+    else:
+        head = [node, codex_js]  # 保持原行为，让报错信息可读
+    cmd = (head + ["exec", "-m", MODEL, "--skip-git-repo-check"]
            + CODEX_ARGS + [prompt])
 
     home = None
