@@ -6,6 +6,11 @@
 - 切片原来是纯随机 2–4 字符，实测会把 `IOCTL` 切成 `OCTL`、`base_url` 切成 `ase_url` —— 模型拿到不存在的名字，答案直接跑偏。
 - `internal/inject`：新增 `asciiRuns()`，把 ASCII 标识符/路径/命令（长度 ≥2 的 `[A-Za-z0-9_\-.]` 连续段）标为受保护位置，切片起点或终点落在其中就重抽。回归测试 `TestCodebookKeepsIdentifiers`（slots 1–4 全档断言 `IOCTL` / `base_url` / `/v1/responses` 原样保留）。
 - 界面：「槽位」→「每条请求替换 [N] 个片段」，并加 tooltip「每条命中的请求抽几个片段换成伪词（1–8）」。
+### 新增：主臂资产指纹检查 + 主臂技术分析
+- `verify` 第 10 项「主臂资产」：钉死 `ctf-ac` 的 28,451 字节与 `sha256 45b93af8…`。主臂靠整段替换 `instructions` 生效，资产被误改（忘跑 `go generate`、重新生成、密钥不匹配）时界面完全看不出来 —— 现在自检直接 FAIL 并给出比对。
+- 自检项数 9 → 10（e2e 时 11），`selfcheck_test` 同步。
+- 新增 `docs/MAIN-ARM.md`：主臂的结构地图（18 节 / 26,031 字符）、机制清单（8 条，附原文）、与默认档的对照、成本（每次 +33% instructions / 约 +1.2k tokens）、5 条风险、4 个待做实验、4 条改进提案。
+- 关键结论：主臂不是人设型破甲 —— 全篇 `luna` 0 次、`red team` 0 次，安全性词表（cyber/policy/harm/refuse/decline/prohibit）全为 0；它删掉官方安全章节、改写"要不要问权限"那几节，保留 6.3KB 的工具纪律章节，因此工具行为不退化。
 ### 文档：把「特此说明」提到 README 首屏
 - 原实现把"本项目由 AI 生成"藏在文末 License 段。现在提到首屏（Star/群链接之后、截图之前），只保留一句：> **特此说明**：本项目由 AI 生成（DeepSeek Harness + Mimo V2.6 Pro），代码质量仅供参考。
 - 许可与免责仍留给文末 License 段，不塞进声明里。

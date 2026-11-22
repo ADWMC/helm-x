@@ -7,6 +7,8 @@
 package selfcheck
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -64,12 +66,18 @@ func (r Report) Text() string {
 // Progress 在每项检查完成时回调，供 GUI 展示进度。
 type Progress func(step, total int, c Check)
 
+const (
+	// mainArmBytes / mainArmSHA256 钉住主臂资产的指纹（2026-11-22 定稿）。
+	mainArmBytes  = 28451
+	mainArmSHA256 = "45b93af8f4c7ed79fbdff97c381dda3966ba5ae0097460ba585f3b4f968e2392"
+)
+
 // Run 执行全部检查。e2e 为 true 时额外跑一次 codex 激活验证。
 func Run(e2e bool, progress Progress) Report {
 	var r Report
-	total := 9
+	total := 10
 	if e2e {
-		total = 10
+		total = 11
 	}
 	step := 0
 	add := func(c Check) {
@@ -217,7 +225,25 @@ func Run(e2e bool, progress Progress) Report {
 		add(Check{Name: "部署语义", OK: true, Skip: true, Detail: "未找到 helmx 配置"})
 	}
 
-	// 10. e2e
+	// 10. 主臂资产指纹
+	//
+	// 主臂（ctf-ac）生效靠"整段替换官方 base_instructions"，产物就是那 28KB 文本。
+	// 它一旦被误改（改了某段忘了 go generate、资产重新生成、HELMX_ASSET_KEY 不匹配），
+	// 装上去就变成另一份提示词，而界面上完全看不出来。这里钉住字节数与 sha256。
+	//
+	// 真的有意改主臂时：同步更新下面两个常量与 TestMigratedPromptAssets。
+	if arm := assets.Prompt("ctf-ac"); arm == "" {
+		add(Check{Name: "主臂资产", OK: false, Detail: "ctf-ac 资产为空（解密失败或未生成？）"})
+	} else if sum := sha256.Sum256([]byte(arm)); hex.EncodeToString(sum[:]) != mainArmSHA256 || len(arm) != mainArmBytes {
+		add(Check{Name: "主臂资产", OK: false,
+			Detail: fmt.Sprintf("%d 字节 sha256 %s…，期望 %d 字节 %s…；若确实改了主臂请同步 selfcheck 常量",
+				len(arm), hex.EncodeToString(sum[:])[:8], mainArmBytes, mainArmSHA256[:8])})
+	} else {
+		add(Check{Name: "主臂资产", OK: true,
+			Detail: fmt.Sprintf("%d 字节 · sha256 %s…", len(arm), mainArmSHA256[:8])})
+	}
+
+	// 11. e2e
 	if e2e {
 		out, err := runCodex()
 		switch {
