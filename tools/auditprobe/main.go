@@ -22,8 +22,6 @@ import (
 	"github.com/ADWMC/helm-x/internal/codexcfg"
 	"github.com/ADWMC/helm-x/internal/proxy"
 	"github.com/ADWMC/helm-x/internal/tamper"
-
-	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 func hdr(s string) { fmt.Printf("\n=== %s ===\n", s) }
@@ -42,9 +40,10 @@ type probeCfg struct{ tm proxy.TamperMatcher }
 func (c probeCfg) PromptInstruction() string   { return "" }
 func (c probeCfg) InjectEvery() int            { return 1 }
 func (c probeCfg) FallbackUserAgent() string   { return "" }
-func (c probeCfg) Rewriter() proxy.Rewriter    { return nil }
-func (c probeCfg) Gate() *riskgate.Gate        { return nil }
 func (c probeCfg) Tamper() proxy.TamperMatcher { return c.tm }
+func (c probeCfg) Deploy() string              { return "insert" }
+func (c probeCfg) EncodeEnabled() bool         { return false }
+func (c probeCfg) CodebookSlots() int          { return 0 }
 func (c probeCfg) Retry() proxy.RetryOptions   { return proxy.RetryOptions{} }
 
 func main() {

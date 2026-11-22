@@ -38,8 +38,8 @@ var targetFiles = []string{
 	"data/prompt-v6.md",
 	"data/prompt-v2.md",
 	"data/prompt-ctf-scoring.md",
+	"data/prompt-a-composed.md",
 	"data/tamper_rules.txt",
-	"data/rewrite_prompt.txt",
 	"data/qa.json",
 }
 
