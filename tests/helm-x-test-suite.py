@@ -119,6 +119,56 @@ class OverallStats:
 # ============================================================
 
 MODEL = "gpt-6.1-sol"
+# 是否复用当前 codex 配置（--no-isolate）。测 helm-x 代理时必须为 True：
+# 私有 CODEX_HOME 没有 provider/base_url/auth，请求会绕开代理直连默认上游。
+SHARED_HOME = False
+# 端点与 provider 仅用于报告标注（从 ~/.codex/config.toml 解析，或 --endpoint 覆盖）
+ENDPOINT = ""
+PROVIDER = ""
+
+
+def _real_upstream(base: str) -> str:
+    """base_url 指向本机代理时，从 helm-x 的还原点里取真实上游。
+
+    `helmx proxy` 会把 active provider 的 base_url 改成 127.0.0.1:1800，
+    原值存在 `config.toml.helmx-proxy-bak`。报告里要说清"实际打的是谁"，
+    否则只看到一个 loopback 地址，无法判断这次跑的是哪个中转站。
+    """
+    if not base or "127.0.0.1" not in base and "localhost" not in base:
+        return base
+    home = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+    bak = os.path.join(home, "config.toml.helmx-proxy-bak")
+    try:
+        text = open(bak, encoding="utf-8").read()
+    except OSError:
+        return base
+    import re as _re
+    m = _re.search(r'base_url\s*=\s*"([^"]+)"', text)
+    return m.group(1) if m else base
+
+
+def _read_codex_env() -> tuple[str, str, str]:
+    """从 ~/.codex/config.toml 读 (model, provider, base_url)。
+
+    只做够用的行级解析：顶层 `model` / `model_provider`，以及对应
+    `[model_providers.<name>]` 段里的 `base_url`。解析不到就返回空串。
+    """
+    import re as _re
+
+    home = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+    path = os.path.join(home, "config.toml")
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return "", "", ""
+    model = (_re.search(r'(?m)^model\s*=\s*"([^"]+)"', text) or [None, ""])[1]
+    prov = (_re.search(r'(?m)^model_provider\s*=\s*"([^"]+)"', text) or [None, ""])[1]
+    base = ""
+    if prov:
+        m = _re.search(r'\[model_providers\.' + _re.escape(prov) + r'\]([\s\S]*?)(?=\n\[|\Z)', text)
+        if m:
+            base = (_re.search(r'base_url\s*=\s*"([^"]+)"', m.group(1)) or [None, ""])[1]
+    return model, prov, base
 # 用户口径窗口：正式交付首字是否在这个秒数内到达（不影响判档，只影响「按时率」）
 WINDOW = 60.0
 # 透传给 codex exec 的额外参数（--codex-arg 累积；如 -c model_reasoning_effort="low"）
@@ -503,12 +553,22 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
         head = [codex_exe]
     else:
         head = [node, codex_js]  # 保持原行为，让报错信息可读
+    # 共用当前配置时（--no-isolate）没有私有 rollout 可解析，于是让 codex 把
+    # 最终回复直接写到文件：证据不依赖 stdout 抓取，也避免"上游答了、codex 没打印"
+    # 被记成 NO_OUTPUT（2026-11-22 实测踩到）。
+    last_msg = None
+    if SHARED_HOME and RUN_DIR is not None:
+        safe_id = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in case_id)
+        case_dir = (RUN_DIR / "work" / safe_id).resolve()
+        case_dir.mkdir(parents=True, exist_ok=True)
+        last_msg = str(case_dir / "last-message.md")
     cmd = (head + ["exec", "-m", MODEL, "--skip-git-repo-check"]
+           + (["--output-last-message", last_msg] if last_msg else [])
            + CODEX_ARGS + [prompt])
 
     home = None
     env = None
-    if RUN_DIR is not None:
+    if RUN_DIR is not None and not SHARED_HOME:
         # 必须绝对化：cwd 改成用例工作目录后，相对路径的 CODEX_HOME 会解析不到
         # （实测 codex 立刻退出：CODEX_HOME points to ... but that path does not exist）
         home = _case_home(RUN_DIR, case_id).resolve()
@@ -554,6 +614,17 @@ def run_single_test(prompt: str, timeout: int = 300, category: str = "",
         )
         elapsed = time.time() - start
         tl = extract_timeline(_case_files())
+
+        # 共用配置时没有 rollout 可解析：用 codex 写出的 last-message 兜底，
+        # 否则"上游答了、codex 没打印"会被误记为 NO_OUTPUT（2026-11-22 实测）。
+        if last_msg and not (tl.get("final_text") or "").strip():
+            try:
+                written = open(last_msg, encoding="utf-8").read().strip()
+            except OSError:
+                written = ""
+            if written:
+                tl["final_text"] = written
+                result.stdout = written
 
         # cyber：错误面判定（工具输出不进这个面）
         # 只判错误事件面。codex 的 stderr 混着工具回显与助手流文本，拿它当错误面会把
@@ -841,8 +912,12 @@ def main():
     parser.add_argument('--ids', type=str, help='仅运行指定用例 ID（逗号分隔，如 VE04,VE05,MW01,GC05）')
     parser.add_argument('--repeat', type=int, default=1, help='每个用例重复次数（n≥3 口径）')
     parser.add_argument('--arm', type=str, help='消融臂标签（写入报告标题，如 A0/A1/v2）')
-    parser.add_argument('--model', type=str, default="gpt-6.1-sol",
-                        help='被测通道（默认 gpt-6.1-sol；如 gpt-6-sol / gpt-6-astra）')
+    parser.add_argument('--model', type=str, default="",
+                        help='被测通道（留空 = 读当前 ~/.codex/config.toml 的 model）')
+    parser.add_argument('--no-isolate', action='store_true',
+                        help='不建私有 CODEX_HOME，直接用当前 codex 配置（测 helm-x 代理时必须开，否则 provider/base_url/auth 全丢）')
+    parser.add_argument('--endpoint', type=str, default="",
+                        help='仅用于报告标注的上游地址（留空 = 读当前配置里 active provider 的 base_url）')
     parser.add_argument('--codex-arg', action='append', default=[],
                         help='透传给 codex exec 的参数，可重复（如 -c model_reasoning_effort="low"）')
     parser.add_argument('--parallel', type=int, default=1,
@@ -854,8 +929,15 @@ def main():
     parser.add_argument('--prompts-file', type=str, help='外部题库 JSON（[{id,prompt,category}]，用于 poxian 负桶等）')
     args = parser.parse_args()
 
-    global MODEL
-    MODEL = args.model
+    global MODEL, CODEX_ARGS, WINDOW, PARALLEL, RETRIES, SHARED_HOME, ENDPOINT, PROVIDER
+    cfg_model, cfg_provider, cfg_base = _read_codex_env()
+    MODEL = args.model or cfg_model or "gpt-6.1-sol"
+    PROVIDER = cfg_provider
+    ENDPOINT = _real_upstream(args.endpoint or cfg_base)
+    SHARED_HOME = bool(args.no_isolate)
+    if SHARED_HOME and PARALLEL > 1:
+        print("提示: --no-isolate 与 --parallel>1 冲突（共用一份 CODEX_HOME），已把并行度压到 1")
+        args.parallel = 1
     CODEX_ARGS = list(args.codex_arg or [])
     WINDOW = float(args.window)
     PARALLEL = max(1, int(args.parallel))
@@ -916,6 +998,8 @@ def main():
     print(f"判据: judge v2（只判 assistant 正文 + 第一人称标记 + 回显剥离）")
     if args.arm:
         print(f"消融臂: {args.arm}")
+    isolation = "复用当前配置" if SHARED_HOME else "私有 CODEX_HOME"
+    print(f"模型: {MODEL}   endpoint: {ENDPOINT or '(未配置)'}   provider: {PROVIDER or '-'}   隔离: {isolation}")
     print(f"用例数: {len(cases)}")
     print(f"类别: {', '.join(set(c.category for c in cases))}")
     print(f"超时: {args.timeout}s")
@@ -939,6 +1023,12 @@ def main():
     if args.arm:
         report = report.replace("# helm-x 测试报告", f"# helm-x 测试报告（消融臂 {args.arm}）", 1)
         report = report.replace("测试版本: v0.0.2-beta", f"测试版本: v0.0.2-beta  判据: judge v2  臂: {args.arm}", 1)
+    report = report.replace(
+        "测试用例:",
+        f"通道: {MODEL}  ·  端点: {ENDPOINT or '(未配置)'}  ·  provider: {PROVIDER or '-'}"
+        f"  ·  隔离: {'复用当前配置' if SHARED_HOME else '私有 CODEX_HOME'}\n\n测试用例:",
+        1,
+    )
 
     # 保存报告
     with open(args.output, 'w', encoding='utf-8') as f:
@@ -956,6 +1046,10 @@ def main():
         run_meta["cases"] = [c.id for c in cases]
         mode = _active_prompt_mode()
         run_meta["prompt_mode"] = mode
+        run_meta["model"] = MODEL
+        run_meta["provider"] = PROVIDER
+        run_meta["endpoint"] = ENDPOINT
+        run_meta["isolated"] = not SHARED_HOME
         cand = Path("internal/assets/data") / f"prompt-{mode}.md"
         run_meta["prompt_file"] = str(cand) if mode and cand.exists() else ""
         run_meta["prompt_sha256"] = _sha256(cand) if run_meta["prompt_file"] else ""
