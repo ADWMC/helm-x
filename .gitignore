@@ -55,3 +55,12 @@ tests/ABLATION-STATUS.md
 tests/RETEST4-FINDINGS.md
 tests/TEST_STANDARD.md
 tests/run-ablation.ps1
+
+# Windows 版本资源（wails3 generate syso 产物，可重新生成）
+/*.syso
+
+# 本地临时产物（截图 / 探测目录）
+.tmp-*
+
+# 取证工具的工作目录（每次分析自动创建）
+helmd-cases/
