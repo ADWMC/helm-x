@@ -135,17 +135,21 @@ def _real_upstream(base: str) -> str:
     原值存在 `config.toml.helmx-proxy-bak`。报告里要说清"实际打的是谁"，
     否则只看到一个 loopback 地址，无法判断这次跑的是哪个中转站。
     """
-    if not base or "127.0.0.1" not in base and "localhost" not in base:
+    if not base or ("127.0.0.1" not in base and "localhost" not in base):
         return base
+    # 还原点可能来自上一次代理运行（上游换过就不准），所以只当参考值报出来，
+    # 并显式标注"经 helm-x 代理"。要精确值就传 --endpoint。
     home = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
     bak = os.path.join(home, "config.toml.helmx-proxy-bak")
     try:
         text = open(bak, encoding="utf-8").read()
     except OSError:
-        return base
+        return f"{base}（经 helm-x 代理）"
     import re as _re
     m = _re.search(r'base_url\s*=\s*"([^"]+)"', text)
-    return m.group(1) if m else base
+    if not m:
+        return f"{base}（经 helm-x 代理）"
+    return f"{m.group(1)}（经 helm-x 代理 · 入口 {base}）"
 
 
 def _read_codex_env() -> tuple[str, str, str]:
