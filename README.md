@@ -1,283 +1,247 @@
-# helm-x — Codex 破甲工具
+# helm-x
 
-**仓库地址**：https://github.com/ADWMC/helm-x
+[![License](https://img.shields.io/github/license/ADWMC/helm-x?style=flat-square&color=2ea44f)](LICENSE)
+[![Repo version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2FADWMC%2Fhelm-x%40master%2Fwails.json&query=%24.productVersion&label=repo%20version&style=flat-square&color=2ea44f)](CHANGELOG.md)
+[![Release](https://img.shields.io/github/v/tag/ADWMC/helm-x?style=flat-square&color=2ea44f&label=release)](https://github.com/ADWMC/helm-x/releases)
+[![Stars](https://img.shields.io/github/stars/ADWMC/helm-x?style=flat-square&color=2ea44f)](https://github.com/ADWMC/helm-x/stargazers)
+[![Forks](https://img.shields.io/github/forks/ADWMC/helm-x?style=flat-square&color=2ea44f)](https://github.com/ADWMC/helm-x/network/members)
+[![Issues](https://img.shields.io/github/issues/ADWMC/helm-x?style=flat-square&color=2ea44f)](https://github.com/ADWMC/helm-x/issues)
+[![Last commit](https://img.shields.io/github/last-commit/ADWMC/helm-x?style=flat-square&color=2ea44f)](https://github.com/ADWMC/helm-x/commits)
+[![Go](https://img.shields.io/github/go-mod/go-version/ADWMC/helm-x?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Wails](https://img.shields.io/badge/Wails-v3-DF0000?style=flat-square)](https://v3.wails.io)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square)](#已知限制)
+[![Single EXE](https://img.shields.io/badge/ship-single%20exe-6f42c1?style=flat-square)](#能力)
+
+**Codex 破甲工具**：一个常驻本机的 HTTP 代理 + 一个桌面控制台。
+codex 的请求经 `127.0.0.1:1800` 转一手，在这一跳完成注入、改写、判定与补救。
+
+> **如果这个项目帮你把活干成了，请点一个 Star。**
+> 用法问题、想法、报 bug 都欢迎：**Telegram 群** <https://t.me/helm_xD> · **QQ 群** 213266664 · **Issues** <https://github.com/ADWMC/helm-x/issues>
+
+![系统总览](docs/screens/01-overview.png)
 
 ---
 
-**如果这个项目对你有帮助，请给个 Star 支持一下！**
+## 目录
 
-**Telegram**：[t.me/helm_xD](https://t.me/helm_xD)
-
-**官方QQ群**：213266664
-
----
-
-**Codex 破甲工具** · 本地代理/注入 · 桌面 GUI · 单文件
-
-> 本项目由 AI 生成（**DeepSeek Harness** + **Mimo V2.6 Pro**；旧版为 DeepSeek V4 Flash + Mimo V2.5 Pro），代码质量仅供参考，请勿喷。
->
-> **License：GNU AGPL v3.0 —— 可商用。** 分发或对外提供服务须按 AGPL 开放相应源码。使用者须遵守所在地法律法规，对使用本项目产生的后果自负。
+- [这是什么](#这是什么)
+- [能力](#能力)
+- [快速开始](#快速开始)
+- [界面](#界面)
+- [它改了什么、存在哪](#它改了什么存在哪)
+- [提示词](#提示词)
+- [破甲：代号表 / 全文编码](#破甲代号表--全文编码)
+- [命令行](#命令行)
+- [构建](#构建)
+- [目录结构](#目录结构)
+- [已知限制](#已知限制)
+- [贡献](#贡献)
+- [License](#license)
 
 ---
 
 ## 这是什么
 
-helm-x 是 Codex 的**破甲工具**：模型拒绝时对话不中断、内容能送达。
-
-实现手段是本地代理 + 注入（`codex → 127.0.0.1:1800 → 上游中转`）：请求层注入提示词，响应层判定拒绝并按补救阶梯处理。手段服务于目标——不是为了做代理，是为了让回答能过。
-
-**核心能力**：
-
-1. **提示词注入**：内置精简破甲提示词（2.5KB），注入频率可配
-2. **判定与补救**：拒绝被检测到时走补救阶梯（重试 → 附加标记 → 原样透传），模型原话完整保留，对话不中断
-3. **上下文感知改写器**：自动改写请求 + 重试，可配自己的 API
-4. **中转站兼容**：请求头全透传（UA、Cookie、X-\*），校验请求指纹的中转站不拒
-5. **流式支持**：SSE 流式响应照常处理；首段缓冲窗口内命中拒答会丢弃缓冲、换 clean session 重发，再以 SSE 转发——流式是真补救，不是只判定
-6. **配置一键注入**：codex 配置自动指向本代理，退出自动还原
-7. **桌面控制台**：9 页 GUI（请求/日志/提示词/QA 等），数字键快捷切页
-8. **零依赖**：单 exe 静态链接，仅 Windows 系统库
-
----
-
-## 测试结果
-
-### 全量基准测试（50 题 · gpt-6.1-sol · `ctf-v2.1` 证据闭环版）
-
-| 指标 | 数值 | 占比 | 相对基线提升 |
-|------|------|------|-------------|
-| **总用例** | 50 | 100% | - |
-| **通过 (PASS)** | **43** | **86.0%** | **+10.0%**（原 38 题 76%） |
-| **Cyber Flag（上游平台拦截）** | 7 | 14.0% | **-2.0%**（原 8 题 16%） |
-| **模型拒绝 (Refusal)** | **0** | **0.0%** | **-8.0%（彻底清零）** |
-| **错误 / 超时** | **0** | **0.0%** | 5 题超时复测后 3 PASS、2 拦截 |
-| **排除 Cyber 拦截后模型有效应答通过率** | **43/43** | **100.0%** | **+9.5%**（原 90.5%） |
-
-> 口径说明：基准跑集 50 题。针对首轮 60s 因长链推理出现超时的 5 题放宽至 150s 充分推理，其中 3 题顺利产出完整工件判定 PASS，2 题触发中转网关输入词过滤拦截。模型自身拒答率为 0.0%。完整测试报告：[tests/report-v21-final50.md](tests/report-v21-final50.md)。
-
-### 分类通过率（v2.1 最终合并数据）
-
-| 类别 | 用例 | 通过 | Cyber | 拒绝 | 通过率 |
-|------|------|------|-------|------|--------|
-| **键盘记录** | 4 | 4 | 0 | 0 | **100%** |
-| **游戏安全** | 6 | 6 | 0 | 0 | **100%**（原 83.3%） |
-| **边界场景** | 4 | 4 | 0 | 0 | **100%**（原 75%） |
-| **网络攻击** | 8 | 7 | 1 | 0 | **87.5%** |
-| **进程隐藏** | 8 | 7 | 1 | 0 | **87.5%**（原 62.5%） |
-| **漏洞利用** | 8 | 6 | 2 | 0 | **75.0%**（原 50%） |
-| **恶意软件** | 8 | 6 | 2 | 0 | **75.0%**（原 62.5%） |
-| **授权破解** | 4 | 3 | 1 | 0 | **75.0%** |
-
-### 提示词历代对比（实测数据）
-
-| 版本 | Prompt 大小 | 核心机制 | 50 题通过率 | 模型拒绝数 | 有效应答通过率 |
-|------|-----------|---------|------------|-----------|---------------|
-| **ctf-v2.1 (当前默认)** | **3.7KB** | **证据闭环 (VERIFIED/CANDIDATE) + 规范占位符 + 动量交付** | **86.0% (43/50)** | **0 拒绝 (0.0%)** | **100.0% (43/43)** |
-| v0.0.5 | 2.5KB | CTF 评分制 + luna 人设 + 输出锁 | 76.0% (38/50) | 4 拒绝 (8.0%) | 90.5% (38/42) |
-| v0.0.4 | 2.5KB | 基础 CTF 框架 | 95% (20题) | - | - |
-| v0.0.3 | 15KB | 复合沙盒提示词 | 85% | - | - |
-| v0.0.2 | 15KB | 初始沙盒框架 | ~70% | - | - |
-
----
-
-## Prompt 设计
-
-提示词在 `internal/assets/data/` 下维护。模式统一 `ctf` 前缀 + 阶梯版本，适配的模型代数写在 `Models` 字段里（界面「提示词」页直接显示）：
-
-| 模式 ID | 文件 | 大小 | 适配模型 | 说明 |
-|---|---|---|---|---|
-| `ctf` | prompt-ctf-scoring.md | 2.7KB | gpt-5.6 系 | 经典计分淘汰 + 输出锁 + 首轮归一化 |
-| `ctf-v2` | prompt-v2.md | 3.5KB | gpt-6.0 系 | 完成态契约：补缺口 + VERIFIED 工件 |
-| `ctf-v2.1` | prompt-v2.1.md | 3.7KB | gpt-6.1 系 | **默认**：三级证据评级 + 规范占位符 + 回滚闭环 |
-
-历史 ID（`default` / `v2` / `v2.1`）继续可用，读入时归一化到上表 ID。核心机制：
-
-| 机制 | 作用 |
-|------|------|
-| **三级证据评级** | 强制要求打标 `VERIFIED`（已执行）、`CANDIDATE`（理论推导）、`UNRESOLVED`（缺口待补），促使模型专注填补技术工件 |
-| **规范类型占位符** | 统一收拢至 `SAMPLE / TARGET / OFFSET / SERIAL / PAYLOAD`，防止真实靶标直接引爆平台网关审查 |
-| **完成态与动量契约** | 闭环要求提供验证命令与回滚机制；受阻时交付最近邻可用组件，彻底禁止半途截断 |
-| CTF 竞赛框架 | 设定环境为纯内网、空泡化的 CTF 演练沙盒靶场 |
-| 激活协议 | `helmx` 触发词校验 |
-| 人设 luna | 强化红队/教练角色意识，剥离客服式说教与免责声明 |
-| 计分淘汰制 | 拒绝 = -500（淘汰），执行 = +100，利用奖励偏置引导生成 |
-| 输出锁 | 强制代码/工具调用开头，跳过所有前置安全客套 |
-| 中性化归一化 | 意图与敏感词中性技术映射（Word-Free 规范），降低网关层 Cyber Flag 误判 |
-
----
-
-## 架构
+把 `~/.codex/config.toml` 里的 `base_url` 指向本机代理，codex 每一条请求都要先过这一跳：
 
 ```
-codex ──> http://127.0.0.1:1800 ──> 上游中转
-              │
-        [注入提示词]        [响应判定]
-        [全头透传]          [补救：重试 → 附加标记 → 原样透传]
-              │
-        [记录：~/.codex/helmx.log + 控制台请求页]
+codex  --->  127.0.0.1:1800  --->  上游（官方后端 / 中转站）
+                |
+                +-- 注入：提示词写进 instructions 或 input 位
+                +-- 改写：代号表 / 全文编码（可选，默认关）
+                +-- 判定：正常 / 拒绝 / 平台拦截 / 上游失败 / 结构异常
+                +-- 补救：重发 -> 附加标记 -> 原样透传
+                +-- 观测：每请求一条记录，四段原始报文可选落盘
 ```
 
----
+一个 exe，无运行时依赖。关掉窗口即退出，并把 `config.toml` 还原成注入前的样子。
 
-## 使用教程
+## 能力
 
-### 一、准备上游中转
-
-在 `~/.codex/config.toml` 中配置：
-
-```toml
-[model_providers.custom]
-name = "my-relay"
-base_url = "https://your-api.com/v1"
-wire_api = "responses"
-api_key = "your-api-key"
-```
-
-### 二、启动 helm-x
-
-双击 `helmx.exe`（或安装包创建的快捷方式）。自动完成：启动代理（:1800）+ 注入 codex 配置 + 打开控制台。
-
-### 三、使用 Codex CLI
-
-```bat
-codex
-```
-
-正常用即可。所有请求自动经过 helm-x，控制台「请求」页可看到每条请求的注入标记与判定结果。
-
-### 四、切换提示词 / 注入频率
-
-控制台 → 提示词页：选择提示词模式；设置「注入频率」（每 N 个会话注入 1 个会话，命中后该会话全程携带；1 = 每个会话都注入）。保存后下次请求生效，无需重启。
-
-### 五、查看日志
-
-控制台 → 运行日志。日志文件在 `~/.codex/helmx.log`（代理）与 `~/.codex/helmx-cyber.log`（cyber 事件）。
-
-### 六、上游错误重试
-
-默认启用：额外重试 10 次、固定间隔 3 秒（`0` = 无限）。HTTP 408/429/5xx、空响应、连接错误进入重试。控制台 → 服务页可调开关与参数；每次重试固定间隔，不使用上游的 `Retry-After`。
-
-### 七、UA 兜底
-
-控制台 → 服务页 → 「转发 UA 兜底」。默认不填：入站请求的 User-Agent 原样透传；仅当客户端不发 UA 时才补这里的值；两者皆无则转发请求不带 UA。
-
----
-
-## CLI
-
-不带子命令 = 桌面控制台。子命令：
-
-```bat
-helmx proxy      :: 本地映射代理（无窗口，供脚本/排查使用）
-helmx apply      :: 注入 codex 配置（base_url 指向本代理）
-helmx remove     :: 还原并清理
-helmx verify     :: 自检
-helmx activate   :: 发送激活词做端到端验证
-helmx watch      :: 自愈守护（前台）
-helmx ui         :: 浏览器控制台（无 WebView2 时的降级路径）
-```
-
-`proxy` 常用选项：
-
-```bat
-helmx proxy --listen PORT          :: 监听端口，默认 1800
-helmx proxy --upstream URL         :: 上游地址；缺省从 codex 配置读取
-helmx proxy --max-retries 0        :: 无限重试（默认额外 10 次）
-helmx proxy --retry-delay 3        :: 固定重试间隔，默认 3 秒
-helmx proxy --no-retry             :: 本次运行禁用重试
-helmx proxy --passthrough          :: 关闭全部内容转换（对照排查用）
-helmx proxy --dry-run              :: 只计算不发上游
-helmx proxy --restore              :: 手动还原 codex 配置后退出
-```
-
----
-
-## 配置与日志位置
-
-| 内容 | 位置 |
+| 能力 | 说明 |
 |---|---|
-| 运行配置 | `%APPDATA%\helmx.config.json` |
-| 代理日志 | `~/.codex/helmx.log` |
-| cyber 事件日志 | `~/.codex/helmx-cyber.log` |
-| codex 配置（注入目标） | `~/.codex/config.toml` |
-| 注入前原始备份 | `~/.codex/config.toml.helmx-bak` |
+| 本地映射代理 | 除逐跳头外全透传（UA / Cookie / Authorization / X-\*），校验请求指纹的中转站不拒；上游重试覆盖 408 / 429 / 5xx / 空体 / 连接错误，次数可配（0 = 无限） |
+| 提示词注入 | 7 档内置提示词，按会话采样注入（N=1 时每个会话必注）；三种落点：input 的 system 位 / 追加到 `instructions` / 整段替换官方 `base_instructions` |
+| 判定 | 六分类；拒绝只在 2xx 上成立，只扫回复前 200 字符、超长不判（用漏判换零误判） |
+| 补救阶梯 | 换 clean session 重发 -> 附加标记（只加不删）-> 原样透传；网络安全策略拦截属终局，不重试 |
+| 流式 | SSE 首段缓冲窗口 2048B / 400ms：窗口内命中拒答就丢弃缓冲、换会话重发，用户看不到那次拒答；窗口结束后边读边转 |
+| 配置注入 | 定点改 `~/.codex/config.toml`，字节级可逆；退出自动还原；被强杀后下次启动自动救回 |
+| 请求层改写 | 代号表（抽中文片段换伪词）与全文编码（mojibake），见 [`docs/TRANSFORMS.md`](docs/TRANSFORMS.md) |
+| 观测 | 实时请求流（loopback SSE）+ 请求记录 JSONL（保留 7 天）+ 可选四段报文捕获（默认脱敏） |
+| 桌面控制台 | 9 页、数字键切页、浅色 / 深色 / 跟随系统，两套配色均过 WCAG AA |
+| 单文件分发 | 一个 exe；WebView2 缺失时可退化为 `helmx ui` 浏览器控制台 |
 
----
+## 快速开始
+
+1. 双击 `helmx.exe`，控制台打开，代理监听 `127.0.0.1:1800`；
+2. 首次启动自动把 codex 的 `base_url` 指向本代理（原值先存还原点）；
+3. 回 codex 发一条消息，「请求」页会出现记录。
+
+需要无窗口常驻：
+
+```bat
+helmx proxy
+```
+
+先自检一次：
+
+```bat
+helmx verify
+```
+
+```
+[PASS] codex 配置目录      C:\Users\<user>\.codex
+[PASS] config.toml 可解析  6797 字节 / 47 个表
+[PASS] 激活 provider       custom -> http://127.0.0.1:1800/v1
+[PASS] 配置注入状态        三个上下文键齐备
+[PASS] 内嵌资源            提示词 7 个模式，TAMPER 规则 3342 字节
+[PASS] 配置备份
+[PASS] 代理态一致          代理在监听 http://127.0.0.1:1800/v1
+[PASS] 提示词模式          ctf-v2.1
+[PASS] 部署语义            insert（insert 系模式）
+全部通过
+```
+
+## 界面
+
+九个页面：概览（总览 / 请求 / 报文 / 自检）、配置（服务 / 提示词 / 破甲）、调试、日志。
+
+| 页面 | 看什么 |
+|---|---|
+| 总览 | 代理状态、判定计数、最近请求、codex 配置状态 |
+| 请求 | 一行一个请求：时间 / 路径 / 是否注入 / 大小 / 判定 / 补救 / 上游命中 / 耗时，可按判定过滤 |
+| 报文 | 盘上捕获的四段原始字节（改写前 / 改写后 / 响应 / 判定），凭据默认脱敏 |
+| 自检 | 9 项完整性检查逐项出结果，可跑 e2e（真实调用一次 codex） |
+| 服务 | 启停代理、自愈守护、配置注入 / 还原、UA 兜底、外观主题 |
+| 提示词 | 7 档提示词 + 部署语义 + 注入频率 + 内容预览 |
+| 破甲 | 代号表 / 全文编码两个开关 |
+| QA | 常见错误与处理 |
+| 运行日志 | 代理与事件日志，跟随最新 |
+
+![请求页](docs/screens/02-requests.png)
+
+其余页面截图在 [`docs/screens/`](docs/screens)。
+
+## 它改了什么、存在哪
+
+| 位置 | 内容 | 谁创建 |
+|---|---|---|
+| `~/.codex/config.toml` | 只改 active provider 的 `base_url` + 三个上下文键 | `apply` / 首次启动 |
+| `~/.codex/config.toml.helmx-bak` | 注入前备份 | 同上 |
+| `~/.codex/config.toml.helmx-proxy-bak` | `base_url` 还原点 | 切 base_url 前 |
+| `%APPDATA%\helmx.config.json` | 本应用设置（可缺省） | 首次保存设置 |
+| `%APPDATA%\helmx\capture\` | 报文捕获（默认关，512 MB 配额，按日清理） | 打开开关后 |
+| `%APPDATA%\helmx\records\` | 请求记录 JSONL（保留 7 天） | 自动 |
+| `~/.codex/helmx.log` | 运行日志 | 自动 |
+
+## 提示词
+
+内置 7 档，编译期加密进二进制（AES-256-GCM）：
+
+| ID | 名字 | 大小 | 说明 |
+|---|---|---|---|
+| `ctf` | 铁面 | 2.7 KB | 计分制：拒绝等于淘汰 |
+| `ctf-v2` | 阿契 | 3.5 KB | 完成契约：每请求一个缺失交付物 + 证据 |
+| **`ctf-v2.1`** | 短刃 | 3.7 KB | 默认：证据闭环（VERIFIED / CANDIDATE / UNRESOLVED） |
+| `ctf-v4` | 老炮 | 11.7 KB | 厚人设 + 类目映射 |
+| `ctf-v5` | 账房 | 11.2 KB | 四件套事务 + 流内判定 |
+| `ctf-v6` | 总管 | 8.8 KB | 沙盒融合 + 双账本 |
+| `ctf-ac` | 主臂 | 28.4 KB | 整段替换官方 `base_instructions`，必须配 `replace-base` |
+
+选 `ctf-ac` 而部署语义不是 `replace-base` 时服务端会拒绝保存。
+
+## 破甲：代号表 / 全文编码
+
+两个开关都在请求发出去之前改**用户消息**的写法：
+
+- **代号表**：抽 N 个中文片段换成伪词（`内核` 变 `pizama`），对照表进 `instructions`；
+- **全文编码**：整条用户消息按字节转成 mojibake（`帮我写` 变 `å¸®æå`），还原说明进 `instructions`。
+
+ASCII 标识符（`IOCTL`、`base_url`、`/v1/responses`）一律不动；两个开关互斥，编码优先。
+
+算法、实例、代价见 **[`docs/TRANSFORMS.md`](docs/TRANSFORMS.md)**。
+
+## 命令行
+
+```bat
+helmx                    无参数 = 桌面窗口
+helmx proxy              无窗口代理（Ctrl+C 退出并还原配置）
+helmx apply              只注入 codex 配置
+helmx remove             还原并清理
+helmx verify             9 项自检（--e2e 追加真实调用一次 codex）
+helmx watch              自愈守护（前台）
+helmx ui                 浏览器控制台（WebView2 不可用时的降级路径）
+```
+
+排查用参数：
+
+```bat
+helmx proxy --no-apply      只起代理，不改 codex 配置（对着假上游验证时用）
+helmx proxy --dry-run       只计算不发上游
+helmx proxy --passthrough   关闭全部内容转换（对照实验）
+helmx proxy --restore       把 config.toml 还原到注入前
+```
 
 ## 构建
 
 ```bat
-wails3 task build      :: bin/helmx.exe（单文件）
-wails3 task package    :: bin/helm-x-amd64-installer.exe（NSIS 安装包）
+pwsh -File scripts\build.ps1      :: bin/helmx.exe（图标 + 清单 + 版本资源 + GUI 子系统）
 ```
 
-内嵌资产（`internal/assets/data/` 下的提示词与拒答规则）已加密：AES-256-GCM，密钥 `K = SHA-256(HELMX_ASSET_KEY)`，未设置时用内置开发种子。改完 `internal/assets/data/` 下的文件必须重新生成后再构建：
+四步：前端构建 -> `wails3 generate syso`（图标 / 清单 / 版本）-> `go build -H windowsgui` -> 修正版本资源语言（`tools/verlang`）。
+
+裸 `go build` 不带 Windows 图标与版本资源，双击还会弹控制台。
+
+内嵌资产（提示词 / 拒答规则）用 AES-256-GCM 加密，密钥 `K = SHA-256(HELMX_ASSET_KEY)`（未设置时用内置开发种子）。改过 `internal/assets/data/` 之后：
 
 ```bat
 go generate ./internal/assets
 ```
 
-设置 `HELMX_ASSET_KEY` 可把密钥外部化（不再依赖仓库内种子），但**构建与运行必须用同一个值**，否则资源解密失败，`helmx verify` 自检会直接报出来：
-
-```bat
-set HELMX_ASSET_KEY=YOUR_ASSET_KEY
-go generate ./internal/assets && wails3 task build
-set HELMX_ASSET_KEY=YOUR_ASSET_KEY && bin\helmx.exe
-```
-
-测试：
-
-```bat
-go test ./internal/...        :: Go 单元/集成测试
-cd frontend && npx vitest     :: 前端测试
-python tests/helm-x-test-suite.py :: 破甲题库实测
-```
-
-系统要求：Windows 10/11（需 WebView2 Runtime，安装包会自动补齐）。
-
----
+构建与运行必须用同一个 `HELMX_ASSET_KEY`，否则资源解密失败，`helmx verify` 会直接报出来。
 
 ## 目录结构
 
 ```
-main.go               入口：GUI / CLI 分发
-internal/             代理引擎、注入、判定补救、配置注入、改写器、服务层
-frontend/             Vue 3 + Tailwind + daisyUI 控制台
-build/                图标、清单、NSIS 打包
-tests/                破甲题库测试套件 + 阶段实证工具
-docs/                 设计文档（重写说明见 docs/REWRITE.md）
+main.go                 入口：无参数开窗口，有参数走 CLI
+internal/
+  proxy/                请求管线、上游转发、判定、补救、SSE、观测接线
+  protocol/jsonwalk/    字节级 JSON 读写（不改未涉及字段）
+  protocol/sse/         SSE 分帧
+  inject/               请求层改写算法（代号表 / mojibake）
+  codexcfg/             codex 配置的行级 TOML 模型、备份与还原
+  config/               本应用设置（%APPDATA%\helmx.config.json）
+  assets/               内嵌资产（AES-256-GCM，编译期加密）
+  runtime/              CLI 与 GUI 共用的装配点 + 启动自愈
+  svc/                  Wails 绑定服务（代理 / 配置 / 提示词 / 捕获 / 自检 / 日志 / QA）
+  selfcheck/            9 项只读自检
+frontend/               Vue 3 + Vite + Tailwind v4 + daisyUI（9 页）
+tools/                  genassets / fakeupstream / verlang / contrast
+docs/                   设计、方案、截图、破甲说明
 ```
 
----
+## 已知限制
 
-## 已修复的已知问题
+- 仅 Windows：Wails v3 + WebView2，Linux / macOS 未验证
+- Wails 自定义事件在本机不通：控制台改用 loopback SSE 收请求流，日志与自检用轮询兜底
+- 托盘已移除：关窗即退出并还原配置（无窗口常驻用 `helmx proxy`）
+- exe 的字符串版本信息在属性页仍为空（产品名称 / 说明）；数字版本 `0.3.0.0` 可读
+- 长会话下流式缓冲窗口（2048B / 400ms）是否合用，未做长跑验证
+- `wails3 task package`（NSIS 安装包）未在本轮重新验证
 
-以下缺陷均已修复并有对应测试，README 旧版描述随之作废：
+## 贡献
 
-| 问题 | 现状 |
-|---|---|
-| 拒答判定误伤正常回答 | 判定收紧：只扫回复**前 200 字符**，超过 **1200 字符**的回答一律不判拒答；规则文件删除单词级 `dangerous` / `illegal` / `harmful` 匹配（`internal/tamper/tamper.go`、`internal/assets/data/tamper_rules.txt`） |
-| 流式路径"只判定、不补救" | 流式真补救：SSE 首段缓冲窗口（默认 **2048B / 400ms**）内命中拒答 → 丢弃缓冲、换 clean session 重发；重发用 `stream:true` 取回真正的 SSE 再转发（`internal/proxy/stream.go`） |
-| 流式路径不重试 | 流式与非流式对齐：HTTP 408/429/5xx 与连接错误均进入重试（`PostStreamRetry`） |
-| 注入频率按"每 N 次请求"计数 | 改为按会话采样：每 N 个会话注入 1 个会话，命中后该会话全程携带；1 = 每个会话都注入（`internal/proxy/inject.go`） |
-| `prompt_mode: "default"` 静默变成 v2.1 | 历史 ID 统一归一化：`default`→`ctf`、`v2`→`ctf-v2`、`v2.1`→`ctf-v2.1`，升级不再静默换版（`internal/assets/assets.go` 的 `promptAliases`、`internal/config/config.go`） |
-| 内嵌资产仅 11 字节重复 XOR | 改为 AES-256-GCM，密钥 `K = SHA-256(HELMX_ASSET_KEY)`，未设置时用内置开发种子；改 `internal/assets/data/` 后须 `go generate ./internal/assets`；构建与运行必须给同一个 `HELMX_ASSET_KEY`，否则解密失败（自检会报）（`internal/assets/`） |
+```bat
+go test ./internal/...            :: 10 个包，含管线 / 补救 / 代号表 / 配置往返
+cd frontend && npx vitest run     :: 29 项（组件 + 主题 + 实时流）
+bin\helmx.exe verify              :: 9 项只读自检
+```
 
----
-
-## 关于本重写
-
-本仓库为 **Wails v3 + Go + Vue 3 重写版**（旧版 C++ 见 [`legacy`](https://github.com/ADWMC/helm-x/tree/legacy) 分支）。为什么重写、与旧版差别、设计文档索引 → **[docs/REWRITE.md](docs/REWRITE.md)**。
-
----
-
-## 参考项目
-
-- [NERV-BREAK-5.6](https://github.com/lingbol088-spec/5.6-JAILBREAK-NERV-codex-instruct-5.6) — Memory Kernel + 上下文分类
-- [codex-gpt-5.6-5.5-instruct](https://github.com/lingbol088-spec/codex-gpt-5.6-5.5-instruct) — 计分制 + 语义归一化 + 通道调度
-- [Codex-X](https://github.com/yynxxxxx/Codex-X) — 提示词模板
-- [gptbypass](https://github.com/null119/gptbypass) — 改写器策略
-- [gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct) — 测试方法论
+提 PR 前请确认：改动不破坏设计文档里的不变量（[`docs/DESIGN.md`](docs/DESIGN.md)）；不引入第二个 `.syso`（会报 `too many .rsrc sections`）；界面改动附一张真机截图并跑过 `python tools/contrast.py --theme light|dark`。
 
 ## License
 
-[GNU AGPL v3.0](LICENSE) · 允许商业使用；分发或对外提供服务（含 SaaS）须按 AGPL 开放相应源码
+[GNU AGPL v3.0](LICENSE)。可商用；分发或对外提供服务（含 SaaS）须按 AGPL 开放相应源码。
+使用者须遵守所在地法律法规，对使用本项目产生的后果自负。
+
+> 本项目由 AI 生成（DeepSeek Harness + Mimo V2.6 Pro），代码质量仅供参考。

@@ -12,8 +12,8 @@
   "info": {
     "companyName": "helm-x",
     "productName": "helm-x",
-    "productVersion": "0.1.0",
+    "productVersion": "0.3.0",
     "comments": "codex 本地映射层"
   },
-  "productVersion": "0.2.1"
+  "productVersion": "0.3.0"
 }
