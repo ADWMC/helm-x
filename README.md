@@ -18,6 +18,12 @@ codex 的请求经 `127.0.0.1:1800` 转一手，在这一跳完成注入、改�
 > **如果这个项目帮你把活干成了，请点一个 Star。**
 > 用法问题、想法、报 bug 都欢迎：**Telegram 群** <https://t.me/helm_xD> · **QQ 群** 213266664 · **Issues** <https://github.com/ADWMC/helm-x/issues>
 
+> **特此说明**
+>
+> - 本项目由 **AI 生成**（DeepSeek Harness + Mimo V2.6 Pro），代码质量仅供参考，请勿以商业软件的标准要求它。
+> - 以 **AGPL-3.0** 发布，可商用；分发或对外提供服务（含 SaaS）须按 AGPL 开放相应源码。
+> - 使用者须遵守所在地法律法规，**对使用本项目产生的后果自负**。
+
 ![系统总览](docs/screens/01-overview.png)
 
 ---
@@ -241,7 +247,6 @@ bin\helmx.exe verify              :: 9 项只读自检
 
 ## License
 
-[GNU AGPL v3.0](LICENSE)。可商用；分发或对外提供服务（含 SaaS）须按 AGPL 开放相应源码。
-使用者须遵守所在地法律法规，对使用本项目产生的后果自负。
+[GNU AGPL v3.0](LICENSE)
 
-> 本项目由 AI 生成（DeepSeek Harness + Mimo V2.6 Pro），代码质量仅供参考。
+许可范围、免责与"本项目由 AI 生成"的完整声明见文首 **特此说明**。
