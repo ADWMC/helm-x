@@ -4,7 +4,7 @@
   "items": [
     {
       "question": "出现 no helmx.config.json 怎么办？",
-      "answer": "helmx.config.json 是可选配置。v0.0.7 会使用内置默认值；需要改写器时，在 WebUI 的“改写器”页面保存一次配置即可自动创建到 %APPDATA%\\helmx.config.json。"
+      "answer": "helmx.config.json 是可选配置，不存在时使用内置默认值；在控制台任一页面保存一次设置就会自动创建到 %APPDATA%\\helmx.config.json。"
     },
     {
       "question": "为什么启动后提示 config has no base_url？",

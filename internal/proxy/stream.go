@@ -57,7 +57,7 @@ func (e *Engine) handleStream(ctx context.Context, w http.ResponseWriter, r *htt
 		if canTransform && view != nil && (st.Class == ClassRefused || st.Class == ClassFlagged) {
 			userMsg, _ := view.LastUserMessage()
 			out := e.remedy(ctx, st, view, r.Header, remedyDeps{
-				upstream: e.upstream, engine: e, tamper: tm, rewriter: e.rewriter(),
+				upstream: e.upstream, engine: e, tamper: tm,
 				retry: e.retryOpts(), streamRetry: true,
 			}, userMsg)
 			st = out.State
@@ -166,6 +166,7 @@ func (e *Engine) pumpStream(ctx context.Context, w http.ResponseWriter, r *http.
 				if canTransform && view != nil {
 					for _, ev := range parser.Feed(chunk) {
 						acc.WriteString(deltaText(ev))
+						collectUpstreamEvent(rec, ev)
 					}
 					if !sawRefusal {
 						if tm := e.tamper(); tm != nil && tm.IsRefusal(acc.String()) {
@@ -219,6 +220,14 @@ func (e *Engine) pumpStream(ctx context.Context, w http.ResponseWriter, r *http.
 	default:
 		rec.Class = ClassHealthy
 	}
+	// 观测：流式不保留全量（O(1) 转发），只落窗口内已缓冲的头部，
+	// 并在 verdict 的 note 里标明「非全量」，避免被当成完整报文。
+	if len(buffered) > 0 {
+		e.capPut(rec.ID, "03.response.sse.window", buffered)
+	}
+	if acc.Len() > 0 {
+		e.capPut(rec.ID, "03.response.text", []byte(acc.String()))
+	}
 	e.logf("info", "proxy: 流式 %s %dB→%dB class=%s %dms",
 		rec.Path, rec.InBytes, rec.OutBytes, rec.Class, time.Since(rec.TS).Milliseconds())
 }
@@ -238,7 +247,7 @@ func (e *Engine) remedyStreaming(ctx context.Context, w http.ResponseWriter, r *
 	}
 	userMsg, _ := view.LastUserMessage()
 	out := e.remedy(ctx, st, view, r.Header, remedyDeps{
-		upstream: e.upstream, engine: e, tamper: e.tamper(), rewriter: e.rewriter(),
+		upstream: e.upstream, engine: e, tamper: e.tamper(),
 		retry: e.retryOpts(), streamRetry: true,
 	}, userMsg)
 

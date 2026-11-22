@@ -1,6 +1,6 @@
 // Package runtime 把各领域包组装成可运行的服务。
 //
-// 职责：持有配置与单例组件（日志、TAMPER 引擎、改写器、代理引擎），
+// 职责：持有配置与单例组件（日志、TAMPER 引擎、代理引擎、观测层），
 // 供 CLI 与 GUI 共用。**不含业务逻辑** —— 只做装配与生命周期。
 //
 // 存在的理由：CLI（helmx proxy）与 GUI（Wails 服务层）需要同一套组件，
@@ -9,17 +9,16 @@ package runtime
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 
 	"github.com/ADWMC/helm-x/internal/assets"
 	"github.com/ADWMC/helm-x/internal/codexcfg"
 	"github.com/ADWMC/helm-x/internal/config"
 	"github.com/ADWMC/helm-x/internal/logging"
+	"github.com/ADWMC/helm-x/internal/obs"
 	"github.com/ADWMC/helm-x/internal/proxy"
-	"github.com/ADWMC/helm-x/internal/rewriter"
 	"github.com/ADWMC/helm-x/internal/tamper"
-
-	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 // Runtime 是装配好的运行时。
@@ -27,17 +26,14 @@ type Runtime struct {
 	Store  *config.Store
 	Logger *logging.Logger
 
-	mu       sync.Mutex
-	home     codexcfg.Home
-	hasHome  bool
-	engine   *proxy.Engine
-	rewriter *rewriter.Rewriter
-	// rewriterCfg 记录构造 rewriter 时用的配置，用于判断是否需要重建
-	rewriterCfg config.RewriterSettings
-	// gate 是风险闸门；gateCfg 用于判断是否需要重建
-	gate    *riskgate.Gate
-	gateCfg config.RiskGateSettings
+	mu      sync.Mutex
+	home    codexcfg.Home
+	hasHome bool
+	engine  *proxy.Engine
 	tamper  *tamper.Engine
+	// capture / recorder：观测层（报文捕获 + 请求记录落盘）
+	capture  *obs.Capture
+	recorder *obs.Recorder
 	// sink 接收代理事件（日志 + 请求记录）
 	sink proxy.EventSink
 }
@@ -49,6 +45,23 @@ func New(store *config.Store, logger *logging.Logger) *Runtime {
 		rt.home, rt.hasHome = h, true
 	}
 	rt.tamper = buildTamper()
+	// 启动自愈：上次被强杀时把 codex 从这个没人监听的本地端口救回来（见 heal.go）
+	if rt.hasHome {
+		healStaleProxy(rt.home, func(level, format string, args ...any) {
+			if level == "warn" {
+				rt.Logger.Warn(format, args...)
+				return
+			}
+			rt.Logger.Info(format, args...)
+		})
+	}
+
+	// 观测目录统一放 %APPDATA%\helmx\{capture,records}：不与配置文件同级
+	dataDir := filepath.Join(filepath.Dir(store.Path()), "helmx")
+	s := store.Get()
+	rt.capture = obs.NewCapture(filepath.Join(dataDir, "capture"), s.CaptureEnabled)
+	rt.capture.SetRedact(s.CaptureRedact)
+	rt.recorder = obs.NewRecorder(filepath.Join(dataDir, "records"), 7)
 	return rt
 }
 
@@ -77,79 +90,6 @@ func buildTamper() *tamper.Engine {
 
 // Tamper 返回规则引擎。
 func (r *Runtime) Tamper() *tamper.Engine { return r.tamper }
-
-// Rewriter 返回当前改写器（未启用时返回 nil）。
-//
-// 每次调用重新判定启用状态，但复用已构造的实例（避免每次请求新建 HTTP 客户端）。
-func (r *Runtime) Rewriter() proxy.Rewriter {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	s := r.Store.Get()
-	if !s.Rewriter.Enabled || s.Rewriter.BaseURL == "" {
-		return nil
-	}
-	// 配置变了就重建
-	if r.rewriter == nil || r.rewriterCfg != s.Rewriter {
-		rc := rewriter.Config{
-			Enabled:      s.Rewriter.Enabled,
-			Provider:     s.Rewriter.Provider,
-			BaseURL:      s.Rewriter.BaseURL,
-			APIKey:       s.Rewriter.APIKey,
-			Model:        s.Rewriter.Model,
-			SystemPrompt: s.Rewriter.SystemPrompt,
-			TimeoutSec:   s.Rewriter.TimeoutSec,
-			UseProxy:     s.Rewriter.UseProxy,
-			ProxyURL:     s.Rewriter.ProxyURL,
-			Fallback:     s.Rewriter.Fallback,
-			MaxAttempts:  s.Rewriter.MaxAttempts,
-		}
-		r.rewriter = rewriter.New(rc, assets.RewritePrompt())
-		r.rewriterCfg = s.Rewriter
-	}
-	if r.rewriter == nil || !r.rewriter.Enabled() {
-		return nil
-	}
-	return r.rewriter
-}
-
-// Gate 返回风险闸门；未启用或配置不完整时返回 nil（代理据此完全跳过闸门）。
-func (r *Runtime) Gate() *riskgate.Gate {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	s := r.Store.Get()
-	if !s.RiskGate.Enabled || s.RiskGate.BaseURL == "" {
-		return nil
-	}
-	if r.gate == nil || r.gateCfg != s.RiskGate {
-		cfg := riskgate.Config{
-			Enabled:      s.RiskGate.Enabled,
-			Mode:         s.RiskGate.Mode,
-			Profile:      s.RiskGate.Profile,
-			HotModel:     s.RiskGate.HotModel,
-			LabelModel:   s.RiskGate.LabelModel,
-			BaseURL:      s.RiskGate.BaseURL,
-			APIKey:       s.RiskGate.APIKey,
-			TimeoutSec:   s.RiskGate.TimeoutSec,
-			CacheTTLSec:  s.RiskGate.CacheTTLSec,
-			EnforceRatio: s.RiskGate.EnforceRatio,
-			Budget: riskgate.Budget{
-				PerSessionJudge:   s.RiskGate.BudgetPerSessionJudge,
-				PerSessionRewrite: s.RiskGate.BudgetPerSessionRewrite,
-				PerRequestTokens:  s.RiskGate.BudgetPerRequestTokens,
-			},
-		}
-		r.gate = riskgate.New(cfg)
-		r.gateCfg = s.RiskGate
-	}
-	return r.gate
-}
-
-// NewRewriterForTest 暴露给测试构造指定配置的改写器。
-func NewRewriterForTest(cfg rewriter.Config, prompt string) *rewriter.Rewriter {
-	return rewriter.New(cfg, prompt)
-}
 
 // ProxyConfig 实现 proxy.ConfigProvider。
 //
@@ -186,11 +126,27 @@ func (c *ProxyConfig) FallbackUserAgent() string {
 	return c.rt.Store.Get().ForwardUserAgent
 }
 
-// Rewriter 返回改写器。
-func (c *ProxyConfig) Rewriter() proxy.Rewriter { return c.rt.Rewriter() }
+// Deploy 返回提示词部署语义（insert / append / replace-base）。
+func (c *ProxyConfig) Deploy() string {
+	c.rt.Store.Refresh()
+	return c.rt.Store.Get().Deploy
+}
 
-// Gate 实现 proxy.ConfigProvider。
-func (c *ProxyConfig) Gate() *riskgate.Gate { return c.rt.Gate() }
+// EncodeEnabled 报告是否启用 user 全文编码。
+func (c *ProxyConfig) EncodeEnabled() bool {
+	c.rt.Store.Refresh()
+	return c.rt.Store.Get().EncodeEnabled
+}
+
+// CodebookSlots 返回代号表槽位数；0 = 未启用。
+func (c *ProxyConfig) CodebookSlots() int {
+	c.rt.Store.Refresh()
+	s := c.rt.Store.Get()
+	if !s.CodebookEnabled {
+		return 0
+	}
+	return s.CodebookSlots
+}
 
 // Tamper 返回规则引擎。
 func (c *ProxyConfig) Tamper() proxy.TamperMatcher {
@@ -273,6 +229,13 @@ func (r *Runtime) StartProxy(ctx context.Context, opts proxy.Options) (*proxy.En
 	if opts.StreamWindowMs <= 0 {
 		opts.StreamWindowMs = s.StreamWindowMs
 	}
+	// 观测层：调用方没显式给就用运行时持有的实例（UI 热切换同一个 Capture）
+	if opts.Capture == nil {
+		opts.Capture = r.capture
+	}
+	if opts.Recorder == nil {
+		opts.Recorder = r.recorder
+	}
 
 	e, err := proxy.New(opts)
 	if err != nil {
@@ -283,6 +246,20 @@ func (r *Runtime) StartProxy(ctx context.Context, opts proxy.Options) (*proxy.En
 	r.mu.Unlock()
 
 	return e, nil
+}
+
+// Capture 返回报文捕获器（可能为 nil）。
+func (r *Runtime) Capture() *obs.Capture { return r.capture }
+
+// Recorder 返回请求记录器（可能为 nil）。
+func (r *Runtime) Recorder() *obs.Recorder { return r.recorder }
+
+// RecordDir 返回请求记录目录。
+func (r *Runtime) RecordDir() string {
+	if r.recorder == nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(r.Store.Path()), "records")
 }
 
 // Engine 返回当前引擎（可能为 nil）。

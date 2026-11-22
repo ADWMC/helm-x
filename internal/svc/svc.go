@@ -12,9 +12,8 @@
 //	proxy.go     代理启停与状态
 //	config.go    codex 配置状态 / apply / remove / 还原
 //	prompt.go    提示词模式
-//	rewriter.go  改写器读写与测试
 //	verify.go    自检（异步 + 进度事件）
 //	logs.go      日志与请求记录
 //	qa.go        QA 数据
-//	app.go       窗口、托盘、生命周期
+//	app.go       窗口、生命周期
 package svc

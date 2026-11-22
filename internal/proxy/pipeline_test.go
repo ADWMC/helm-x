@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 // scriptedUpstream 按脚本返回响应，用于驱动管线各分支。
@@ -84,16 +82,20 @@ type testConfig struct {
 	tamper      *stubTamper
 	// retry 必须显式设置：零值表示"不重试"，是合法配置
 	retry RetryOptions
-	// gate 是风险闸门（nil 表示未启用）
-	gate *riskgate.Gate
+	// deploy 是部署语义（空 = insert）
+	deploy string
+	// 请求层改写：encode 优先于 codebook
+	encode        bool
+	codebookSlots int
 }
 
 func (c *testConfig) PromptInstruction() string { return c.instruction }
-func (c *testConfig) Rewriter() Rewriter        { return nil }
-func (c *testConfig) Gate() *riskgate.Gate      { return c.gate }
 func (c *testConfig) Tamper() TamperMatcher     { return c.tamper }
 func (c *testConfig) Retry() RetryOptions       { return c.retry }
 func (c *testConfig) FallbackUserAgent() string { return c.fallbackUA }
+func (c *testConfig) Deploy() string            { return c.deploy }
+func (c *testConfig) EncodeEnabled() bool       { return c.encode }
+func (c *testConfig) CodebookSlots() int        { return c.codebookSlots }
 func (c *testConfig) InjectEvery() int {
 	if c.injectEvery <= 0 {
 		return 1

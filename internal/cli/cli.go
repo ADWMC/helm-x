@@ -133,6 +133,7 @@ proxy 选项:
   --no-retry             本次运行禁用重试
   --passthrough          关闭全部内容转换（对照排查用）
   --dry-run              只计算不发上游
+  --no-apply             只起代理，不改写 codex 配置（对着假上游做验证用）
   --restore              手动还原 codex 配置后退出
 
 apply 选项:
@@ -167,6 +168,7 @@ func subUsage(w io.Writer, cmd string) {
   --no-retry             本次运行禁用重试（优先于配置文件）
   --passthrough          关闭全部内容转换（对照排查用）
   --dry-run              只计算不发上游，且不改写 codex 配置
+  --no-apply             只起代理，不改写 codex 配置（端到端验证用）
   --restore              还原 codex 配置后退出
   --help, -h             显示本帮助
 

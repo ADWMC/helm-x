@@ -42,10 +42,23 @@ func (e *Engine) dryRun(w http.ResponseWriter, r *http.Request, body []byte, rec
 	}
 	instruction := e.instruction()
 	report["instructionBytes"] = len(instruction)
+	// 部署语义必须与真实注入一致，否则 dry-run 会给出误导性的"将要发送"内容。
+	mode := e.deployMode()
+	report["deploy"] = string(mode)
 	if instruction != "" {
-		if injected, ok, ierr := view.InjectSystem(instruction); ierr == nil {
+		var injected []byte
+		var ok bool
+		var ierr error
+		if mode == DeployAppend || mode == DeployReplaceBase {
+			injected, ok, ierr = view.InjectInstructions(instruction, mode)
+		} else {
+			injected, ok, ierr = view.InjectSystem(instruction)
+		}
+		if ierr == nil {
 			report["injected"] = ok
 			report["outBytes"] = len(injected)
+		} else {
+			report["injectError"] = ierr.Error()
 		}
 	}
 	if msg, ok := view.LastUserMessage(); ok {

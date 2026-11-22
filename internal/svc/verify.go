@@ -17,6 +17,7 @@ type VerifyService struct {
 	mu      sync.Mutex
 	running bool
 	last    *selfcheck.Report
+	items   []VerifyProgress
 }
 
 // VerifyProgress 是一条进度事件。
@@ -29,6 +30,19 @@ type VerifyProgress struct {
 	Skip   bool   `json:"skip"`
 }
 
+// VerifyRun 是自检的当前状态（轮询用）。
+//
+// 为什么需要它（2026-11-22 实测）：前端依赖 `proxy:verify` 事件推送，
+// 但本机 WebView2 下**一条都没到**（Go 侧日志「自检完成：0 项失败」，
+// 前端零行、一直停在"执行中"）。自检结果不能依赖一条无法验证的通道，
+// 所以把状态放在服务端，前端轮询 —— 顺带解决"切走再回来结果丢了"。
+type VerifyRun struct {
+	Running bool             `json:"running"`
+	Total   int              `json:"total"`
+	Failed  int              `json:"failed"`
+	Items   []VerifyProgress `json:"items"`
+}
+
 // Run 异步执行自检，进度通过 proxy:verify 事件推送。
 //
 // 立即返回；结果通过事件送达，界面无需轮询（对比旧版的 /api/zxwn 轮询）。
@@ -39,6 +53,7 @@ func (v *VerifyService) Run(e2e bool) error {
 		return fmt.Errorf("自检正在运行")
 	}
 	v.running = true
+	v.items = nil
 	v.mu.Unlock()
 
 	go func() {
@@ -49,10 +64,14 @@ func (v *VerifyService) Run(e2e bool) error {
 		}()
 
 		rep := selfcheck.Run(e2e, func(step, total int, c selfcheck.Check) {
-			v.s.emit(EventVerify, VerifyProgress{
+			p := VerifyProgress{
 				Step: step, Total: total,
 				Name: c.Name, OK: c.OK, Detail: c.Detail, Skip: c.Skip,
-			})
+			}
+			v.mu.Lock()
+			v.items = append(v.items, p)
+			v.mu.Unlock()
+			v.s.emit(EventVerify, p)
 		})
 
 		v.mu.Lock()
@@ -63,6 +82,20 @@ func (v *VerifyService) Run(e2e bool) error {
 		v.s.emit(EventVerify, map[string]any{"done": true, "report": rep})
 	}()
 	return nil
+}
+
+// Checks 返回自检的当前状态与已完成的检查项（前端轮询入口）。
+func (v *VerifyService) Checks() (VerifyRun, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	out := VerifyRun{Running: v.running, Items: append([]VerifyProgress(nil), v.items...)}
+	if v.last != nil {
+		out.Failed = v.last.Failed
+	}
+	if n := len(out.Items); n > 0 {
+		out.Total = out.Items[n-1].Total
+	}
+	return out, nil
 }
 
 // Report 返回上次自检结果（文本形式，便于直接展示）。

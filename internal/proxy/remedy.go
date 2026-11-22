@@ -41,7 +41,6 @@ type remedyDeps struct {
 	upstream *Upstream
 	engine   *Engine
 	tamper   TamperMatcher
-	rewriter Rewriter
 	retry    RetryOptions
 	// streamRetry 为 true 时用流式 clean session 重发（补救流式请求专用）
 	streamRetry bool
@@ -54,13 +53,6 @@ type TamperMatcher interface {
 	IsRefusal(text string) bool
 	Attach(text string) string
 	Marker() string
-}
-
-// Rewriter 是可选的语义改写器（LLM 路径）。
-// 返回 (改写结果, 是否成功)。失败必须返回 false —— 上层据此直接进下一级，
-// **不再重试**（INV-2：不额外消耗用户额度）。
-type Rewriter interface {
-	Rewrite(ctx context.Context, userMsg, refusal, conversation string) (string, bool)
 }
 
 // noopTamper 在未配置规则时兜底，避免 nil 接口解引用 panic。
@@ -113,16 +105,11 @@ func (e *Engine) remedy(ctx context.Context, st ResponseState, view *RequestView
 	}
 
 	// ── 第 1 级：clean session 重发 ──
+	//
+	// 2026-11-22：语义改写器（LLM 改写 user 消息再重发）已整体移除 ——
+	// 它对 Flagged/Refused 的实际效果不可测（需要外部 key），且与提示词注入
+	// 职责重叠。现在重发一律用原文：只重建会话、不换措辞。
 	msg := userMsg
-	// Flagged 时如果有改写器，先做语义改写（与旧版 cyber 分支一致）
-	if st.Class == ClassFlagged && deps.rewriter != nil && userMsg != "" {
-		if rewritten, ok := deps.rewriter.Rewrite(ctx, userMsg, st.Text, view.ConversationText()); ok && rewritten != "" {
-			msg = rewritten
-			out.Notes = append(out.Notes, "已语义改写")
-		} else {
-			out.Notes = append(out.Notes, "改写失败，沿用原文")
-		}
-	}
 
 	if msg != "" || st.Class == ClassRefused {
 		cleanBody, err := view.BuildCleanSessionMode(msg, deps.streamRetry)

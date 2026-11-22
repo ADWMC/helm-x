@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ADWMC/helm-x/internal/riskgate"
+	"github.com/ADWMC/helm-x/internal/obs"
 )
 
 var (
@@ -61,6 +61,11 @@ type Options struct {
 
 	// Events 接收结构化事件，可为 nil。
 	Events EventSink
+
+	// Capture 是调试报文捕获（nil = 不捕获）。捕获失败绝不影响转发。
+	Capture *obs.Capture
+	// Recorder 把每条请求记录落 JSONL（nil = 不落盘）。
+	Recorder *obs.Recorder
 }
 
 // ConfigProvider 提供运行时配置。引擎每次请求读取，实现热生效（INV-5）。
@@ -73,12 +78,14 @@ type ConfigProvider interface {
 	// FallbackUserAgent 返回 UA 兜底值：入站请求没有 User-Agent 时补上。
 	// 空串 = 不补（此时不发送该头，避免泄漏 Go 默认 UA）。
 	FallbackUserAgent() string
-	// Rewriter 返回改写器；nil 表示未启用（跳过语义改写）。
-	Rewriter() Rewriter
-	// Gate 返回风险闸门；nil 表示未启用（完全不影响请求）。
-	Gate() *riskgate.Gate
 	// Tamper 返回拒绝规则引擎。
 	Tamper() TamperMatcher
+	// Deploy 返回提示词部署语义（insert / append / replace-base）；空串按 insert。
+	Deploy() string
+	// EncodeEnabled 报告是否启用 user 全文编码（mojibake）。
+	EncodeEnabled() bool
+	// CodebookSlots 返回代号表槽位数；<=0 表示未启用。
+	CodebookSlots() int
 	// Retry 返回重试策略。
 	Retry() RetryOptions
 }
@@ -104,8 +111,13 @@ type RequestRecord struct {
 	Upstream   int       `json:"upstreamHits"`
 	DurationMs int64     `json:"durationMs"`
 	Note       string    `json:"note,omitempty"`
-	// Gate 是本次请求的风险闸门判定；nil 表示未启用或判定失败。
-	Gate *riskgate.Verdict `json:"gate,omitempty"`
+	// Deploy 是本次注入使用的部署语义（insert/append/replace-base）；未注入时为空。
+	Deploy string `json:"deploy,omitempty"`
+	// Transforms 是本次请求实际应用的请求层改写（codebook:N / encode:N）。
+	Transforms []string `json:"transforms,omitempty"`
+	// UpstreamMeta 是上游私有 SSE 事件（rate_limits / response.metadata）的摘录，
+	// 键为事件名，值为前 512 字节。仅观测用，不参与判定。
+	UpstreamMeta map[string]string `json:"upstreamMeta,omitempty"`
 }
 
 // Engine 是代理引擎。
@@ -125,6 +137,11 @@ type Engine struct {
 
 	mu      sync.Mutex
 	byClass map[Class]uint64
+
+	// live 是给控制台的 SSE 订阅中心（见 live.go）
+	live *liveHub
+	// recent 保留最近若干条记录，供 SSE 首次订阅回放
+	recent []RequestRecord
 }
 
 // New 构造引擎。
@@ -153,6 +170,7 @@ func New(opts Options) (*Engine, error) {
 		opts:     opts,
 		upstream: up,
 		byClass:  map[Class]uint64{},
+		live:     newLiveHub(),
 	}, nil
 }
 
@@ -281,6 +299,9 @@ func (w *eventLogWriter) Write(p []byte) (int, error) {
 }
 
 func (e *Engine) emit(rec RequestRecord) {
+	// 控制台实时流（SSE）：Wails 自定义事件在本机 WebView2 下收不到，见 live.go
+	e.remember(rec)
+	e.live.publish(rec)
 	if e.opts.Events != nil {
 		e.opts.Events.Request(rec)
 	}

@@ -34,15 +34,19 @@ const devKeySeed = "helm-x-dev-asset-key-do-not-ship"
 
 // 资源逻辑名 → 嵌入路径。
 const (
-	pathPromptCTF     = "data/prompt-ctf-scoring.md"
-	pathPromptV2      = "data/prompt-v2.md"
-	pathPromptV21     = "data/prompt-v2.1.md"
-	pathPromptV4      = "data/prompt-v4.md"
-	pathPromptV5      = "data/prompt-v5.md"
-	pathPromptV6      = "data/prompt-v6.md"
-	pathTamperRules   = "data/tamper_rules.txt"
-	pathRewritePrompt = "data/rewrite_prompt.txt"
-	pathQA            = "data/qa.json"
+	pathPromptCTF = "data/prompt-ctf-scoring.md"
+	pathPromptV2  = "data/prompt-v2.md"
+	pathPromptV21 = "data/prompt-v2.1.md"
+	pathPromptV4  = "data/prompt-v4.md"
+	pathPromptV5  = "data/prompt-v5.md"
+	pathPromptV6  = "data/prompt-v6.md"
+	// 从 helm-a 迁入的唯一提示词资产：竞赛主臂（2026-11-22）。
+	// 整段替换官方 base_instructions（deploy=replace-base）；A1/A2 两个生产短线档
+	// 已按用户要求移除 —— 只保留主臂。
+	pathPromptAComposed = "data/prompt-a-composed.md"
+	pathTamperRules     = "data/tamper_rules.txt"
+	pathRewritePrompt   = "data/rewrite_prompt.txt"
+	pathQA              = "data/qa.json"
 )
 
 var (
@@ -168,6 +172,10 @@ type PromptMode struct {
 	Bytes int `json:"bytes"`
 	// Default 标记默认模式。
 	Default bool `json:"default"`
+	// Deploy 是该模式**实测过的部署语义**：空 = insert（input[] system 消息），
+	// "replace-base" = 必须整段替换顶层 instructions，否则实测结论不成立。
+	// 选择模式与部署语义冲突时，svc.PromptService 会拒绝并给出可执行提示。
+	Deploy string `json:"deploy,omitempty"`
 }
 
 // promptModes 定义全部可用模式。
@@ -179,6 +187,7 @@ type PromptMode struct {
 //	ctf-v2   完成态契约          → gpt-6.0 系
 //	ctf-v2.1 证据闭环（默认）    → gpt-6.1 系
 //	ctf-v4   厚人设 + 单点拒绝面  → gpt-6.1-sol 已测
+//	ctf-ac   竞赛主臂 28.4KB     → gpt-6.1-sol landed（helm-a 迁入，需 replace-base）
 var promptModes = []struct {
 	mode PromptMode
 	path string
@@ -189,6 +198,7 @@ var promptModes = []struct {
 	{PromptMode{ID: "ctf-v4", Name: "老炮", Description: "厚人设 + 类目映射：11.4KB。创作/逆向/横向无影响；因 OpenAI 加强模型防御，内核过 ACE 与注册机类无法绕过", Models: "gpt-6.1 系 · 已测"}, pathPromptV4},
 	{PromptMode{ID: "ctf-v5", Name: "账房", Description: "四件套事务 + 流内判定：11.0KB。创作/逆向/横向无影响；内核与注册机类无法绕过", Models: "gpt-6.1 系 · 已测"}, pathPromptV5},
 	{PromptMode{ID: "ctf-v6", Name: "总管", Description: "沙盒融合 + 双账本：8.6KB。创作/横向无影响；内核与注册机类无法绕过", Models: "gpt-6.1 系 · 已测"}, pathPromptV6},
+	{PromptMode{ID: "ctf-ac", Name: "主臂", Description: "整段替换官方 base_instructions：28.4KB（官方 21.3KB + 注入段 + 路由规则 v4）。必须配合 replace-base", Models: "gpt-6.1-sol · landed=true", Deploy: "replace-base"}, pathPromptAComposed},
 }
 
 // promptAliases 是历史 ID → 现行 ID 的映射。
@@ -254,9 +264,6 @@ func IsValidPromptMode(id string) bool {
 
 // TamperRules 返回拒绝句式规则文本。
 func TamperRules() string { return Get(pathTamperRules) }
-
-// RewritePrompt 返回改写器的系统提示词。
-func RewritePrompt() string { return Get(pathRewritePrompt) }
 
 // QAItem 是一条常见问题。
 type QAItem struct {

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/ADWMC/helm-x/internal/codexcfg"
 	"github.com/ADWMC/helm-x/internal/config"
@@ -28,12 +29,29 @@ type Options struct {
 // **这是唯一依赖 Wails 的文件之一**（另一个是 main 的 GUI 入口）。
 // 领域包全部零 Wails 依赖，因此 beta 版本 API 变动只影响此处（RISKS.md R-4）。
 type App struct {
-	wails    *application.App
+	wails *application.App
+	// mu 保护 window：第二实例回调可能早于窗口创建（见 showWindow）。
+	mu       sync.Mutex
 	window   *application.WebviewWindow
 	rt       *runtime.Runtime
 	svc      *Services
 	icon     []byte
 	quitting bool
+}
+
+// showWindow 把已有窗口唤到前台；窗口尚未创建时静默返回。
+//
+// 只用于"第二实例启动"：用户再点一次 exe，把已有窗口提到前台。
+// 不做隐藏/最小化的复原 —— 那条路在本 Wails beta 下会把窗口毁成 202×56（见 window 说明）。
+func (a *App) showWindow() {
+	a.mu.Lock()
+	w := a.window
+	a.mu.Unlock()
+	if w == nil {
+		return
+	}
+	w.Show()
+	w.Focus()
 }
 
 // New 构造桌面应用（不启动）。
@@ -71,15 +89,25 @@ func New(opts Options) (*App, error) {
 		// 单实例：第二次启动拉起已有窗口，而不是端口冲突
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "helm-x-single-instance",
+			// 第二次双击 exe = 把已有窗口提到前台（窗口开着时避免重复起进程）。
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+				if a.rt != nil && a.rt.Logger != nil {
+					a.rt.Logger.Info("第二实例启动：唤回已有窗口")
+				}
+				a.showWindow()
+			},
 		},
 		// 退出时务必还原 codex 配置 —— 这是最坏的失败模式
 		OnShutdown: func() {
 			a.shutdown()
 		},
-		// 关窗口不退出（最小化到托盘），真正的退出走托盘菜单
-		Windows: application.WindowsOptions{
-			DisableQuitOnLastWindowClosed: true,
-		},
+		// 点关闭 = 退出（默认行为，不要改）。
+		//
+		// 曾设过 DisableQuitOnLastWindowClosed: true + 关窗时 Hide/Minimise，
+		// 想做"缩到托盘继续跑"。本 Wails beta 上取消关闭并不能保住窗口：
+		// 原 HWND 被销毁、只剩 202×56 残窗，Show/UnMinimise/ShowWindow(SW_RESTORE)
+		// 全复原不回来 —— 结果是"窗口没了、进程还在、界面再也打不开"。
+		// 需要无窗口常驻时用命令行 `helmx proxy`。
 	})
 
 	a.wails = app
@@ -89,8 +117,7 @@ func New(opts Options) (*App, error) {
 	app.RegisterService(application.NewService(a.svc.Proxy))
 	app.RegisterService(application.NewService(a.svc.Config))
 	app.RegisterService(application.NewService(a.svc.Prompt))
-	app.RegisterService(application.NewService(a.svc.Rewriter))
-	app.RegisterService(application.NewService(a.svc.RiskGate))
+	app.RegisterService(application.NewService(a.svc.Capture))
 	app.RegisterService(application.NewService(a.svc.Verify))
 	app.RegisterService(application.NewService(a.svc.Logs))
 	app.RegisterService(application.NewService(a.svc.QA))
@@ -102,10 +129,13 @@ func New(opts Options) (*App, error) {
 		MinWidth:  960,
 		MinHeight: 600,
 		URL:       "/",
+		// 标题栏跟随系统：内容默认也是「跟随系统」（useTheme 默认值 = system），两边一致。
+		// 注意：Wails v3 没有运行期改标题栏主题的公开 API —— 用户把内容显式切成浅色
+		// 而系统是深色时，标题栏仍是深色；这是框架限制，已记在 CHANGELOG。
+		Windows: application.WindowsWindow{Theme: application.SystemDefault},
 	})
 	a.window = win
 
-	a.setupTray()
 	a.setupWindowEvents()
 	return a, nil
 }

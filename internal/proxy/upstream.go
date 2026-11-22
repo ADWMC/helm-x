@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/ADWMC/helm-x/internal/netenv"
 )
 
 // maxBodyBytes 与旧版一致（proxy.cpp:706）：超过即判失败，避免 OOM。
@@ -88,7 +90,10 @@ func NewUpstream(rawURL string) (*Upstream, error) {
 		client: &http.Client{
 			// 不设总超时：流式响应可能很长，超时由 ctx 控制
 			Transport: &http.Transport{
-				Proxy: http.ProxyFromEnvironment,
+				// netenv：env → Windows 系统代理（注册表）→ 直连。
+				// 只用 ProxyFromEnvironment 会在"只配了系统代理"的机器上直连公网，
+				// 表现为 dial timeout 且错误里没有代理字样（helm-a 真机踩过）。
+				Proxy: netenv.ProxyFunc(),
 				DialContext: (&net.Dialer{
 					Timeout:   30 * time.Second,
 					KeepAlive: 30 * time.Second,

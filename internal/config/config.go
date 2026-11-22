@@ -33,6 +33,26 @@ type Settings struct {
 	// 位置是独立于内容的杠杆：尾部紧贴生成起点，抗长上下文稀释。
 	InjectTail bool `json:"inject_tail,omitempty"`
 
+	// Deploy 是提示词部署语义（2026-11-22，随 helm-a 提示词资产迁入）：
+	//   insert        往 input[] 插 system 消息（默认，历史行为）
+	//   append        追加到顶层 instructions 末尾（保留官方 base）
+	//   replace-base  整段替换顶层 instructions（竞赛臂；官方 base 被覆盖）
+	// 只有 insert 会用到 InjectTail；另外两档改的是顶层字段，与数组位置无关。
+	Deploy string `json:"deploy,omitempty"`
+
+	// 请求层改写（2026-11-22 迁入）。两条通道互斥，encode 优先：
+	//   CodebookEnabled  抽片段换拉丁伪词，映射段进 instructions
+	//   EncodeEnabled    把 user 明文按 Latin-1 逐字节换成 mojibake
+	CodebookEnabled bool `json:"codebook_enabled,omitempty"`
+	CodebookSlots   int  `json:"codebook_slots,omitempty"`
+	EncodeEnabled   bool `json:"encode_enabled,omitempty"`
+
+	// 观测（2026-11-22 迁入）：
+	//   CaptureEnabled  调试报文捕获（默认关；开启后每请求落原始字节）
+	//   CaptureRedact   捕获时对 Authorization/Cookie/api-key 脱敏（默认开）
+	CaptureEnabled bool `json:"capture_enabled,omitempty"`
+	CaptureRedact  bool `json:"capture_redact"`
+
 	// UA 兜底：入站请求没有 User-Agent 时用它补上（空 = 不补；
 	// 不补时转发请求**不带** UA，而不是泄漏 Go 默认 UA）。
 	ForwardUserAgent string `json:"forward_user_agent,omitempty"`
@@ -46,64 +66,9 @@ type Settings struct {
 	StreamWindowBytes int `json:"stream_window_bytes,omitempty"`
 	StreamWindowMs    int `json:"stream_window_ms,omitempty"`
 
-	// 改写器
-	Rewriter RewriterSettings `json:"rewriter"`
-	RiskGate RiskGateSettings `json:"riskgate"`
-
 	// 说明：旧版 Context Gardener 的两个字段（context_gardener_enabled /
 	// context_gardener_threshold_bytes）已彻底移除。encoding/json 默认忽略未知字段，
 	// 旧配置文件仍可正常读取，不需要占位结构体。
-}
-
-// RewriterSettings 是改写器配置。
-type RewriterSettings struct {
-	Enabled      bool   `json:"enabled"`
-	Provider     string `json:"provider,omitempty"`
-	BaseURL      string `json:"base_url,omitempty"`
-	APIKey       string `json:"api_key,omitempty"`
-	Model        string `json:"model,omitempty"`
-	SystemPrompt string `json:"system_prompt,omitempty"`
-	TimeoutSec   int    `json:"timeout_sec,omitempty"`
-	UseProxy     bool   `json:"use_proxy,omitempty"`
-	ProxyURL     string `json:"proxy_url,omitempty"`
-	Fallback     string `json:"fallback,omitempty"`     // none(默认) | local
-	MaxAttempts  int    `json:"max_attempts,omitempty"` // 默认 3
-}
-
-// RiskGateSettings 是风险闸门配置（docs/RISKGATE-DESIGN.md §9）。
-//
-// 默认关闭：闸门会引入额外延迟与外部调用，必须先 shadow 校准再启用。
-type RiskGateSettings struct {
-	Enabled                 bool   `json:"enabled"`
-	Mode                    string `json:"mode,omitempty"`        // shadow(默认) | enforce
-	Profile                 string `json:"profile,omitempty"`     // substr-gateway | cyber-openai(默认) | generic
-	HotModel                string `json:"hot_model,omitempty"`   // 热路径判定模型（延迟优先）
-	LabelModel              string `json:"label_model,omitempty"` // 离线标注模型（质量优先）
-	BaseURL                 string `json:"base_url,omitempty"`
-	APIKey                  string `json:"api_key,omitempty"`
-	TimeoutSec              int    `json:"timeout_sec,omitempty"`
-	CacheTTLSec             int    `json:"cache_ttl_sec,omitempty"`
-	EnforceRatio            int    `json:"enforce_ratio,omitempty"`
-	BudgetPerSessionJudge   int    `json:"budget_per_session_judge,omitempty"`
-	BudgetPerSessionRewrite int    `json:"budget_per_session_rewrite,omitempty"`
-	BudgetPerRequestTokens  int    `json:"budget_per_request_tokens,omitempty"`
-}
-
-// RiskGateDefaults 返回闸门的保守默认值。
-func RiskGateDefaults() RiskGateSettings {
-	return RiskGateSettings{
-		Enabled:                 false,
-		Mode:                    "shadow",
-		Profile:                 "cyber-openai",
-		HotModel:                "nvidia/nemotron-3.5-bolt-e4b",
-		LabelModel:              "meta/muse-glimmer-30b",
-		TimeoutSec:              8,
-		CacheTTLSec:             900,
-		EnforceRatio:            5,
-		BudgetPerSessionJudge:   3,
-		BudgetPerSessionRewrite: 2,
-		BudgetPerRequestTokens:  4000,
-	}
 }
 
 // Default 返回默认设置，与旧版默认值一致。
@@ -117,16 +82,7 @@ func Default() Settings {
 		UpstreamRetryDelaySeconds: 3,
 		StreamWindowBytes:         2048,
 		StreamWindowMs:            400,
-		Rewriter: RewriterSettings{
-			Enabled:     false,
-			Provider:    "klapi",
-			BaseURL:     "https://klapi.me/v1",
-			Model:       "mimo-v2.5-pro",
-			TimeoutSec:  90,
-			ProxyURL:    "http://127.0.0.1:7897",
-			Fallback:    "none",
-			MaxAttempts: 3,
-		},
+		CaptureRedact:             true,
 	}
 }
 
@@ -231,13 +187,6 @@ func (s *Store) reload(force bool) {
 
 // normalize 补齐缺省值，保证数值合法。
 func (s *Store) normalize(v *Settings) {
-	// 闸门：缺值一律补保守默认；显式关掉时不动其余字段
-	if v.RiskGate.Mode == "" {
-		v.RiskGate.Mode = RiskGateDefaults().Mode
-	}
-	if v.RiskGate.Profile == "" {
-		v.RiskGate.Profile = RiskGateDefaults().Profile
-	}
 	d := Default()
 	if v.ListenPort <= 0 || v.ListenPort > 65535 {
 		v.ListenPort = d.ListenPort
@@ -257,6 +206,19 @@ func (s *Store) normalize(v *Settings) {
 	if v.UpstreamRetryDelaySeconds <= 0 {
 		v.UpstreamRetryDelaySeconds = d.UpstreamRetryDelaySeconds
 	}
+	// 部署语义白名单：未知值归一化为 insert（不静默启用会覆盖官方 base 的模式）。
+	switch v.Deploy {
+	case "append", "replace-base", "insert":
+	default:
+		v.Deploy = "insert"
+	}
+	// 代号表槽位：缺省 2，钳到 [1,8]（超过 8 个伪词会明显拖长文本、增加暴露面）
+	if v.CodebookSlots <= 0 {
+		v.CodebookSlots = 2
+	}
+	if v.CodebookSlots > 8 {
+		v.CodebookSlots = 8
+	}
 	if v.UpstreamMaxRetries < 0 {
 		v.UpstreamMaxRetries = 0 // 0 = 无限，合法
 	}
@@ -265,15 +227,6 @@ func (s *Store) normalize(v *Settings) {
 	}
 	if v.StreamWindowMs <= 0 {
 		v.StreamWindowMs = d.StreamWindowMs
-	}
-	if v.Rewriter.TimeoutSec <= 0 {
-		v.Rewriter.TimeoutSec = d.Rewriter.TimeoutSec
-	}
-	if v.Rewriter.MaxAttempts <= 0 {
-		v.Rewriter.MaxAttempts = d.Rewriter.MaxAttempts
-	}
-	if v.Rewriter.Fallback == "" {
-		v.Rewriter.Fallback = d.Rewriter.Fallback
 	}
 }
 

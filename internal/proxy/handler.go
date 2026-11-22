@@ -10,11 +10,15 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/ADWMC/helm-x/internal/riskgate"
 )
 
 func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
+	// 控制台实时流：不在 /v1 下，直接由本进程处理，不转发上游
+	if r.URL.Path == livePath {
+		e.serveLive(w, r)
+		return
+	}
+
 	start := time.Now()
 	rec := RequestRecord{
 		ID:        fmt.Sprintf("req_%d", e.seq.Add(1)),
@@ -33,10 +37,15 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec.InBytes = len(body)
+	// 观测：入站元信息 + 原始报文（改写前），供与 02.upstream.body 对照
+	e.capMeta(&rec, r.Header.Get("User-Agent"), r.Header.Get("Content-Type"))
+	e.capPut(rec.ID, "01.request.body", body)
+
 	defer func() {
 		rec.DurationMs = time.Since(start).Milliseconds()
 		e.reqs.Add(1)
 		e.countClass(rec.Class)
+		e.finishObserve(rec)
 		e.emit(rec)
 	}()
 
@@ -69,42 +78,7 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 		rec.SessionID = view.SessionFingerprint()
 	}
 
-	// ── 1.5 RiskGate ──
-	// 判定单位是**载荷**：用户最新一句 + 我们即将注入的提示词。
-	// 闸门永远不阻断请求：未启用/失败/超预算一律直通（ok=false）。
-	// 只有 enforce 模式且保真检查通过时才替换最后一条 user 文本 —— 外科式，不重建会话。
 	outBody := body
-	if canTransform && view != nil {
-		if g := e.gate(); g != nil {
-			cfg := g.Config()
-			userText, _ := view.LastUserMessage()
-			if userText != "" && !IsAuxiliaryRequest(r.Header, body) {
-				vd, ok := g.Judge(ctx, rec.SessionID, riskgate.Payload{
-					UserText:      userText,
-					InjectionText: e.instruction(),
-					HistoryTail:   view.ConversationText(),
-				})
-				if ok {
-					rec.Gate = &vd
-					// 改写只针对 **cyber 层**（上游网络安全过滤），这是分工边界：
-					// 模型拒答（B 层）由提示词解决 —— 用改写器去绕模型判断既无效也污染归因。
-					// 因此门槛是 FilterRisk == high，而不是 compliance 轴。
-					if cfg.Mode == "enforce" && vd.FilterRisk == riskgate.RiskHigh && vd.Rewrite != "" {
-						if pass, why := riskgate.FidelityOK(userText, vd.Rewrite); pass {
-							if rewritten, rok, rerr := view.ReplaceLastUserText(vd.Rewrite); rerr == nil && rok {
-								outBody = rewritten
-								rec.Note = joinNote(rec.Note, "风险闸门已改写用户请求")
-							}
-						} else {
-							rec.Note = joinNote(rec.Note, "改写作废（保真检查："+why+"）")
-						}
-					} else if vd.FilterRisk != riskgate.RiskNone || vd.ComplianceRisk != riskgate.RiskNone {
-						rec.Note = joinNote(rec.Note, "闸门判定有风险（"+cfg.Mode+"）")
-					}
-				}
-			}
-		}
-	}
 
 	// ── 2. Inject ──
 	// 注入频率：每 N 次请求注 1 次（按会话计数）。
@@ -113,14 +87,36 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 	if canTransform {
 		instruction := e.instruction()
 		if instruction != "" && e.shouldInject(rec.SessionID) {
-			injected, ok, ierr := view.InjectSystemAt(instruction, e.opts.InjectTail)
+			mode := e.deployMode()
+			var injected []byte
+			var ok bool
+			var ierr error
+			// 三档语义见 deploy.go：insert 走 input[]，append/replace-base 走顶层 instructions。
+			if mode == DeployAppend || mode == DeployReplaceBase {
+				injected, ok, ierr = view.InjectInstructions(instruction, mode)
+			} else {
+				injected, ok, ierr = view.InjectSystemAt(instruction, e.opts.InjectTail)
+			}
 			if ierr == nil && ok {
 				outBody = injected
 				rec.Injected = true
+				rec.Deploy = string(mode)
 				e.markInjected(rec.SessionID)
+			} else if ierr != nil {
+				// 结构不支持该语义：原样透传并留可见记录（INV-9），不猜
+				e.logf("warn", "proxy: 注入失败（deploy=%s），原样透传: %v", mode, ierr)
 			}
 		}
 	}
+
+	// ── 2.5 Transforms（codebook / encode）──
+	// 与提示词注入分开：注入写 instructions/system 位，改写动 user 明文本身。
+	// encode 与 codebook 互斥，encode 优先（见 transform.go）。
+	if canTransform {
+		outBody = e.applyTransforms(outBody, &rec)
+	}
+	// 观测：实际发往上游的报文（注入 + 改写后）
+	e.capPut(rec.ID, "02.upstream.body", outBody)
 
 	// ── 3/4/5. Send → Interpret → Remedy ──
 	isStream := false
@@ -145,6 +141,14 @@ func (e *Engine) instruction() string {
 		return ""
 	}
 	return e.opts.Config.PromptInstruction()
+}
+
+// deployMode 返回当前部署语义；未配置时按 insert（历史行为）。
+func (e *Engine) deployMode() DeployMode {
+	if e.opts.Config == nil {
+		return DeployInsert
+	}
+	return ParseDeployMode(e.opts.Config.Deploy())
 }
 
 // fallbackUserAgent 返回 UA 兜底值（空 = 不补）。
@@ -178,13 +182,6 @@ func (e *Engine) retryOpts() RetryOptions {
 		return e.opts.Retry
 	}
 	return e.opts.Config.Retry()
-}
-
-func (e *Engine) rewriter() Rewriter {
-	if e.opts.Config == nil {
-		return nil
-	}
-	return e.opts.Config.Rewriter()
 }
 
 // handleBuffered 处理非流式请求：完整读取后判定并补救。
@@ -235,7 +232,6 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 			upstream: e.upstream,
 			engine:   e,
 			tamper:   e.tamper(),
-			rewriter: e.rewriter(),
 			retry:    e.retryOpts(),
 		}, userMsg)
 		st = out.State
@@ -272,15 +268,12 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 		ct = "text/event-stream; charset=utf-8"
 	}
 	rec.OutBytes = len(finalBody)
+	// 观测：上游响应正文（补救后的最终形态）
+	e.capPut(rec.ID, "03.response.body", finalBody)
 
 	status := st.Status
 	if status == 0 {
 		status = http.StatusBadGateway
-	}
-	// 闸门判定单独落一条日志：界面之外（日志文件/抓取）也要能统计影子期一致率。
-	if rec.Gate != nil {
-		e.logf("info", "proxy: 闸门 locus=%s filter=%s compliance=%s source=%s why=%q",
-			rec.Gate.Locus, rec.Gate.FilterRisk, rec.Gate.ComplianceRisk, rec.Gate.Source, rec.Gate.Why)
 	}
 
 	w.Header().Set("Content-Type", ct)
@@ -298,19 +291,3 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 //   - 窗口结束 → Flush 缓冲，之后纯转发（O(1) 内存）
 //
 // 旧版是**全缓冲**：实测首字节延迟等于生成总时长（FINDINGS A-3，1.25s）。
-
-// gate 返回风险闸门；nil 表示未启用。
-func (e *Engine) gate() *riskgate.Gate {
-	if e.opts.Config == nil {
-		return nil
-	}
-	return e.opts.Config.Gate()
-}
-
-// joinNote 追加备注（分号分隔），避免覆盖已有内容。
-func joinNote(dst, add string) string {
-	if dst == "" {
-		return add
-	}
-	return dst + "; " + add
-}

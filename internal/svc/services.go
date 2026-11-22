@@ -30,14 +30,13 @@ type Emitter interface {
 
 // Services 汇总全部绑定服务，供 Wails 注册。
 type Services struct {
-	Proxy    *ProxyService
-	Config   *ConfigService
-	Prompt   *PromptService
-	Rewriter *RewriterService
-	RiskGate *RiskGateService
-	Verify   *VerifyService
-	Logs     *LogService
-	QA       *QAService
+	Proxy   *ProxyService
+	Config  *ConfigService
+	Prompt  *PromptService
+	Capture *CaptureService
+	Verify  *VerifyService
+	Logs    *LogService
+	QA      *QAService
 
 	rt      *runtime.Runtime
 	emitter Emitter
@@ -58,8 +57,7 @@ func NewServices(rt *runtime.Runtime, emitter Emitter) *Services {
 	s.Proxy = &ProxyService{s: s}
 	s.Config = &ConfigService{s: s}
 	s.Prompt = &PromptService{s: s}
-	s.Rewriter = &RewriterService{s: s}
-	s.RiskGate = &RiskGateService{s: s}
+	s.Capture = &CaptureService{s: s}
 	s.Verify = &VerifyService{s: s}
 	s.Logs = &LogService{s: s}
 	s.QA = &QAService{s: s}

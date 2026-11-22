@@ -67,9 +67,9 @@ type Progress func(step, total int, c Check)
 // Run 执行全部检查。e2e 为 true 时额外跑一次 codex 激活验证。
 func Run(e2e bool, progress Progress) Report {
 	var r Report
-	total := 8
+	total := 9
 	if e2e {
-		total = 9
+		total = 10
 	}
 	step := 0
 	add := func(c Check) {
@@ -194,7 +194,30 @@ func Run(e2e bool, progress Progress) Report {
 		add(Check{Name: "提示词模式", OK: true, Skip: true, Detail: "未找到 helmx 配置"})
 	}
 
-	// 9. e2e
+	// 9. 部署语义与模式匹配（2026-11-22，随主臂迁入）
+	//
+	// 主臂（ctf-ac）的实测结论以"整段替换 instructions"为前提。配置里出现
+	// "模式=主臂 但 deploy=insert" 时，装上去的是另一种配置，结论不成立却
+	// 在界面上看不出来 —— 与第 8 项同类，把静默 mismatch 变成可见失败。
+	if raw, rerr := os.ReadFile(storePathOrDefault()); rerr == nil {
+		mode, deploy := jsonPromptDeploy(raw)
+		need := modeDeploy(mode)
+		switch {
+		case mode == "":
+			add(Check{Name: "部署语义", OK: true, Skip: true, Detail: "配置里未指定模式"})
+		case need == "":
+			add(Check{Name: "部署语义", OK: true, Detail: fmt.Sprintf("%s（insert 系模式）", orInsert(deploy))})
+		case deploy == need:
+			add(Check{Name: "部署语义", OK: true, Detail: fmt.Sprintf("%s · 模式 %s", deploy, mode)})
+		default:
+			add(Check{Name: "部署语义", OK: false,
+				Detail: fmt.Sprintf("模式 %q 要求 %s，当前是 %s；在「提示词」页把部署语义切到 %s", mode, need, orInsert(deploy), need)})
+		}
+	} else {
+		add(Check{Name: "部署语义", OK: true, Skip: true, Detail: "未找到 helmx 配置"})
+	}
+
+	// 10. e2e
 	if e2e {
 		out, err := runCodex()
 		switch {
@@ -269,6 +292,35 @@ func storePathOrDefault() string {
 }
 
 // jsonPromptMode 从配置 JSON 里取 prompt_mode（只读，不改写文件）。
+// jsonPromptDeploy 从配置 JSON 里取 prompt_mode 与 deploy（只读，不改写文件）。
+func jsonPromptDeploy(raw []byte) (mode, deploy string) {
+	var v struct {
+		PromptMode string `json:"prompt_mode"`
+		Deploy     string `json:"deploy"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return "", ""
+	}
+	return v.PromptMode, v.Deploy
+}
+
+// modeDeploy 返回某模式实测要求的部署语义（空 = insert 系）。
+func modeDeploy(mode string) string {
+	for _, m := range assets.PromptModes() {
+		if m.ID == mode {
+			return m.Deploy
+		}
+	}
+	return ""
+}
+
+func orInsert(s string) string {
+	if s == "" {
+		return "insert"
+	}
+	return s
+}
+
 func jsonPromptMode(raw []byte) string {
 	var v struct {
 		PromptMode string `json:"prompt_mode"`

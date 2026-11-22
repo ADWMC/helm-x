@@ -22,6 +22,8 @@ type PromptModeView struct {
 	Default     bool   `json:"default"`
 	Active      bool   `json:"active"`
 	Preview     string `json:"preview"`
+	// Deploy 是该模式实测过的部署语义；"replace-base" 表示必须整段替换 instructions。
+	Deploy string `json:"deploy,omitempty"`
 }
 
 // Modes 列出全部模式，标记当前激活项并附一小段预览。
@@ -40,6 +42,7 @@ func (p *PromptService) Modes() ([]PromptModeView, error) {
 			Default:     m.Default,
 			Active:      m.ID == cur,
 			Preview:     head(body, 300),
+			Deploy:      m.Deploy,
 		})
 	}
 	return out, nil
@@ -51,11 +54,21 @@ func (p *PromptService) Current() (string, error) {
 }
 
 // Set 切换模式。下次请求即生效（代理每请求读取配置，INV-5）。
+//
+// 部署语义守卫：某些模式（当前只有 ctf-ac 主臂）的实测结论以"整段替换
+// instructions"为前提。选它但部署语义是 insert 时，装上去的是**另一种配置**，
+// 结论不成立却看不出来 —— 所以这里直接拒绝，并给出可执行的下一步。
 func (p *PromptService) Set(mode string) error {
 	// 历史 ID 先归一化再落盘：配置里存的永远是现行 ID
 	mode = assets.CanonicalPromptMode(mode)
 	if !assets.IsValidPromptMode(mode) {
 		return fmt.Errorf("未知的提示词模式: %q", mode)
+	}
+	if need := modeDeploy(mode); need == "replace-base" {
+		cur := p.s.rt.Store.Get().Deploy
+		if cur != "replace-base" {
+			return fmt.Errorf("模式 %q 要求整段替换（replace-base），当前部署语义是 %q；先把「部署语义」切到 replace-base 再应用", mode, orInsert(cur))
+		}
 	}
 	if err := p.s.rt.Store.Update(func(s *config.Settings) { s.PromptMode = mode }); err != nil {
 		return err
@@ -63,6 +76,91 @@ func (p *PromptService) Set(mode string) error {
 	p.s.rt.Logger.Info("提示词模式已切换为 %s", mode)
 	p.s.emit(EventConfigChg, nil)
 	return nil
+}
+
+// GetDeploy 返回当前部署语义（空 = insert）。
+func (p *PromptService) GetDeploy() (string, error) {
+	return orInsert(p.s.rt.Store.Get().Deploy), nil
+}
+
+// SetDeploy 设置部署语义：insert / append / replace-base。
+func (p *PromptService) SetDeploy(mode string) error {
+	switch mode {
+	case "insert", "append", "replace-base":
+	default:
+		return fmt.Errorf("未知的部署语义: %q（可选 insert / append / replace-base）", mode)
+	}
+	if err := p.s.rt.Store.Update(func(s *config.Settings) { s.Deploy = mode }); err != nil {
+		return err
+	}
+	p.s.rt.Logger.Info("部署语义已切换为 %s", mode)
+	p.s.emit(EventConfigChg, nil)
+	return nil
+}
+
+// ── 请求层改写（2026-11-22 迁入）──
+
+// CodebookView 是代号表配置。
+type CodebookView struct {
+	Enabled bool `json:"enabled"`
+	Slots   int  `json:"slots"`
+}
+
+// GetCodebook 返回代号表配置。
+func (p *PromptService) GetCodebook() (CodebookView, error) {
+	s := p.s.rt.Store.Get()
+	return CodebookView{Enabled: s.CodebookEnabled, Slots: s.CodebookSlots}, nil
+}
+
+// SetCodebook 保存代号表配置（slots 钳到 1–8）。
+func (p *PromptService) SetCodebook(enabled bool, slots int) error {
+	if slots < 1 {
+		slots = 1
+	}
+	if slots > 8 {
+		slots = 8
+	}
+	if err := p.s.rt.Store.Update(func(s *config.Settings) {
+		s.CodebookEnabled = enabled
+		s.CodebookSlots = slots
+	}); err != nil {
+		return err
+	}
+	p.s.rt.Logger.Info("代号表：enabled=%v slots=%d", enabled, slots)
+	p.s.emit(EventConfigChg, nil)
+	return nil
+}
+
+// GetEncode 返回全文编码开关。
+func (p *PromptService) GetEncode() (bool, error) {
+	return p.s.rt.Store.Get().EncodeEnabled, nil
+}
+
+// SetEncode 保存全文编码开关（与代号表互斥；开启时 encode 优先）。
+func (p *PromptService) SetEncode(enabled bool) error {
+	if err := p.s.rt.Store.Update(func(s *config.Settings) { s.EncodeEnabled = enabled }); err != nil {
+		return err
+	}
+	p.s.rt.Logger.Info("全文编码：enabled=%v", enabled)
+	p.s.emit(EventConfigChg, nil)
+	return nil
+}
+
+// ModeDeploy 返回某模式的实测部署语义（空 = insert）。
+func modeDeploy(mode string) string {
+	for _, m := range assets.PromptModes() {
+		if m.ID == mode {
+			return m.Deploy
+		}
+	}
+	return ""
+}
+
+func orInsert(s string) string {
+	if s == "" {
+		return "insert"
+	}
+	return s
 }
 
 // Preview 返回指定模式的完整正文。

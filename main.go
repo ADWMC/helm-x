@@ -49,6 +49,9 @@ func main() {
 		return
 	}
 
+	// 命令行分支：GUI 子系统的进程默认没有控制台，先挂到父终端再输出
+	// （否则 `helmx verify` 之类会"什么都不打印"）。见 console_windows.go。
+	attachConsole()
 	ctx, cancel := cli.SignalContext()
 	defer cancel()
 	os.Exit(cli.Run(ctx, os.Args[1:], os.Stdout, os.Stderr))

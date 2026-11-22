@@ -1,6 +1,7 @@
 package assets_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ADWMC/helm-x/internal/assets"
@@ -8,20 +9,22 @@ import (
 
 func TestPromptModes(t *testing.T) {
 	modes := assets.PromptModes()
-	if len(modes) != 6 {
-		t.Fatalf("expected exactly 6 prompt modes, got %d", len(modes))
+	if len(modes) != 7 {
+		t.Fatalf("expected exactly 7 prompt modes, got %d", len(modes))
 	}
 
 	expected := []struct {
-		id    string
-		isDef bool
+		id     string
+		isDef  bool
+		deploy string
 	}{
-		{"ctf", false},
-		{"ctf-v2", false},
-		{"ctf-v2.1", true},
-		{"ctf-v4", false},
-		{"ctf-v5", false},
-		{"ctf-v6", false},
+		{"ctf", false, ""},
+		{"ctf-v2", false, ""},
+		{"ctf-v2.1", true, ""},
+		{"ctf-v4", false, ""},
+		{"ctf-v5", false, ""},
+		{"ctf-v6", false, ""},
+		{"ctf-ac", false, "replace-base"},
 	}
 
 	for i, exp := range expected {
@@ -31,8 +34,35 @@ func TestPromptModes(t *testing.T) {
 		if modes[i].Default != exp.isDef {
 			t.Errorf("mode[%d].Default = %v, want %v", i, modes[i].Default, exp.isDef)
 		}
+		if modes[i].Deploy != exp.deploy {
+			t.Errorf("mode[%d].Deploy = %q, want %q", i, modes[i].Deploy, exp.deploy)
+		}
 		if modes[i].Bytes <= 0 {
 			t.Errorf("mode[%d].Bytes = %d, want > 0", i, modes[i].Bytes)
+		}
+	}
+}
+
+// TestMigratedPromptAssets 锁住从 helm-a 迁来的主臂的**字节数**。
+//
+// 为什么要锁：主臂的实测结论（landed=true、罐头逐字照抄）都是针对确切文本的，
+// 文本改一个字结论就作废。字节数变化必须是有意识的决定，不能悄悄漂。
+func TestMigratedPromptAssets(t *testing.T) {
+	const want = 28451 // 去掉 frontmatter 后的正文长度（原文件 29065B）
+	got := assets.Prompt("ctf-ac")
+	if len(got) != want {
+		t.Errorf("Prompt(ctf-ac) = %d bytes, want %d（主臂文本被改动，实测结论需重跑）", len(got), want)
+	}
+	if !strings.HasPrefix(got, "You are Codex, an agent based on GPT-6") {
+		t.Errorf("主臂开头不是官方 base 段：%q", got[:40])
+	}
+	if !assets.IsValidPromptMode("ctf-ac") {
+		t.Error("IsValidPromptMode(ctf-ac) = false, want true")
+	}
+	// 已移除的两档不能再出现（用户要求只保留主臂）
+	for _, gone := range []string{"ctf-a1", "ctf-a2"} {
+		if assets.IsValidPromptMode(gone) {
+			t.Errorf("%q 应已移除", gone)
 		}
 	}
 }
@@ -106,11 +136,6 @@ func TestAssetDecodeFidelity(t *testing.T) {
 	tamper := assets.TamperRules()
 	if len(tamper) == 0 {
 		t.Error("TamperRules() returned empty string")
-	}
-
-	rewrite := assets.RewritePrompt()
-	if len(rewrite) == 0 {
-		t.Error("RewritePrompt() returned empty string")
 	}
 
 	qa := assets.QA()

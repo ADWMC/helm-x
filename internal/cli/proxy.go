@@ -76,8 +76,11 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	// --dry-run 承诺"只计算不发上游"，但它同样会改写用户的 codex 配置 ——
 	// 实测强杀后 base_url 停在死端口（2026-10-28 体验审查）。干跑不该产生副作用。
 	proxyURL := "http://" + addr + "/v1"
+	applied := hasHome && !opts.dryRun && !opts.noApply
 	if hasHome && opts.dryRun {
 		fmt.Fprintln(stdout, "[helm-x] 干跑模式：不改写 codex 配置（base_url 保持原样）")
+	} else if hasHome && opts.noApply {
+		fmt.Fprintln(stdout, "[helm-x] --no-apply：不改写 codex 配置（只起代理）")
 	} else if hasHome {
 		res, aerr := home.Apply(codexcfg.ApplyOptions{ProxyAddr: proxyURL})
 		if aerr != nil {
@@ -112,7 +115,7 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		Events:        rt.Sink(),
 	})
 	if err != nil {
-		if hasHome {
+		if applied {
 			_, _ = home.RestoreProxy()
 		}
 		_ = ln.Close()
@@ -132,7 +135,9 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	case <-ctx.Done():
 		fmt.Fprintln(stdout, "\n[helm-x] 正在停止…")
 	case err := <-errCh:
-		restoreHome(rt, stdout)
+		if applied {
+			restoreHome(rt, stdout)
+		}
 		return err
 	}
 
@@ -141,7 +146,9 @@ func runProxy(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	case <-errCh:
 	case <-time.After(5 * time.Second):
 	}
-	restoreHome(rt, stdout)
+	if applied {
+		restoreHome(rt, stdout)
+	}
 	fmt.Fprintln(stdout, "[helm-x] 已停止")
 	return nil
 }
@@ -184,6 +191,8 @@ func printProxyBanner(w io.Writer, e *proxy.Engine, o proxyArgs) {
 		mode = "透传模式（不做任何转换）"
 	} else if o.dryRun {
 		mode = "干跑模式（不发上游）"
+	} else if o.noApply {
+		mode = "注入 ON · 不改 codex 配置（--no-apply）"
 	}
 	fmt.Fprintf(w, "  模式    : %s\n", mode)
 	fmt.Fprint(w, "  按 Ctrl+C 停止\n")
@@ -195,6 +204,12 @@ type proxyArgs struct {
 	upstream    string
 	passthrough bool
 	dryRun      bool
+	// noApply 为真时不改写 codex 配置（只起代理）。
+	//
+	// 为什么需要（2026-11-22 实测踩到）：`helmx proxy` 默认把 codex 的 base_url
+	// 指向本代理，强杀进程会跳过收尾还原，用户的 codex 就停在死端口上。
+	// 对着假上游做端到端验证时根本不该碰配置，所以给一个显式的"不接管"开关。
+	noApply bool
 	// noRetrySet 记录用户是否敲了 --no-retry（与 maxSet/delaySet 一起决定覆盖）
 	noRetrySet bool
 	restore    bool
@@ -258,6 +273,8 @@ func parseProxyArgs(args []string) (proxyArgs, error) {
 			o.passthrough = true
 		case "--dry-run":
 			o.dryRun = true
+		case "--no-apply":
+			o.noApply = true
 		case "--restore":
 			o.restore = true
 		case "--help", "-h":
