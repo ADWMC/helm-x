@@ -113,6 +113,12 @@ type RequestRecord struct {
 	Note       string    `json:"note,omitempty"`
 	// Deploy 是本次注入使用的部署语义（insert/append/replace-base）；未注入时为空。
 	Deploy string `json:"deploy,omitempty"`
+	// InstructionsSource 说明这一轮的系统级 instructions 到底是谁写的：
+	//   ours          = 只有我们注入的资产（replace-base，或客户端本来没给）
+	//   ours+client   = 我们的资产叠加在客户端自带文本之上（insert/append）
+	//   client        = 我们没有注入，客户端自己带的（passthrough / 未命中）
+	// 纯观测字段，不改变任何行为。见 docs/CONTEXT-ATTACK-SURFACE.md。
+	InstructionsSource string `json:"instructionsSource,omitempty"`
 	// Transforms 是本次请求实际应用的请求层改写（codebook:N / encode:N）。
 	Transforms []string `json:"transforms,omitempty"`
 	// UpstreamMeta 是上游私有 SSE 事件（rate_limits / response.metadata）的摘录，

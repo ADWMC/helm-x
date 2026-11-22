@@ -136,3 +136,23 @@ func (v *RequestView) insertInstructionsMember(instruction string) ([]byte, bool
 	}
 	return out, true, nil
 }
+
+// instructionsSource 归类本轮 instructions 的来源（纯观测，不改行为）。
+//
+// 为什么需要：`insert`/`append` 会把我们的资产叠加在客户端自带文本之上，而
+// `replace-base` 会把客户端文本整段覆盖。两种情况下"模型此刻遵守的系统提示词
+// 到底是谁写的"完全不同，但界面与记录里看不出来 —— 于是出问题时无法归因。
+func instructionsSource(injected bool, deploy string, clientHad bool) string {
+	switch {
+	case injected && deploy == string(DeployReplaceBase):
+		return "ours"
+	case injected && clientHad:
+		return "ours+client"
+	case injected:
+		return "ours"
+	case clientHad:
+		return "client"
+	default:
+		return ""
+	}
+}

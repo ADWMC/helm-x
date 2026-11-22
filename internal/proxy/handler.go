@@ -84,6 +84,10 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 	// 注入频率：每 N 次请求注 1 次（按会话计数）。
 	// shouldInject 只在"可改写且有指令"时才被调用，其余请求不占名额；
 	// 注入失败也不占名额 —— markInjected 只在成功后调用，下次请求重试。
+	// 客户端是否自带系统级 instructions —— 决定这一轮的系统提示词"是谁写的"。
+	// replace-base 会整段覆盖它；insert/append 会叠加。纯观测（见 instructionsSource）。
+	_, clientHadInstructions := view.Instructions()
+
 	if canTransform {
 		instruction := e.instruction()
 		if instruction != "" && e.shouldInject(rec.SessionID) {
@@ -101,6 +105,7 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 				outBody = injected
 				rec.Injected = true
 				rec.Deploy = string(mode)
+				rec.InstructionsSource = instructionsSource(true, string(mode), clientHadInstructions)
 				e.markInjected(rec.SessionID)
 			} else if ierr != nil {
 				// 结构不支持该语义：原样透传并留可见记录（INV-9），不猜
@@ -115,6 +120,11 @@ func (e *Engine) handle(w http.ResponseWriter, r *http.Request) {
 	if canTransform {
 		outBody = e.applyTransforms(outBody, &rec)
 	}
+	// 未注入但客户端自带 instructions：如实标注来源为 client（passthrough / 未命中时）
+	if !rec.Injected && clientHadInstructions {
+		rec.InstructionsSource = instructionsSource(false, "", true)
+	}
+
 	// 观测：实际发往上游的报文（注入 + 改写后）
 	e.capPut(rec.ID, "02.upstream.body", outBody)
 

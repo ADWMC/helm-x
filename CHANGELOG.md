@@ -6,6 +6,10 @@
 - 切片原来是纯随机 2–4 字符，实测会把 `IOCTL` 切成 `OCTL`、`base_url` 切成 `ase_url` —— 模型拿到不存在的名字，答案直接跑偏。
 - `internal/inject`：新增 `asciiRuns()`，把 ASCII 标识符/路径/命令（长度 ≥2 的 `[A-Za-z0-9_\-.]` 连续段）标为受保护位置，切片起点或终点落在其中就重抽。回归测试 `TestCodebookKeepsIdentifiers`（slots 1–4 全档断言 `IOCTL` / `base_url` / `/v1/responses` 原样保留）。
 - 界面：「槽位」→「每条请求替换 [N] 个片段」，并加 tooltip「每条命中的请求抽几个片段换成伪词（1–8）」。
+### 范围收敛：只做代理层注入 + 记录系统提示词来源
+- 明确范围：记忆层与"可信规则"文件（`memories/**`、`AGENTS.md`、`skills`、`plugins`、`mcp_servers`）**只观测不管理**；不做记忆审计、不做记忆写入告警、不拦截上游下发的 `base_instructions`。
+- 代理层落地：`RequestRecord` 新增 `instructionsSource`，取值 `ours` / `ours+client` / `client`（`deploy.go: instructionsSource`）。实测：`insert` + 客户端自带 instructions → `ours+client`；`replace-base` → `ours`（客户端文本被整段覆盖）。
+- 单测 `TestInstructionsSource` 覆盖 7 种组合；文档 `docs/CONTEXT-ATTACK-SURFACE.md` 增加 §0.5 范围声明与实测输出。
 ### 安全分析：上下文 / 记忆污染入口盘点 + 修掉缺口 E
 - 新增 `docs/CONTEXT-ATTACK-SURFACE.md`：列出 helm-x 的写入口 W1–W8、读入口 R1–R6，以及 5 个敞口（A 客户端 `instructions` 透传 / B 上游回包间接注入 / C 工作区记忆层 AGENTS.md·SKILL.md·MCP 完全不管 / D 正文伪造 TAMPER 标记 / E clean-session 重发丢上下文）。
 - 实测证据：`deploy=insert` 时客户端 `instructions` 原样进上游（`ATTACKER-SYSTEM-TEXT` 命中）；代号表的映射段因 `spanOK` 只允许非 ASCII 片段，换行/ASCII 指令无法逃逸进系统级字符串（提权路径已封死，写进文档"不要再优化掉"）。

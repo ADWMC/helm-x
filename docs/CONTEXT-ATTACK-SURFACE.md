@@ -3,6 +3,31 @@
 > 2026-11-22。范围修正：这份文档只回答一件事 —— **攻击者能把内容塞进模型的"上下文/记忆"的入口在哪**（落盘的、每轮重新注入的、以及从上游下发的），不讨论"用户文本 → 系统指令"这类提权分析（那部分见 §附）。
 > 对象：本机 `~/.codex`（codex 0.167.0）+ `helm-x` + `helm-a`。
 
+## 0.5 范围声明（2026-11-22 定）
+
+**helm-x 只做代理层注入。** 记忆层与"可信规则"文件（`~/.codex/memories/*`、`AGENTS.md`、`skills/**`、`plugins/**`、`mcp_servers`）**只观测、不管理**：
+
+| 明确不做 | 原因 |
+|---|---|
+| 审计/校验/清理 `memories/**`、`AGENTS.md`、`skills`、`plugins`、MCP | 那是 codex 自己的记忆与扩展域；由代理去改它，等于让代理拥有"改写模型记忆"的权限，风险高于收益 |
+| `verify` 加"记忆面审计"、记忆写入告警 | 同上；且这些文件与"请求是否被注入"无关，放进自检只会让告警长期噪声化 |
+| 拦截/清洗上游下发的 `base_instructions` | 那是上游与客户端之间的事；我们只保证**自己注入的那份**可核对 |
+
+| 代理层要做的（已做/待做） | 状态 |
+|---|---|
+| `replace-base` 整段覆盖上游/客户端给的 instructions | 已有（主臂） |
+| clean-session 重发补回我们自己的注入 | 已修（`remedy.go` + `TestCleanSessionRetryKeepsInjection`） |
+| **每轮标注系统提示词来源** `instructionsSource = ours / ours+client / client` | 已加（`RequestRecord.instructionsSource`，实测见下） |
+
+实测两种语义下的标注：
+
+```
+ctf-v2.1  deploy=insert        injected=True  instructionsSource=ours+client
+ctf-ac    deploy=replace-base  injected=True  instructionsSource=ours
+```
+
+意义：出问题时能一眼分清"模型此刻遵守的系统提示词"是我们的资产、还是叠加了客户端文本、还是根本没人注入 —— 不需要去翻记忆层。
+
 ## 0. 结论（三句话）
 
 1. **最直接的入口不在本机，在上游**：模型目录（`croli-model-catalog.json`，488 KB）里带 `base_instructions`(17,730 字) 与 `model_messages.instructions_template`(21,620 字)，实测这些文本就是 codex 发给上游的 `instructions`。**换一个中转站 = 换掉模型的系统提示词**，不需要碰用户机器。
