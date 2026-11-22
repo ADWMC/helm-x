@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import statistics
+import tempfile
 import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -945,8 +946,11 @@ def main():
 
     # 产物目录：默认落在 tests/jb/runs/<时间戳>-<模型>-<臂>/
     stamp = datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
-    rid = args.run_dir or str(Path("tests") / "jb" / "runs" /
-                              f"{stamp}-{MODEL}-{args.arm or 'run'}")
+    # 默认把产物放到仓库之外（%TEMP%\helmx-runs）：用例工作目录就是 codex 的 cwd，
+    # 放在 tests/ 下时 codex 能顺着父目录读到我们自己的仓库（含主臂资产本身），
+    # 会污染结论。需要旧位置就用 --run-dir 显式指定。
+    _root = os.path.join(tempfile.gettempdir(), "helmx-runs")
+    rid = args.run_dir or os.path.join(_root, f"{stamp}-{MODEL}-{args.arm or 'run'}")
     RUN_DIR = Path(rid)
     (RUN_DIR / "raw").mkdir(parents=True, exist_ok=True)
     run_meta = {
