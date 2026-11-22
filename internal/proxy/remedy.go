@@ -46,6 +46,11 @@ type remedyDeps struct {
 	streamRetry bool
 	// post 覆盖默认发送实现；nil 表示用 upstream.PostWithRetry
 	post retryPost
+	// injectedPrompt 是本进程当前要注入的提示词（内嵌资产）。
+	// clean-session 重发**不带**任何 instructions，等于让模型在厂商默认 base 下作答 ——
+	// 保护强度低于首轮。这里把**我们自己的**资产补回去（不含客户端文本，避免引入新的
+	// 上下文污染面，见 docs/CONTEXT-ATTACK-SURFACE.md 缺口 E）。
+	injectedPrompt string
 }
 
 // TamperMatcher 由 tamper.Engine 满足。
@@ -114,6 +119,16 @@ func (e *Engine) remedy(ctx context.Context, st ResponseState, view *RequestView
 	if msg != "" || st.Class == ClassRefused {
 		cleanBody, err := view.BuildCleanSessionMode(msg, deps.streamRetry)
 		if err == nil && len(cleanBody) > 0 {
+			// 补回我们自己的注入：clean session 只保留了 model/user/reasoning/tools，
+			// 不带 instructions 的话这一轮就在厂商默认 base 下作答（缺口 E）。
+			if deps.injectedPrompt != "" {
+				if cv, perr := ParseRequest(view.Path, cleanBody); perr == nil {
+					if withInj, ok, ierr := cv.insertInstructionsMember(deps.injectedPrompt); ierr == nil && ok {
+						cleanBody = withInj
+						out.Notes = append(out.Notes, "重发已附带注入")
+					}
+				}
+			}
 			a := e.postForRetry(ctx, deps, view.Path, cleanBody, in)
 			out.UpstreamHits++
 

@@ -233,6 +233,8 @@ func (e *Engine) handleBuffered(ctx context.Context, w http.ResponseWriter, r *h
 			engine:   e,
 			tamper:   e.tamper(),
 			retry:    e.retryOpts(),
+
+			injectedPrompt: e.injectedPrompt(),
 		}, userMsg)
 		st = out.State
 		rec.Action = out.Action

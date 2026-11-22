@@ -59,6 +59,7 @@ func (e *Engine) handleStream(ctx context.Context, w http.ResponseWriter, r *htt
 			out := e.remedy(ctx, st, view, r.Header, remedyDeps{
 				upstream: e.upstream, engine: e, tamper: tm,
 				retry: e.retryOpts(), streamRetry: true,
+				injectedPrompt: e.injectedPrompt(),
 			}, userMsg)
 			st = out.State
 			rec.Action = out.Action
@@ -249,6 +250,7 @@ func (e *Engine) remedyStreaming(ctx context.Context, w http.ResponseWriter, r *
 	out := e.remedy(ctx, st, view, r.Header, remedyDeps{
 		upstream: e.upstream, engine: e, tamper: e.tamper(),
 		retry: e.retryOpts(), streamRetry: true,
+		injectedPrompt: e.injectedPrompt(),
 	}, userMsg)
 
 	rec.Class = out.State.Class

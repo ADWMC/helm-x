@@ -307,6 +307,17 @@ func (e *Engine) emit(rec RequestRecord) {
 	}
 }
 
+// injectedPrompt 返回当前要注入的提示词（内嵌资产，不含任何客户端文本）。
+//
+// 用途：clean-session 重发时把它补回去 —— 那一轮原本不带 instructions，
+// 等于在厂商默认 base 下作答（docs/CONTEXT-ATTACK-SURFACE.md 缺口 E）。
+func (e *Engine) injectedPrompt() string {
+	if e.opts.Config == nil {
+		return ""
+	}
+	return e.opts.Config.PromptInstruction()
+}
+
 // handle 是唯一入口。
 //
 // 管线（docs/PLAN.md §4.2）：
